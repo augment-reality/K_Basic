@@ -10,17 +10,6 @@ function (dojo, declare) {
     return declare("bgagame.kalua", ebg.core.gamegui, {
         constructor: function(){
             console.log('kalua constructor');
-
-            //use for other images to minimize load time?
-            this.dontPreloadImage( 'd6.png' );
-
-        // Zone control        	
-        this.hkboard = new ebg.zone();
-
-        //zone.create( this, 'happyblock_r', 64, 64 );
-        //zone.setPattern( 'verticalfit' );
-        //zone.placeInZone( this.happyblock_r, 1 );
-
         },
                
         setup: function( gamedatas )
@@ -36,12 +25,8 @@ function (dojo, declare) {
                 </div>
 
                 `);
-
-            //create a prayer counter for each player
-            //var counter = new ebg.counter();
-            //counter.create(pcounter);
-            
-            //try using stock to manage hk tokens
+        
+/*             //try using stock to manage hk tokens
             this.hkstock = new ebg.stock();
             this.hkstock.create( this, $('game_board_Wrap'), 64, 64 );
             //args = page, div, width, height; change div location later
@@ -56,37 +41,33 @@ function (dojo, declare) {
                     this.hkstock.addItemType( color, color, 'img/Cube_iso.png', color );
                     //args = id, weight for sorting purpose, URL of our CSS sprite, position of image in the CSS sprite.
                 }
-            //this.placeOnObject.
-
-            // Example to add a div on the game area
-            document.getElementById('game_play_area').insertAdjacentHTML('beforeend', `
-                <div id="player-tables"></div>
-            `);
-            
-            // Setting up player boards
+            //this.placeOnObject. */
+          
+            // Setting up player boards. The backtick character creates "template literals"
             Object.values(gamedatas.players).forEach(player => {
 
-                // example of setting up players boards
+/*                 // example of setting up players boards
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
-                    <div> Prayer count: <span id = "pc_loc"></span> <br> happiness: <br> cards here?</div>
+                    <div> Prayer count: <span id = 'pc_loc'\+${ptable}\></span> <br> happiness: <br> cards here?</div>
                 `);
-
-                //rename div pc_loc with appended player id
-                var ptable = ("pc_loc"+player.id);
-                pc_loc.setAttribute("id", ptable);
+                
 
                 // example of adding a div for each player
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
                     <div id= "player-table-"${player.id} >
+
                         <strong>${player.name}</strong>
                         <div> Setup player amulets, temples, etc here</div>
+
                     </div>
                 `);
                 
-                //create counter per player in pc_loc div
+                 //create counter per player in pc_loc div
                 var counter = new ebg.counter();
-                counter.create( document.getElementById(ptable));
+                counter.create( document.getElementById('pc_loc'+$ptable));
                 counter.setValue(5);
+
+                 */
                 
             });
             
@@ -132,13 +113,9 @@ function (dojo, declare) {
             }
         },        
 
-        ///////////////////////////////////////////////////
-        //// Utility methods
+        ///// Utility methods//////////////////////////////////////////////
         
-        ///////////////////////////////////////////////////
-        //// Player's action
-
-        // Example:
+        ///// Player's action//////////////////////////////////////////////
         
         onCardClick: function( card_id )
         {
@@ -151,10 +128,8 @@ function (dojo, declare) {
                 // (most of the time, nothing, as the game will react to notifs / change of state instead)
             });        
         },    
-
         
-        ///////////////////////////////////////////////////
-        //// Reaction to cometD notifications
+        ////Reaction to cometD notifications//////////////
 
         /*
             setupNotifications:

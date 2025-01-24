@@ -111,7 +111,7 @@ $machinestates = [
         ],
         "transitions" => ["playCard" => 3, "pass" => 3]
     ],
-
+    
     3 => [
         "name" => "nextPlayer",
         "description" => '',

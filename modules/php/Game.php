@@ -24,16 +24,44 @@ class Game extends \Table
             "Active_Player_Increment" => 70,
             "End_Game" => 89
         ]);        
-     
-    }
-
-    /*      //Make two decks: bonus and disaster
+/* 
+        //Make two decks: bonus and disaster
         $this->disasterCards = $this->getNew( "module.common.deck" );
         $this->disasterCards ->init( "disaster_card" );
         $this->bonusCards = $this->getNew( "module.common.deck" );
-        $this->bonusCards ->init( "bonus_card" );
-    } */
+        $this->bonusCards ->init( "bonus_card" ); */
+    }
 
+/*     $this->disasterCards->createCards( $disasterCards, 'deck' );
+    $disasterCards = array(
+        array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),
+        array( 'type' => 1, 'type_arg' => 2, 'nbr' => 4 ),
+        array( 'type' => 1, 'type_arg' => 3, 'nbr' => 4 ),
+        array( 'type' => 1, 'type_arg' => 4, 'nbr' => 4 ),
+        array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
+        array( 'type' => 2, 'type_arg' => 6, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 7, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 8, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 9, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 10, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 11, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 12, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 13, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 14, 'nbr' => 1 ),
+        array( 'type' => 2, 'type_arg' => 15, 'nbr' => 1 )
+    );
+
+    $this->bonusCards->createCards( $bonusCards, 'deck' );
+    $bonusCards = array(
+        array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
+        array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
+        array( 'type' => 1, 'type_arg' => 3, 'nbr' => 3 ),
+        array( 'type' => 1, 'type_arg' => 4, 'nbr' => 3 ),
+        array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
+        array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 ),
+        array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 )
+    ); */
+    
     public function actPlayCard(int $card_id): void
     {
         // Retrieve the active player ID.
@@ -93,11 +121,6 @@ class Game extends \Table
         return 0;
     }
 
-    /**
-     * Game state action, example content.
-     *
-     * The action method of state `nextPlayer` is called everytime the current game state is set to `nextPlayer`.
-     */
     public function stNextPlayer(): void {
         // Retrieve the active player ID.
         $player_id = (int)$this->getActivePlayerId();
@@ -185,6 +208,13 @@ class Game extends \Table
         // }
 
         // TODO: Setup the initial game situation here.
+        
+
+/*         // This is a new hand: let's gather all cards from everywhere in the deck:
+        $this->cards->moveAllCardsInLocation( null, "deck" );
+
+        // And then shuffle the deck
+        $this->cards->shuffle( 'deck' ); */
 
         $this->activeNextPlayer();
         
@@ -202,4 +232,4 @@ class Game extends \Table
         }
  */
         }
-    }
+}
