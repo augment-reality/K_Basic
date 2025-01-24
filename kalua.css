@@ -1,0 +1,75 @@
+
+#game_board_Wrap {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+
+#board_background {
+	width: 620px;
+	height: 300px;	
+	position: relative;
+	display: inline-block;
+}
+
+#hkboard {	
+	background-image: url( 'img/kboard_400_265.jpg');
+	width: 400px;
+	height: 265px;
+	position: absolute;	
+}
+
+
+/*
+.happyblock_r {
+    background-image: url(img/Cube_iso.png);
+    background-position: 70% 80%;}
+
+happyblock {
+	background-image: url(img/Cube_iso.png);
+	width: 640px;
+	height: 64px;
+}
+
+
+happyblock_b {background-position: 10% 20%;}
+
+happyblock_g {background-position: 0% 10%;}
+
+happyblock_y {background-position: 60% 70%;}
+
+happyblock_p {background-position: 80% 90%;}
+
+OR
+
+Example from Cant Stop
+.token {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    background-image: url( 'img/token.png' );    
+}
+.token_000000, .bhikkhu {  background-position: -88px 0px; }
+.token_ff0000 {  background-position: -66px 0px; }
+.token_008000 {  background-position: -44px 0px; }
+.token_0000ff {  background-position: 0px 0px; }
+.token_ffa500 {  background-position: -22px 0px; }
+/*
+
+/*
+    Example of CSS sprites (a black token and a white token, 20x20px each, embedded in the same "tokens.png" 40x20px image):
+
+    .white_token {
+        background-image: url('img/tokens.png');
+        background-position: 0px 0px;
+    }
+    .black_token {
+        background-image: url('img/tokens.png');
+        background-position: -20px 0px;
+    }
+    .token {
+        width: 20px;
+        height: 20px;
+        background-repeat: none;
+    }
+*/
