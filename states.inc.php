@@ -1,5 +1,27 @@
 <?php
+/**
+ *------
+ * BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
+ * kalua implementation : © <Your name here> <Your email address here>
+ *
+ * This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
+ * See http://en.boardgamearena.com/#!doc/Studio for more information.
+ * -----
+ *
+ * states.inc.php
+ *
+ * kalua game states description
+ *
+ */
+
 /*
+   Game state machine is a tool used to facilitate game developement by doing common stuff that can be set up
+   in a very easy way from this configuration file.
+
+   Please check the BGA Studio presentation about game state to understand this, and associated documentation.
+
+   Summary:
+
    States types:
    _ activeplayer: in this type of state, we expect some action from the active player.
    _ multipleactiveplayer: in this type of state, we expect some action from multiple players (the active players)
@@ -25,66 +47,24 @@
                             method).
 */
 
+//    !! It is not a good idea to modify this file when a game is running !!
+
+/*  From Game.php _Construct
+    "Draw" => 10,
+    "Free_Action" => 20,
+    "Active_Turn" => 30,
+    "Non-active_Turn" => 31,
+    "Card_Effect" => 32,
+    "Continue_Turn" => 33,
+    "Convert" => 40,
+    "Gain_Prayer" => 50,
+    "Eliminate_Players" => 60,
+    "Check_Winner" => 61,
+    "Check_Tie" => 62,
+    "Active_Player_Increment" => 70,
+    "End_Game" => 89 */
+
 $machinestates = [
-
-    /*  From Game.php _Construct
-        "Update_Count" => 10,
-        "Active_Draw" => 11,
-        "Free_Action" => 20,
-        "Convert" => 40,
-        "Gain_Prayer" => 50,
-        "Check_Winner" => 61,
-        "Check_Tie" => 62,
-        "Active_Player_Increment" => 70,
-        "End_Game" => 89 */
-
-    10 => [
-        "name" => "Update_Count",
-        "description" => 'Figure out how many players there are',
-        "type" => "game",
-    ],
-    11 => [
-        "name" => "Active_Draw",
-        "description" => 'Draw up to five cards',
-        "type" => "game",
-    ],
-    20 => [
-        "name" => "Free_Action",
-        "description" => 'Pick one of the free actions',
-        "type" => "game",
-    ],
-
-    40 => [
-        "name" => "Convert",
-        "description" => 'Redistribute families based on happiness, etc',
-        "type" => "game",
-    ],
-    50 => [
-        "name" => "Gain_Prayer",
-        "description" => 'Get Prayer points',
-        "type" => "game",
-    ],
-
-    61 => [
-        "name" => "Check_Winner",
-        "description" => 'Checking for a winner',
-        "type" => "game",
-    ],
-    62 => [
-        "name" => "Check_Tie",
-        "description" => 'Checking if a tie-breaker is needed',
-        "type" => "game",
-    ],
-    70 => [
-        "name" => "Active_Player_Increment",
-        "description" => 'Go to next player',
-        "type" => "game",
-    ],
-    89 => [
-        "name" => "End_Game",
-        "description" => 'Winner has been declared. Ready to end game',
-        "type" => "game",
-    ],
 
     // The initial state. Please do not modify.
 
@@ -93,32 +73,115 @@ $machinestates = [
         "description" => "",
         "type" => "manager",
         "action" => "stGameSetup",
-        "transitions" => ["" => 2]
+        "transitions" => ["Starting_Draw" => 10]
     ),
 
-    // Note: ID=2 => your first state
-
-    2 => [
-        "name" => "playerTurn",
-        "description" => clienttranslate('${actplayer} must play a card or pass'),
-        "descriptionmyturn" => clienttranslate('${you} must play a card or pass'),
-        "type" => "activeplayer",
-        "args" => "argPlayerTurn",
-        "possibleactions" => [
-            // these actions are called from the front with bgaPerformAction, and matched to the function on the game.php file
-            "actPlayCard", 
-            "actPass",
-        ],
-        "transitions" => ["playCard" => 3, "pass" => 3]
+    10 => [
+        "name" => "Initial_Draw",
+        "description" => 'All players pick a combination of five bonus and disaster cards',
+        "type" => "multipleactiveplayer",
+        "action" => "stInitialDraw",
+        "args" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["Cards_Selected" => 20]
     ],
-    
-    3 => [
-        "name" => "nextPlayer",
+    11 => [
+        "name" => "Active_Draw",
+        "description" => clienttranslate('${actplayer} must draw cards'),
+        "descriptionmyturn" => "Pick a combination of cards to take",
+        "type" => "activeplayer",
+        "action" => "stActiveDraw",
+        "args" => "",
+        "possibleactions" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["Next_Player_Free" => 20, "Begin_Round" => 30]
+    ],
+    20 => [
+        "name" => "Free_Action",
+        "description" => clienttranslate('${actplayer} is selecting their action'),
+        "descriptionmyturn" => "Select one of the free actions",
+        "type" => "activeplayer",
+        "action" => "stFreeAction",
+        "args" => "",
+        "possibleactions" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["Next_Player_Free" => 20, "Begin_Round" => 30, "conversion" => 40]
+    ],
+    30 => [
+        "name" => "Active_Turn",
+        "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
+        "descriptionmyturn" => "Play a card or pass",
+        "type" => "",
+        "action" => "",
+        "args" => "",
+        "possibleactions" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["played" => 31, "passed" => 32]
+    ],
+    31 => [
+        "name" => "Non-active_Turn",
+        "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
+        "descriptionmyturn" => "Play a card or pass",
+        "type" => "activeplayer",
+        "action" => "",
+        "args" => "",
+        "possibleactions" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["next round" => 30, "next round" => 30}
+    ],
+    32 => [
+        "name" => "Global_Option",
+        "description" => 'Decide to avoid or double the effect of a global disaster',
+        "type" => "activeplayer",
+        "action" => "",
+        "args" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["???" => 33]
+    ],
+    33 => [
+        "name" => "Card_Effect",
+        "description" => 'Card effects are resolved sequentially',
+        "type" => "game",
+        "action" => "",
+        "args" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["???" => 33]
+    ],
+    40 => [
+        "name" => "Convert",
+        "description" => "Round ended and families convert based on happiness",
+        "type" => "game",
+        "action" => "",
+        "args" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["pray" => 50]
+    ],
+    50 => [
+        "name" => "Gain_Prayer",
         "description" => '',
         "type" => "game",
-        "action" => "stNextPlayer",
+        "action" => "",
+        "args" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["Endgame_Check" => 60]
+    ],
+    60 => [
+        "name" => "Eliminate_Players",
+        "description" => 'Checking for eliminations and a winner/tie',
+        "type" => "game",
+        "action" => "",
+        "args" => "",
         "updateGameProgression" => true,
-        "transitions" => ["endGame" => 99, "nextPlayer" => 2]
+        "transitions" => ["No_Winner" => 70, "Game_Over" => 90]
+    ],
+    70 => [
+        "name" => "Starting player",
+        "description" => 'Player order changes',
+        "type" => "game",
+        "action" => "st70_newcycle",
+        "args" => "",
+        "updateGameProgression" => false,
+        "transitions" => ["New_Cycle" => 11]
     ],
 
     // Final state.

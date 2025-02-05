@@ -1,75 +1,123 @@
+/**
+ *------
+ * BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
+ * kalua implementation : © August Delemeester haphazardeinsteinaugdog@gmail.com
+ *
+ * This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
+ * See http://en.boardgamearena.com/#!doc/Studio for more information.
+ * -----
+ *
+ * kalua.css
+ *
+ * kalua stylesheet
+ *
+ */
 
 #game_board_Wrap {
     display: flex;
-    flex-direction: row;
-    justify-content: space-evenly;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
 }
 
 #board_background {
-	width: 620px;
-	height: 300px;	
-	position: relative;
-	display: inline-block;
+    position: relative;
+    width: 400px;
+    height: 265px;
+    background-image: url('img/kboard_400_265.jpg');
+    background-size: cover;
+    margin-bottom: 20px; /* Add margin to avoid overlap */
 }
 
-#hkboard {	
-	background-image: url( 'img/kboard_400_265.jpg');
-	width: 400px;
-	height: 265px;
-	position: absolute;	
+#hkboard {
+    width: 400px; /* Match the width of board_background */
+    height: 80px; /* Match the height of board_background */
+    position: relative;
+}
+
+#atheistFamilies {
+    width: 400px; /* Match the width of board_background */
+    height: 210px; /* Match the height of board_background */
+    position: relative;
+}
+
+.player_area {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 10px;
+    width: 600px;
+    min-height: 450px; /* Adjusted height to fit both player_families and player_cards */
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    text-align: right;
+    box-sizing: border-box; /* Ensure padding and border are included in the width */
+    display: inline-block;
+}
+
+.player_hand {
+    min-height: 100px;
+    min-width: 600px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
+    box-sizing: border-box; /* Ensure padding and border are included in the height */
+    display: block;
+}
+
+.player_name {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.player_families {
+    min-height: 40px;
+    min-width: 600px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
+    box-sizing: border-box; /* Ensure padding and border are included in the height */
+    display: block;
+}
+
+.player_cards {
+    min-height: 100px;
+    width: auto;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
+    box-sizing: border-box; /* Ensure padding and border are included in the height */
+    display: block;
+}
+
+.family_item {
+    width: 30px;
+    height: 30px;
+    background-image: url('img/30_30_meeple.png');
+    background-size: 30px 30px;
+    background-repeat: no-repeat;
+    opacity: 1; /* Ensure opacity is set to 1 */
+}
+
+.hk_token {
+    width: 30px;
+    height: 30px;
+    background-image: url('img/30_30_hktoken.png');
+    background-repeat: no-repeat;
+}
+
+/* Styles for card decks */
+.deck {
+    width: 120px; /* Width of each card */
+    height: 174px; /* Height of each card */
+    background-size: cover;
+    border: 1px solid #000;
+    border-radius: 5px;
+    margin: 5px;
+    display: inline-block;
 }
 
 
-/*
-.happyblock_r {
-    background-image: url(img/Cube_iso.png);
-    background-position: 70% 80%;}
-
-happyblock {
-	background-image: url(img/Cube_iso.png);
-	width: 640px;
-	height: 64px;
-}
-
-
-happyblock_b {background-position: 10% 20%;}
-
-happyblock_g {background-position: 0% 10%;}
-
-happyblock_y {background-position: 60% 70%;}
-
-happyblock_p {background-position: 80% 90%;}
-
-OR
-
-Example from Cant Stop
-.token {
-    position: absolute;
-    width: 22px;
-    height: 22px;
-    background-image: url( 'img/token.png' );    
-}
-.token_000000, .bhikkhu {  background-position: -88px 0px; }
-.token_ff0000 {  background-position: -66px 0px; }
-.token_008000 {  background-position: -44px 0px; }
-.token_0000ff {  background-position: 0px 0px; }
-.token_ffa500 {  background-position: -22px 0px; }
-/*
-
-/*
-    Example of CSS sprites (a black token and a white token, 20x20px each, embedded in the same "tokens.png" 40x20px image):
-
-    .white_token {
-        background-image: url('img/tokens.png');
-        background-position: 0px 0px;
-    }
-    .black_token {
-        background-image: url('img/tokens.png');
-        background-position: -20px 0px;
-    }
-    .token {
-        width: 20px;
-        height: 20px;
-        background-repeat: none;
-    }
-*/

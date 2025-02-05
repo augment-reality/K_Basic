@@ -1,5 +1,19 @@
 <?php
-
+/**
+ *------
+ * BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
+ * kalua implementation : ©  August Delemeester haphazardeinsteinaugdog@gmail.com
+ *
+ * This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
+ * See http://en.boardgamearena.com/#!doc/Studio for more information.
+ * -----
+ *
+ * Game.php
+ *
+ * This is the main file for your game logic.
+ *
+ * In this PHP file, you are going to defines the rules of the game.
+ */
 declare(strict_types=1);
 
 namespace Bga\Games\kalua;
@@ -9,6 +23,17 @@ require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
 class Game extends \Table
 {
     private static array $CARD_TYPES;
+
+    /**
+     * Your global variables labels:
+     *
+     * Here, you can assign labels to global variables you are using for this game. You can use any number of global
+     * variables with IDs between 10 and 99. If your game has options (variants), you also have to associate here a
+     * label to the corresponding ID in `gameoptions.inc.php`.
+     *
+     * NOTE: afterward, you can get/set the global variables with `getGameStateValue`, `setGameStateInitialValue` or
+     * `setGameStateValue` functions.
+     */
     public function __construct()
     {
         parent::__construct();
@@ -17,51 +42,48 @@ class Game extends \Table
             "Update_Count" => 10,
             "Active_Draw" => 11,
             "Free_Action" => 20,
+            "Active_Turn" => 30,
+            "Non-active_Turn" => 31,
+            "Card_Effect" => 32,
+            "Continue_Turn" => 33,
             "Convert" => 40,
             "Gain_Prayer" => 50,
+            "Eliminate_Players" => 60,
             "Check_Winner" => 61,
             "Check_Tie" => 62,
             "Active_Player_Increment" => 70,
             "End_Game" => 89
         ]);        
-/* 
+
         //Make two decks: bonus and disaster
         $this->disasterCards = $this->getNew( "module.common.deck" );
         $this->disasterCards ->init( "disaster_card" );
-        $this->bonusCards = $this->getNew( "module.common.deck" );
-        $this->bonusCards ->init( "bonus_card" ); */
+        //$this->bonusCards = $this->getNew( "module.common.deck" );
+        //$this->bonusCards ->init( "bonus_card" );
+
+        //demo - Create Cards - to be removed
+        //$this->cards = $this->getNew( "module.common.deck" );
+        //$this->cards->init( "card" );
+        
+/*         self::$CARD_TYPES = [
+            1 => [
+                "card_name" => clienttranslate('Troll'), // ...
+            ],
+            2 => [
+                "card_name" => clienttranslate('Goblin'), // ...
+            ],
+            // ...
+        ]; */
     }
 
-/*     $this->disasterCards->createCards( $disasterCards, 'deck' );
-    $disasterCards = array(
-        array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),
-        array( 'type' => 1, 'type_arg' => 2, 'nbr' => 4 ),
-        array( 'type' => 1, 'type_arg' => 3, 'nbr' => 4 ),
-        array( 'type' => 1, 'type_arg' => 4, 'nbr' => 4 ),
-        array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
-        array( 'type' => 2, 'type_arg' => 6, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 7, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 8, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 9, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 10, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 11, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 12, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 13, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 14, 'nbr' => 1 ),
-        array( 'type' => 2, 'type_arg' => 15, 'nbr' => 1 )
-    );
-
-    $this->bonusCards->createCards( $bonusCards, 'deck' );
-    $bonusCards = array(
-        array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
-        array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
-        array( 'type' => 1, 'type_arg' => 3, 'nbr' => 3 ),
-        array( 'type' => 1, 'type_arg' => 4, 'nbr' => 3 ),
-        array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
-        array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 ),
-        array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 )
-    ); */
-    
+    /**
+     * Player action, example content.
+     *
+     * In this scenario, each time a player plays a card, this method will be called. This method is called directly
+     * by the action trigger on the front side with `bgaPerformAction`.
+     *
+     * @throws BgaUserException
+     */
     public function actPlayCard(int $card_id): void
     {
         // Retrieve the active player ID.
@@ -105,6 +127,14 @@ class Game extends \Table
         $this->gamestate->nextState("pass");
     }
 
+    /**
+     * Game state arguments, example content.
+     *
+     * This method returns some additional information that is very specific to the `playerTurn` game state.
+     *
+     * @return array
+     * @see ./states.inc.php
+     */
     public function argPlayerTurn(): array
     {
         // Get some values from the current game situation from the database.
@@ -114,6 +144,16 @@ class Game extends \Table
         ];
     }
 
+    /**
+     * Compute and return the current game progression.
+     *
+     * The number returned must be an integer between 0 and 100.
+     *
+     * This method is called each time we are in a game state with the "updateGameProgression" property set to true.
+     *
+     * @return int
+     * @see ./states.inc.php
+     */
     public function getGameProgression()
     {
         // TODO: compute and return the game progression
@@ -121,6 +161,11 @@ class Game extends \Table
         return 0;
     }
 
+    /**
+     * Game state action, example content.
+     *
+     * The action method of state `nextPlayer` is called everytime the current game state is set to `nextPlayer`.
+     */
     public function stNextPlayer(): void {
         // Retrieve the active player ID.
         $player_id = (int)$this->getActivePlayerId();
@@ -135,6 +180,44 @@ class Game extends \Table
         $this->gamestate->nextState("nextPlayer");
     }
 
+    /**
+     * Migrate database.
+     *
+     * You don't have to care about this until your game has been published on BGA. Once your game is on BGA, this
+     * method is called everytime the system detects a game running with your old database scheme. In this case, if you
+     * change your database scheme, you just have to apply the needed changes in order to update the game database and
+     * allow the game to continue to run with your new version.
+     *
+     * @param int $from_version
+     * @return void
+     */
+    public function upgradeTableDb($from_version)
+    {
+//       if ($from_version <= 1404301345)
+//       {
+//            // ! important ! Use DBPREFIX_<table_name> for all tables
+//
+//            $sql = "ALTER TABLE DBPREFIX_xxxxxxx ....";
+//            $this->applyDbUpgradeToAllDB( $sql );
+//       }
+//
+//       if ($from_version <= 1405061421)
+//       {
+//            // ! important ! Use DBPREFIX_<table_name> for all tables
+//
+//            $sql = "CREATE TABLE DBPREFIX_xxxxxxx ....";
+//            $this->applyDbUpgradeToAllDB( $sql );
+//       }
+    }
+
+    /*
+     * Gather all information about current game situation (visible by the current player).
+     *
+     * The method is called each time the game interface is displayed to a player, i.e.:
+     *
+     * - when the game starts
+     * - when a player refreshes the game page (F5)
+     */
     protected function getAllDatas()
     {
         $result = [];
@@ -153,11 +236,20 @@ class Game extends \Table
         return $result;
     }
 
+    /**
+     * Returns the game name.
+     *
+     * IMPORTANT: Please do not modify.
+     */
     protected function getGameName()
     {
         return "kalua";
     }
 
+    /**
+     * This method is called only once, when a new game is launched. In this method, you must setup the game
+     *  according to the game rules, so that the game is ready to be played.
+     */
     protected function setupNewGame($players, $options = [])
     {
         // Set the colors of the players with HTML color code. The default below is red/green/blue/orange/brown. The
@@ -207,14 +299,55 @@ class Game extends \Table
         //         break;
         // }
 
+        $disasterCards = array(
+            array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),
+            array( 'type' => 1, 'type_arg' => 2, 'nbr' => 4 ),
+            array( 'type' => 1, 'type_arg' => 3, 'nbr' => 4 ),
+            array( 'type' => 1, 'type_arg' => 4, 'nbr' => 4 ),
+            array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
+            array( 'type' => 2, 'type_arg' => 6, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 7, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 8, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 9, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 10, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 11, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 12, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 13, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 14, 'nbr' => 1 ),
+            array( 'type' => 2, 'type_arg' => 15, 'nbr' => 1 )
+        );
+        $this->disasterCards->createCards($disasterCards, 'deck');
+    
+/*         $bonusCards = array(
+            array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
+            array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
+            array( 'type' => 1, 'type_arg' => 3, 'nbr' => 3 ),
+            array( 'type' => 1, 'type_arg' => 4, 'nbr' => 3 ),
+            array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
+            array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 )
+        );
+        $this->bonusCards = self::getNew("module.common.deck");
+        $this->bonusCards->init("bonus_card");
+        $this->bonusCards->createCards($bonusCards, 'deck'); */
+
+        //Demo - Create Cards - to be removed
+/*         $cards = [];
+        foreach (COLORS as $color_id => $color) // spade, heart, diamond, club
+            for ($value = 2; $value <= 14; $value++) // 2, 3, 4, ... K, A
+                if (!in_array($color_id * 100 + $value, $remove_code)) // Cards to be excluded
+                    $cards[] = ['type' => $color_id, 'type_arg' => $value, 'nbr' => 1];
+
+        $this->cards->createCards($cards, 'deck'); */
+
+
+        // Init game statistics.
+        // NOTE: statistics used in this file must be defined in your `stats.inc.php` file.
+
+        // Dummy content.
+        // $this->initStat("table", "table_teststat1", 0);
+        // $this->initStat("player", "player_teststat1", 0);
+
         // TODO: Setup the initial game situation here.
-        
-
-/*         // This is a new hand: let's gather all cards from everywhere in the deck:
-        $this->cards->moveAllCardsInLocation( null, "deck" );
-
-        // And then shuffle the deck
-        $this->cards->shuffle( 'deck' ); */
 
         $this->activeNextPlayer();
         
@@ -232,4 +365,45 @@ class Game extends \Table
         }
  */
         }
+ 
+    /**
+     * This method is called each time it is the turn of a player who has quit the game (= "zombie" player).
+     * You can do whatever you want in order to make sure the turn of this player ends appropriately
+     * (ex: pass).
+     *
+     * Important: your zombie code will be called when the player leaves the game. This action is triggered
+     * from the main site and propagated to the gameserver from a server, not from a browser.
+     * As a consequence, there is no current player associated to this action. In your zombieTurn function,
+     * you must _never_ use `getCurrentPlayerId()` or `getCurrentPlayerName()`, otherwise it will fail with a
+     * "Not logged" error message.
+     *
+     * @param array{ type: string, name: string } $state
+     * @param int $active_player
+     * @return void
+     * @throws feException if the zombie mode is not supported at this game state.
+     */
+    protected function zombieTurn(array $state, int $active_player): void
+    {
+        $state_name = $state["name"];
+
+        if ($state["type"] === "activeplayer") {
+            switch ($state_name) {
+                default:
+                {
+                    $this->gamestate->nextState("zombiePass");
+                    break;
+                }
+            }
+
+            return;
+        }
+
+        // Make sure player is in a non-blocking status for role turn.
+        if ($state["type"] === "multipleactiveplayer") {
+            $this->gamestate->setPlayerNonMultiactive($active_player, '');
+            return;
+        }
+
+        throw new \feException("Zombie mode not supported at this game state: \"{$state_name}\".");
+    }
 }
