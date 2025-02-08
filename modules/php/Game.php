@@ -7,11 +7,6 @@
  * This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
  * See http://en.boardgamearena.com/#!doc/Studio for more information.
  * -----
- *
- * Game.php
- *
- * This is the main file for your game logic.
- *
  * In this PHP file, you are going to defines the rules of the game.
  */
 declare(strict_types=1);
@@ -44,8 +39,7 @@ class Game extends \Table
             "Free_Action" => 20,
             "Active_Turn" => 30,
             "Non-active_Turn" => 31,
-            "Card_Effect" => 32,
-            "Continue_Turn" => 33,
+            "Card_Effect" => 33,
             "Convert" => 40,
             "Gain_Prayer" => 50,
             "Eliminate_Players" => 60,
@@ -58,12 +52,8 @@ class Game extends \Table
         //Make two decks: bonus and disaster
         $this->disasterCards = $this->getNew( "module.common.deck" );
         $this->disasterCards ->init( "disaster_card" );
-        //$this->bonusCards = $this->getNew( "module.common.deck" );
-        //$this->bonusCards ->init( "bonus_card" );
-
-        //demo - Create Cards - to be removed
-        //$this->cards = $this->getNew( "module.common.deck" );
-        //$this->cards->init( "card" );
+        $this->bonusCards = $this->getNew( "module.common.deck" );
+        $this->bonusCards ->init( "bonus_card" );
         
 /*         self::$CARD_TYPES = [
             1 => [
@@ -112,6 +102,100 @@ class Game extends \Table
         $this->gamestate->nextState("playCard");
     }
 
+////////////Game State Actions /////////////////////
+/* 
+    public function stGameSetup(): void
+    {
+        // TODO: Implement the game setup logic here.
+        $this->gamestate->nextState("Initial_Draw");
+    }
+ */
+ /*    public function stInitialDraw(): void
+    {
+        // TODO: Implement the initial draw logic here.
+        $this->gamestate->nextState(Free_Action);
+    }
+ */
+/*     public function stActiveDraw(): void
+    {
+        // TODO: Implement the active draw logic here.
+        $transition = 'Free_Action';
+        $transition = 'Active_Turn';
+        $this->gamestate->nextState($transition);
+        $this->DbQuery("UPDATE player SET free_taken = 1 WHERE player_id = $player_id");
+    }
+ */
+    public function stFreeAction(): void
+    {
+        // TODO: Implement the free action logic here.
+
+        $transition = 'Active_Turn';
+        $transition = 'Convert';
+        $this->gamestate->nextState($transition);
+    }
+
+    public function stActiveTurn(): void
+    {
+        // TODO: Implement the active turn logic here.
+        //check if global card was picked
+        $this->gamestate->nextState('Non-active_Turn');
+    }
+
+    public function stNonActiveTurn(): void
+    {
+        // TODO: Implement the non-active turn logic here.
+        $transition = 'Non-active_Turn';
+        //check if global card was picked
+        //check if all players played
+        $transition = 'Active_Turn';
+        $this->gamestate->nextState($transition);
+    }
+
+    public function stCardEffect(): void
+    {
+        // TODO: Implement the card effect logic here.
+        $transition = 'Card_Effect';
+        //check if any cards remain
+        $transition = 'Convert';
+        $this->gamestate->nextState($transition);
+    }
+
+    public function stConvert(): void
+    {
+        // TODO: Implement the convert logic here.
+        $this->gamestate->nextState("Gain_Prayer");
+        //could combine with prayer and  endgame check once mechanics are working
+    }
+
+    public function stPrayer(): void
+    {
+        // TODO: Implement the prayer logic here.
+        $this->gamestate->nextState("Eliminate_Players");
+        //could combine with prayer and  endgame check once mechanics are working
+    }
+
+    public function stEndRound(): void
+    {
+        // TODO: Implement the end round logic here.
+        $transition = 'Starting_player';
+        //check if any cards remain
+        $transition = 'Convert';
+        $this->gamestate->nextState($transition);
+        $this->gamestate->nextState('gameEnd');
+        //could combine with prayer and  endgame check once mechanics are working
+    }
+
+    public function stNextRound(): void
+    {
+        // TODO: Implement the next round logic here.
+        $this->gamestate->nextState("Active_Draw");
+    }
+
+/*     public function stGameEnd(): void
+    {
+        // TODO: Implement the game end logic here.
+    } */
+
     public function actPass(): void
     {
         // Retrieve the active player ID.
@@ -128,12 +212,7 @@ class Game extends \Table
     }
 
     /**
-     * Game state arguments, example content.
-     *
      * This method returns some additional information that is very specific to the `playerTurn` game state.
-     *
-     * @return array
-     * @see ./states.inc.php
      */
     public function argPlayerTurn(): array
     {
@@ -145,25 +224,17 @@ class Game extends \Table
     }
 
     /**
-     * Compute and return the current game progression.
-     *
-     * The number returned must be an integer between 0 and 100.
-     *
+     * Compute and return game progression (integer between 0 and 100)
      * This method is called each time we are in a game state with the "updateGameProgression" property set to true.
-     *
-     * @return int
-     * @see ./states.inc.php
      */
     public function getGameProgression()
     {
-        // TODO: compute and return the game progression
-
+        //get the starting number of players and divide by the current number of players
         return 0;
     }
 
     /**
-     * Game state action, example content.
-     *
+     * Game state actions
      * The action method of state `nextPlayer` is called everytime the current game state is set to `nextPlayer`.
      */
     public function stNextPlayer(): void {
@@ -181,40 +252,17 @@ class Game extends \Table
     }
 
     /**
-     * Migrate database.
-     *
-     * You don't have to care about this until your game has been published on BGA. Once your game is on BGA, this
-     * method is called everytime the system detects a game running with your old database scheme. In this case, if you
-     * change your database scheme, you just have to apply the needed changes in order to update the game database and
-     * allow the game to continue to run with your new version.
-     *
-     * @param int $from_version
-     * @return void
+     * Migrate database. Don't worry about this until your game has been published on BGA.
      */
     public function upgradeTableDb($from_version)
     {
-//       if ($from_version <= 1404301345)
-//       {
-//            // ! important ! Use DBPREFIX_<table_name> for all tables
-//
-//            $sql = "ALTER TABLE DBPREFIX_xxxxxxx ....";
-//            $this->applyDbUpgradeToAllDB( $sql );
-//       }
-//
-//       if ($from_version <= 1405061421)
-//       {
-//            // ! important ! Use DBPREFIX_<table_name> for all tables
-//
-//            $sql = "CREATE TABLE DBPREFIX_xxxxxxx ....";
-//            $this->applyDbUpgradeToAllDB( $sql );
-//       }
+
     }
 
     /*
-     * Gather all information about current game situation (visible by the current player).
+     * Gather all info for current game situation (visible by the current player).
      *
      * The method is called each time the game interface is displayed to a player, i.e.:
-     *
      * - when the game starts
      * - when a player refreshes the game page (F5)
      */
@@ -286,19 +334,6 @@ class Game extends \Table
 
         $this->setGameStateInitialValue("Update_Count", 0);
 
-        // // Initial family setup?
-        // switch ($this->getGameStateValue('player_count')) {
-        //     default:
-        //         $hk_families_start = 9;
-        //         break;
-        //     case 1:
-        //         $hk_families_start = 12;
-        //         break;
-        //     case 2:
-        //         $hk_families_start = 15;
-        //         break;
-        // }
-
         $disasterCards = array(
             array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),
             array( 'type' => 1, 'type_arg' => 2, 'nbr' => 4 ),
@@ -318,7 +353,7 @@ class Game extends \Table
         );
         $this->disasterCards->createCards($disasterCards, 'deck');
     
-/*         $bonusCards = array(
+        $bonusCards = array(
             array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
             array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
             array( 'type' => 1, 'type_arg' => 3, 'nbr' => 3 ),
@@ -326,19 +361,7 @@ class Game extends \Table
             array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
             array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 )
         );
-        $this->bonusCards = self::getNew("module.common.deck");
-        $this->bonusCards->init("bonus_card");
-        $this->bonusCards->createCards($bonusCards, 'deck'); */
-
-        //Demo - Create Cards - to be removed
-/*         $cards = [];
-        foreach (COLORS as $color_id => $color) // spade, heart, diamond, club
-            for ($value = 2; $value <= 14; $value++) // 2, 3, 4, ... K, A
-                if (!in_array($color_id * 100 + $value, $remove_code)) // Cards to be excluded
-                    $cards[] = ['type' => $color_id, 'type_arg' => $value, 'nbr' => 1];
-
-        $this->cards->createCards($cards, 'deck'); */
-
+        $this->bonusCards->createCards($bonusCards, 'deck');
 
         // Init game statistics.
         // NOTE: statistics used in this file must be defined in your `stats.inc.php` file.

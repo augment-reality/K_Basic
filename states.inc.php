@@ -50,19 +50,18 @@
 //    !! It is not a good idea to modify this file when a game is running !!
 
 /*  From Game.php _Construct
-    "Draw" => 10,
+    "Initial_Draw" => 10,
+    "Active_Draw" => 11,
     "Free_Action" => 20,
     "Active_Turn" => 30,
     "Non-active_Turn" => 31,
-    "Card_Effect" => 32,
-    "Continue_Turn" => 33,
+    "Global_Option" => 32,
+    "Card_Effect" => 33,
     "Convert" => 40,
     "Gain_Prayer" => 50,
     "Eliminate_Players" => 60,
-    "Check_Winner" => 61,
-    "Check_Tie" => 62,
-    "Active_Player_Increment" => 70,
-    "End_Game" => 89 */
+    "Starting_player" => 70,
+    */
 
 $machinestates = [
 
@@ -81,7 +80,8 @@ $machinestates = [
         "description" => 'All players pick a combination of five bonus and disaster cards',
         "type" => "multipleactiveplayer",
         "action" => "stInitialDraw",
-        "args" => "",
+        //"args" => "",
+        //"possibleactions" => "",
         "updateGameProgression" => false,
         "transitions" => ["Cards_Selected" => 20]
     ],
@@ -91,8 +91,8 @@ $machinestates = [
         "descriptionmyturn" => "Pick a combination of cards to take",
         "type" => "activeplayer",
         "action" => "stActiveDraw",
-        "args" => "",
-        "possibleactions" => "",
+        //"args" => "",
+        //"possibleactions" => "",
         "updateGameProgression" => false,
         "transitions" => ["Next_Player_Free" => 20, "Begin_Round" => 30]
     ],
@@ -102,8 +102,8 @@ $machinestates = [
         "descriptionmyturn" => "Select one of the free actions",
         "type" => "activeplayer",
         "action" => "stFreeAction",
-        "args" => "",
-        "possibleactions" => "",
+        //"args" => "",
+        //"possibleactions" => "",
         "updateGameProgression" => false,
         "transitions" => ["Next_Player_Free" => 20, "Begin_Round" => 30, "conversion" => 40]
     ],
@@ -111,57 +111,48 @@ $machinestates = [
         "name" => "Active_Turn",
         "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
         "descriptionmyturn" => "Play a card or pass",
-        "type" => "",
-        "action" => "",
-        "args" => "",
-        "possibleactions" => "",
+        "type" => "activeplayer",
+        "action" => "stActiveTurn",
+        //"args" => "",
+        //"possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["played" => 31, "passed" => 32]
+        "transitions" => ["played" => 31, "passed" => 33]
     ],
     31 => [
         "name" => "Non-active_Turn",
         "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
         "descriptionmyturn" => "Play a card or pass",
         "type" => "activeplayer",
-        "action" => "",
-        "args" => "",
-        "possibleactions" => "",
+        "action" => "stNonActiveTurn",
+        //"args" => "",
+        //"possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["next round" => 30, "next round" => 30}
-    ],
-    32 => [
-        "name" => "Global_Option",
-        "description" => 'Decide to avoid or double the effect of a global disaster',
-        "type" => "activeplayer",
-        "action" => "",
-        "args" => "",
-        "updateGameProgression" => false,
-        "transitions" => ["???" => 33]
+        "transitions" => ["next round" => 30, "next player" => 31]
     ],
     33 => [
         "name" => "Card_Effect",
         "description" => 'Card effects are resolved sequentially',
         "type" => "game",
-        "action" => "",
-        "args" => "",
+        "action" => "stCardEffect",
+        //"args" => "",
         "updateGameProgression" => false,
-        "transitions" => ["???" => 33]
+        "transitions" => ["Effects" => 33, "Begin_End_Round" => 40]
     ],
     40 => [
         "name" => "Convert",
         "description" => "Round ended and families convert based on happiness",
         "type" => "game",
-        "action" => "",
-        "args" => "",
+        "action" => "stConvert",
+        //"args" => "",
         "updateGameProgression" => false,
         "transitions" => ["pray" => 50]
     ],
     50 => [
         "name" => "Gain_Prayer",
-        "description" => '',
+        "description" => 'Players gain prayer based on family count',
         "type" => "game",
-        "action" => "",
-        "args" => "",
+        "action" => "stPrayer",
+        //"args" => "",
         "updateGameProgression" => false,
         "transitions" => ["Endgame_Check" => 60]
     ],
@@ -169,17 +160,17 @@ $machinestates = [
         "name" => "Eliminate_Players",
         "description" => 'Checking for eliminations and a winner/tie',
         "type" => "game",
-        "action" => "",
-        "args" => "",
+        "action" => "stEndRound",
+        //"args" => "",
         "updateGameProgression" => true,
-        "transitions" => ["No_Winner" => 70, "Game_Over" => 90]
+        "transitions" => ["No_Winner" => 70, "Game_Over" => 99]
     ],
     70 => [
-        "name" => "Starting player",
+        "name" => "Starting_player",
         "description" => 'Player order changes',
         "type" => "game",
-        "action" => "st70_newcycle",
-        "args" => "",
+        "action" => "stNextRound",
+        //"args" => "",
         "updateGameProgression" => false,
         "transitions" => ["New_Cycle" => 11]
     ],
