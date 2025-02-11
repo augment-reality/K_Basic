@@ -101,13 +101,26 @@ function (dojo, declare) {
             Object.values(gamedatas.players).forEach(player => {
                 // Setting up players' side panels
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
-                    <div> Prayer count: <span id="player_panel_${player.id}"></span> <br> happiness: <br> cards here?</div>
+                    <div> Prayer count: <span id="panel_p_${player.id}"></span> <br>
+                     happiness:<span id="panel_h_${player.id}"></span><br>
+                     Cards:<span id="panel_c_${player.id}"></span></div>
                 `);
 
-                // Create counter per player in player panel
-                const counter = new ebg.counter();
-                counter.create(document.getElementById(`player_panel_${player.id}`));
-                counter.setValue(5);
+                // Create prayer counter in player panel
+                const counter_p = new ebg.counter();
+                counter_p.create(document.getElementById(`panel_p_${player.id}`));
+                counter_p.setValue(5);
+
+                // Create card counter in player panel
+                const counter_h = new ebg.counter();
+                counter_h.create(document.getElementById(`panel_h_${player.id}`));
+                counter_h.setValue(5);
+
+                // Create card counter in player panel
+                const counter_c = new ebg.counter();
+                this[`counter_c_${player.id}`] = counter_c;
+                counter_c.create(document.getElementById(`panel_c_${player.id}`));
+                counter_c.setValue(0);
             });
 
             // Initialize player hands
@@ -118,28 +131,26 @@ function (dojo, declare) {
                 this[`playerHand_${player.id}`].image_items_per_row = 5;
                 this[`playerHand_${player.id}`].apparenceBorderWidth = '2px'; // Change border width when selected
                 this[`playerHand_${player.id}`].setSelectionMode(1); // Select only a single card
-                this[`playerHand_${player.id}`].horizontal_overlap = 28;
+                this[`playerHand_${player.id}`].horizontal_overlap = 0;
                 this[`playerHand_${player.id}`].item_margin = 0;
 
                 //dojo.connect(this[`playerHand_${player.id}`], 'onChangeSelection', this, 'onHandCardSelect');
 
                 // Create card types
-                for (let color = 1; color <= 3; color++) {
+                for (let col = 1; col <= 3; col++) {
                     for (let value = 1; value <= 5; value++) {
                         // Build card type id
-                        const card_type_id = this.getCardUniqueId(color, value);
-                        // Change card image style according to the preference option
-                        this[`playerHand_${player.id}`].addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_type_id);
+                        const card_type_d = this.getCardUniqueId(col, value);
+                        this[`playerHand_${player.id}`].addItemType(card_type_d, card_type_d, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_type_d);
                     }
                 }
-            });
-
-            // Add three cards to each player's hand
-            Object.values(gamedatas.players).forEach(player => {
-                for (let i = 1; i <= 3; i++) {
-                    const card_type_id = this.getCardUniqueId(Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 5) + 1); // Example card type id
-                    this[`playerHand_${player.id}`].addToStock(card_type_id);
+                // Create card types
+                for (let value = 1; value <= 5; value++) {
+                    // Build card type id
+                    const card_type_b = this.getCardUniqueId(4, value);
+                    this[`playerHand_${player.id}`].addItemType(card_type_b, card_type_b, g_gamethemeurl + 'img/Cards_Bonus_840_174.png', card_type_b);
                 }
+
             });
 
             // TODO: Set up your game interface here, according to "gamedatas"
@@ -151,19 +162,58 @@ function (dojo, declare) {
        
         ///////////////////////////////////////////////////
         //// Game & client states
-        
+
         // onEnteringState: this method is called each time we are entering into a new game state.
         //                  You can use this method to perform some user interface changes at this moment.
         //
         onEnteringState: function(stateName, args) {
-            
+            switch (stateName) {
+                case 'Initial_Draw':
+                    console.log("Entering Initial_Draw state");
+                    this.addActionButton('drawDisasterCard-btn', _('Draw a Disaster Card'), () => {
+                        this.drawDisasterCard();
+                        const counter_c = this[`counter_c_${this.player_id}`];
+                        counter_c.incValue(1);
+                    });
+
+                    this.addActionButton('drawBonusCard-btn', _('Draw a Bonus Card'), () => {
+                        const card_type_id = this.getCardUniqueId(Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 5) + 1); // Example card type id
+                        this[`playerHand_${this.player_id}`].addToStock(card_type_id);
+                        const counter_c = this[`counter_c_${this.player_id}`];
+                        counter_c.incValue(1);
+                    });
+                    break;
+                case 'Free_Action':
+                    console.log("Entering Free_Action state");
+                    if(this.isCurrentPlayerActive()) {            
+                        this.statusBar.addActionButton('Give a Speech');
+                        this.statusBar.addActionButton('Convert Atheist');
+                        this.statusBar.addActionButton('Convert Believer');
+                        this.statusBar.addActionButton('Sacrifice Leader');        
+                        this.addActionButton('actPass-btn', _('Pass'), () => this.bgaPerformAction("actPass"), null, null, 'gray'); 
+                    }
+                    break;
+                case 'endGame':
+                    console.log("Entering endGame state");
+                    // Perform actions specific to endGame state
+                    break;
+                case 'waitingForPlayers':
+                    console.log("Entering waitingForPlayers state");
+                    // Perform actions specific to waitingForPlayers state
+                    break;
+                default:
+                    console.log("Entering unknown state: " + stateName);
+                    // Perform actions for unknown state
+                    break;
+            }
         },
 
         // onLeavingState: this method is called each time we are leaving a game state.
         //                 You can use this method to perform some user interface changes at this moment.
         //
         onLeavingState: function(stateName) {
-
+            console.log('Leaving state: ' + stateName);
+            // Perform actions specific to leaving a state
         }, 
 
         // onUpdateActionButtons: in this method you can manage "action buttons" that are displayed in the
@@ -171,14 +221,56 @@ function (dojo, declare) {
         //        
         onUpdateActionButtons: function(stateName, args) {
 
-        },        
+        //make exception for "undo" button
+        // https://en.doc.boardgamearena.com/BGA_Studio_Cookbook#Out-of-turn_actions%3A_Un-pass
+        if (this.isCurrentPlayerActive()) { 
+            
+            // ....
+
+          } else if (!this.isSpectator) { // player is NOT active but not spectator
+              switch (stateName) {
+                 case 'playerTurnMultiPlayerState':
+               this.addActionButton('button_unpass', _('Oh no!'), 'onUnpass');
+               //dojo.place('button_unpass', 'pagemaintitletext', 'before');
+               break;
+           }
+          }
+        },
+                       
+        onUnpass: function(e) {
+           this.bgaPerformAction("actionCancel", null, { checkAction: false }); // no checkAction!
+        },
+
 
         ///////////////////////////////////////////////////
         //// Utility methods
 
-        getCardUniqueId: function (color, value) {
-            return (color - 1) * 13 + (value - 2);
+        getCardUniqueId: function (col, row) {
+            return (col - 1) * 5 + (row - 1);
         },
+
+        drawDisasterCard: function() {
+            // Pick a card from the disaster deck
+            const card = this.disaster_cards.pickCard('deck', `${this.player_id}_cards`, this.player_id);
+                
+            // Add the card to the active player's card div
+            const card_type_id = this.getCardUniqueId(card.type, card.type_arg);
+            this[`playerHand_${this.player_id}`].addToStockWithId(card_type_id, card.id);
+        },
+
+        drawBonusCard: function() {
+            // Pick a card from the bonus deck
+            const card = this.bonus_cards.pickCard('deck', 'hand', this.player_id);
+    
+            // Add the card to the active player's card div
+            const card_type_id = this.getCardUniqueId(card.type, card.type_arg);
+            this[`playerHand_${this.player_id}`].addToStockWithId(card_type_id, card.id);
+
+            // Increment the counter for the active player
+            const counter_c = this[`counter_c_${this.player_id}`];
+            counter_c.incValue(1);
+        }
+        
 
         ///////////////////////////////////////////////////
         //// Player's action

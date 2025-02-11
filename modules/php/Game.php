@@ -34,7 +34,7 @@ class Game extends \Table
         parent::__construct();
 
         $this->initGameStateLabels([
-            "Update_Count" => 10,
+            "Initial_Draw" => 10,
             "Active_Draw" => 11,
             "Free_Action" => 20,
             "Active_Turn" => 30,
@@ -42,11 +42,9 @@ class Game extends \Table
             "Card_Effect" => 33,
             "Convert" => 40,
             "Gain_Prayer" => 50,
-            "Eliminate_Players" => 60,
-            "Check_Winner" => 61,
-            "Check_Tie" => 62,
-            "Active_Player_Increment" => 70,
-            "End_Game" => 89
+            "Endgame_Checks" => 60,
+            "Next_player" => 70,
+            "End" => 70,
         ]);        
 
         //Make two decks: bonus and disaster
@@ -66,65 +64,48 @@ class Game extends \Table
         ]; */
     }
 
-    /**
-     * Player action, example content.
-     *
-     * In this scenario, each time a player plays a card, this method will be called. This method is called directly
-     * by the action trigger on the front side with `bgaPerformAction`.
-     *
-     * @throws BgaUserException
-     */
-    public function actPlayCard(int $card_id): void
-    {
-        // Retrieve the active player ID.
-        $player_id = (int)$this->getActivePlayerId();
+ 
 
-        // check input values
-        $args = $this->argPlayerTurn();
-        $playableCardsIds = $args['playableCardsIds'];
-        if (!in_array($card_id, $playableCardsIds)) {
-            throw new \BgaUserException('Invalid card choice');
-        }
 
-        // Add your game logic to play a card here.
-        $card_name = self::$CARD_TYPES[$card_id]['card_name'];
-
-        // Notify all players about the card played.
-        $this->notifyAllPlayers("cardPlayed", clienttranslate('${player_name} plays ${card_name}'), [
-            "player_id" => $player_id,
-            "player_name" => $this->getActivePlayerName(),
-            "card_name" => $card_name,
-            "card_id" => $card_id,
-            "i18n" => ['card_name'],
-        ]);
-
-        // at the end of the action, move to the next state
-        $this->gamestate->nextState("playCard");
+    //ties to undo function in js
+    function actionCancel() {
+        $this->gamestate->checkPossibleAction('actionCancel');
+        $this->gamestate->setPlayersMultiactive(array ($this->getCurrentPlayerId() ), 'error', false);
     }
 
 ////////////Game State Actions /////////////////////
-/* 
+
     public function stGameSetup(): void
     {
-        // TODO: Implement the game setup logic here.
+        // Wait for each player to select five cards
+        $players = $this->loadPlayersBasicInfos();
+        foreach ($players as $player_id => $player) {
+            $selectedCards = $this->getSelectedCards($player_id);
+            if (count($selectedCards) != 5) {
+                throw new \BgaUserException($this->_("You must select exactly 5 cards"));
+            }
+        }
+
+        // Proceed to the next game state
         $this->gamestate->nextState("Initial_Draw");
     }
- */
- /*    public function stInitialDraw(): void
+
+    public function stInitialDraw(): void
     {
+        //if (count($card_ids) != 5) throw new \BgaUserException($this->_("You must give exactly 3 cards"));
         // TODO: Implement the initial draw logic here.
-        $this->gamestate->nextState(Free_Action);
+        $this->gamestate->nextState('Free_Action');
     }
- */
-/*     public function stActiveDraw(): void
+
+    public function stActiveDraw(): void
     {
         // TODO: Implement the active draw logic here.
         $transition = 'Free_Action';
         $transition = 'Active_Turn';
         $this->gamestate->nextState($transition);
-        $this->DbQuery("UPDATE player SET free_taken = 1 WHERE player_id = $player_id");
+        //$this->DbQuery("UPDATE player SET free_taken = 1 WHERE player_id = $player_id");
     }
- */
+
     public function stFreeAction(): void
     {
         // TODO: Implement the free action logic here.
@@ -138,7 +119,9 @@ class Game extends \Table
     {
         // TODO: Implement the active turn logic here.
         //check if global card was picked
-        $this->gamestate->nextState('Non-active_Turn');
+        $transition = 'Non-active_Turn';
+        $transition = 'Card_Effect';
+        $this->gamestate->nextState($transition);
     }
 
     public function stNonActiveTurn(): void
@@ -170,18 +153,16 @@ class Game extends \Table
     public function stPrayer(): void
     {
         // TODO: Implement the prayer logic here.
-        $this->gamestate->nextState("Eliminate_Players");
+        $this->gamestate->nextState("Endgame_Checks");
         //could combine with prayer and  endgame check once mechanics are working
     }
 
-    public function stEndRound(): void
+    public function stEndChecks(): void
     {
         // TODO: Implement the end round logic here.
-        $transition = 'Starting_player';
-        //check if any cards remain
-        $transition = 'Convert';
+        $transition = 'Next_player';
+        $transition = 'End';
         $this->gamestate->nextState($transition);
-        $this->gamestate->nextState('gameEnd');
         //could combine with prayer and  endgame check once mechanics are working
     }
 
@@ -332,7 +313,7 @@ class Game extends \Table
 
         // Init global values with their initial values.
 
-        $this->setGameStateInitialValue("Update_Count", 0);
+        //$this->setGameStateInitialValue("Update_Count", 0);
 
         $disasterCards = array(
             array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),

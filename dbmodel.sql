@@ -25,21 +25,21 @@
 -- card_location_arg (0-5)
 
 CREATE TABLE IF NOT EXISTS `disaster_card` (
-  `card_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `card_id_d` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `card_type` varchar(16) NOT NULL,
   `card_type_arg` int(11) NOT NULL,
   `card_location` varchar(16) NOT NULL,
   `card_location_arg` int(11) NOT NULL,
-  PRIMARY KEY (`card_id`)
+  PRIMARY KEY (`card_id_d`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 CREATE TABLE IF NOT EXISTS `bonus_card` (
-  `card_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `card_id_b` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `card_type` varchar(16) NOT NULL,
   `card_type_arg` int(11) NOT NULL,
   `card_location` varchar(16) NOT NULL,
   `card_location_arg` int(11) NOT NULL,
-  PRIMARY KEY (`card_id`)
+  PRIMARY KEY (`card_id_b`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 CREATE TABLE IF NOT EXISTS `hktoken` (

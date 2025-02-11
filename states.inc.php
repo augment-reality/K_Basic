@@ -72,19 +72,30 @@ $machinestates = [
         "description" => "",
         "type" => "manager",
         "action" => "stGameSetup",
-        "transitions" => ["Starting_Draw" => 10]
+        "transitions" => ["Initial_Draw" => 10]
     ),
-
     10 => [
         "name" => "Initial_Draw",
         "description" => 'All players pick a combination of five bonus and disaster cards',
         "type" => "multipleactiveplayer",
+        "action" => "stMakeEveryoneActive",
+        //"args" => "",
+        "possibleactions" => "stInitialDraw","actionCancel",
+        "updateGameProgression" => false,
+        "transitions" => ["Free_Action" => 20]
+    ],
+/*     
+    use to ignore buggy multiactive state
+    10 => [
+        "name" => "Initial_Draw",
+        "description" => 'All players pick a combination of five bonus and disaster cards',
+        "descriptionmyturn" => "Pick a combination of five cards",
+        "type" => "activeplayer",
         "action" => "stInitialDraw",
         //"args" => "",
-        //"possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["Cards_Selected" => 20]
-    ],
+        "transitions" => ["Free_Action" => 20]
+    ], */
     11 => [
         "name" => "Active_Draw",
         "description" => clienttranslate('${actplayer} must draw cards'),
@@ -92,9 +103,9 @@ $machinestates = [
         "type" => "activeplayer",
         "action" => "stActiveDraw",
         //"args" => "",
-        //"possibleactions" => "",
+        "possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["Next_Player_Free" => 20, "Begin_Round" => 30]
+        "transitions" => ["Free_Action" => 20, "Active_Turn" => 30]
     ],
     20 => [
         "name" => "Free_Action",
@@ -103,9 +114,9 @@ $machinestates = [
         "type" => "activeplayer",
         "action" => "stFreeAction",
         //"args" => "",
-        //"possibleactions" => "",
+        "possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["Next_Player_Free" => 20, "Begin_Round" => 30, "conversion" => 40]
+        "transitions" => ["Free_Action" => 20, "Active_Turn" => 30, "Convert" => 40]
     ],
     30 => [
         "name" => "Active_Turn",
@@ -114,9 +125,9 @@ $machinestates = [
         "type" => "activeplayer",
         "action" => "stActiveTurn",
         //"args" => "",
-        //"possibleactions" => "",
+        "possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["played" => 31, "passed" => 33]
+        "transitions" => ["Non-active_Turn" => 31, "Card_Effect" => 33]
     ],
     31 => [
         "name" => "Non-active_Turn",
@@ -125,9 +136,9 @@ $machinestates = [
         "type" => "activeplayer",
         "action" => "stNonActiveTurn",
         //"args" => "",
-        //"possibleactions" => "",
+        "possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["next round" => 30, "next player" => 31]
+        "transitions" => ["Active_Turn" => 30, "Non-active_Turn" => 31]
     ],
     33 => [
         "name" => "Card_Effect",
@@ -136,7 +147,7 @@ $machinestates = [
         "action" => "stCardEffect",
         //"args" => "",
         "updateGameProgression" => false,
-        "transitions" => ["Effects" => 33, "Begin_End_Round" => 40]
+        "transitions" => ["Card_Effect" => 33, "Convert" => 40]
     ],
     40 => [
         "name" => "Convert",
@@ -145,7 +156,7 @@ $machinestates = [
         "action" => "stConvert",
         //"args" => "",
         "updateGameProgression" => false,
-        "transitions" => ["pray" => 50]
+        "transitions" => ["Gain_Prayer" => 50]
     ],
     50 => [
         "name" => "Gain_Prayer",
@@ -154,25 +165,32 @@ $machinestates = [
         "action" => "stPrayer",
         //"args" => "",
         "updateGameProgression" => false,
-        "transitions" => ["Endgame_Check" => 60]
+        "transitions" => ["Endgame_Checks" => 60]
     ],
     60 => [
-        "name" => "Eliminate_Players",
+        "name" => "Endgame_Checks",
         "description" => 'Checking for eliminations and a winner/tie',
         "type" => "game",
-        "action" => "stEndRound",
+        "action" => "stEndChecks",
         //"args" => "",
         "updateGameProgression" => true,
-        "transitions" => ["No_Winner" => 70, "Game_Over" => 99]
+        "transitions" => ["Next_player" => 70, "End" => 70]
     ],
     70 => [
-        "name" => "Starting_player",
+        "name" => "Next_player",
         "description" => 'Player order changes',
         "type" => "game",
         "action" => "stNextRound",
         //"args" => "",
         "updateGameProgression" => false,
         "transitions" => ["New_Cycle" => 11]
+    ],
+    70 => [
+        "name" => "End",
+        "description" => 'calculate stats and final scores?',
+        "type" => "game",
+        "updateGameProgression" => false,
+        "transitions" => ["gameEnd" => 99]
     ],
 
     // Final state.

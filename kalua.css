@@ -46,7 +46,7 @@
     border: 1px solid #ccc;
     padding: 10px;
     margin: 10px;
-    width: 600px;
+    width: 655px;
     min-height: 450px; /* Adjusted height to fit both player_families and player_cards */
     background-color: #f9f9f9;
     border-radius: 5px;
@@ -57,7 +57,7 @@
 
 .player_hand {
     min-height: 100px;
-    min-width: 600px;
+    min-width: 650px;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
