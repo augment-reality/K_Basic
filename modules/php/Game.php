@@ -31,49 +31,26 @@ class Game extends \Table
      */
     public function __construct()
     {
-        parent::__construct();
+        parent::__construct();  
 
         $this->initGameStateLabels([
             "Initial_Draw" => 10,
-            "Active_Draw" => 11,
-            "Free_Action" => 20,
-            "Active_Turn" => 30,
-            "Non-active_Turn" => 31,
-            "Card_Effect" => 33,
-            "Convert" => 40,
-            "Gain_Prayer" => 50,
-            "Endgame_Checks" => 60,
-            "Next_player" => 70,
-            "End" => 70,
-        ]);        
+            "Active_Draw" => 20,
+            "Free_Action" => 30,
+            "Active_Turn" => 40,
+            "Non-active_Turn" => 50,
+            "Card_Effect" => 60,
+            "End_Round" => 70,
+        ]);    
 
-        //Make two decks: bonus and disaster
-        $this->disasterCards = $this->getNew( "module.common.deck" );
-        $this->disasterCards ->init( "disaster_card" );
-        $this->bonusCards = $this->getNew( "module.common.deck" );
-        $this->bonusCards ->init( "bonus_card" );
-        
-/*         self::$CARD_TYPES = [
-            1 => [
-                "card_name" => clienttranslate('Troll'), // ...
-            ],
-            2 => [
-                "card_name" => clienttranslate('Goblin'), // ...
-            ],
-            // ...
-        ]; */
+        // Make two decks: bonus and disaster - cards are defined further below
+        $this->disasterCards = $this->getNew("module.common.deck");
+        $this->disasterCards->init("disaster_card");
+        $this->bonusCards = $this->getNew("module.common.deck");
+        $this->bonusCards->init("bonus_card");
     }
 
- 
-
-
-    //ties to undo function in js
-    function actionCancel() {
-        $this->gamestate->checkPossibleAction('actionCancel');
-        $this->gamestate->setPlayersMultiactive(array ($this->getCurrentPlayerId() ), 'error', false);
-    }
-
-////////////Game State Actions /////////////////////
+    //////////// Game State Actions /////////////////////
 
     public function stGameSetup(): void
     {
@@ -92,7 +69,6 @@ class Game extends \Table
 
     public function stInitialDraw(): void
     {
-        //if (count($card_ids) != 5) throw new \BgaUserException($this->_("You must give exactly 3 cards"));
         // TODO: Implement the initial draw logic here.
         $this->gamestate->nextState('Free_Action');
     }
@@ -100,82 +76,112 @@ class Game extends \Table
     public function stActiveDraw(): void
     {
         // TODO: Implement the active draw logic here.
-        $transition = 'Free_Action';
-        $transition = 'Active_Turn';
-        $this->gamestate->nextState($transition);
-        //$this->DbQuery("UPDATE player SET free_taken = 1 WHERE player_id = $player_id");
+        $this->gamestate->nextState('Free_Action');
     }
 
     public function stFreeAction(): void
     {
         // TODO: Implement the free action logic here.
-
-        $transition = 'Active_Turn';
-        $transition = 'Convert';
-        $this->gamestate->nextState($transition);
+        $this->gamestate->nextState('Active_Turn');
     }
 
     public function stActiveTurn(): void
     {
         // TODO: Implement the active turn logic here.
-        //check if global card was picked
-        $transition = 'Non-active_Turn';
-        $transition = 'Card_Effect';
-        $this->gamestate->nextState($transition);
+        $this->gamestate->nextState('Non-active_Turn');
     }
 
     public function stNonActiveTurn(): void
     {
         // TODO: Implement the non-active turn logic here.
-        $transition = 'Non-active_Turn';
-        //check if global card was picked
-        //check if all players played
-        $transition = 'Active_Turn';
-        $this->gamestate->nextState($transition);
+        $this->gamestate->nextState('End_Round');
     }
 
     public function stCardEffect(): void
     {
         // TODO: Implement the card effect logic here.
-        $transition = 'Card_Effect';
-        //check if any cards remain
-        $transition = 'Convert';
-        $this->gamestate->nextState($transition);
+        $this->gamestate->nextState('Active_Turn');
     }
 
-    public function stConvert(): void
+    public function stEnd_Round(): void
     {
-        // TODO: Implement the convert logic here.
-        $this->gamestate->nextState("Gain_Prayer");
-        //could combine with prayer and  endgame check once mechanics are working
-    }
+        // Initialize constants
+        $players = $this->loadPlayersBasicInfos();
+        $happinessScores = [];
+        $converted_pool = [];
 
-    public function stPrayer(): void
-    {
-        // TODO: Implement the prayer logic here.
-        $this->gamestate->nextState("Endgame_Checks");
-        //could combine with prayer and  endgame check once mechanics are working
-    }
+        // Collect happiness scores
+        foreach ($players as $player_id => $player) {
+            $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
+        }
 
-    public function stEndChecks(): void
-    {
-        // TODO: Implement the end round logic here.
-        $transition = 'Next_player';
-        $transition = 'End';
-        $this->gamestate->nextState($transition);
-        //could combine with prayer and  endgame check once mechanics are working
-    }
+        // Find lowest and highest happiness scores
+        $happy_value_low = min($happinessScores);
+        $happy_value_high = max($happinessScores);
 
-    public function stNextRound(): void
-    {
-        // TODO: Implement the next round logic here.
-        $this->gamestate->nextState("Active_Draw");
-    }
+        // Skip family redistribution if everyone has same happiness
+        if ($happy_value_low != $happy_value_high) {
+            // Send families to temporary group for redistribution
+            foreach ($players as $player_id => $happiness) {
+                if ($happiness == $happy_value_low) {
+                    $converted_pool[] = 0;
+                    // add logic to lose 2 families
+                } elseif ($happiness != $happy_value_high) {
+                    $converted_pool[] = 0;
+                    // add logic to lose 1 family
+                }
+            }
 
-/*     public function stGameEnd(): void
-    {
-        // TODO: Implement the game end logic here.
-    } */
+            // Count number of players with highest happiness score
+            $high_happiness_players = array_filter($happinessScores, function($happiness) use ($happy_value_high) {
+                return $happiness == $happy_value_high;
+            });
+            $count_high_happiness_players = count($high_happiness_players);
+
+            // Redistribute families
+            if (count($converted_pool) >= 3 * $count_high_happiness_players) {
+                foreach ($high_happiness_players as $player_id => $happiness) {
+                    $this->receiveFamiliesFromPool($player_id, 3);
+                }
+                $this->sendFamiliesToKalua(count($converted_pool) - 3 * $count_high_happiness_players);
+            } else {
+                $families_per_player = intdiv(count($converted_pool), $count_high_happiness_players);
+                foreach ($high_happiness_players as $player_id => $happiness) {
+                    $this->receiveFamiliesFromPool($player_id, $families_per_player);
+                }
+                $this->sendFamiliesToKalua(count($converted_pool) % $count_high_happiness_players);
+            }
+        }
+
+        // Players receive prayers (1 per 5 family, and extra if not highest)
+        foreach ($players as $player_id => $happiness) {
+            $family_count = $this->getFamilyCount($player_id);
+            $prayers = intdiv($family_count, 5);
+            if ($happiness == $happy_value_low) {
+                $prayers += 4;
+            } elseif ($happiness != $happy_value_high) {
+                $prayers += 2;
+            }
+            // add $prayers to player prayer total
+        }
+
+        // Check for player elimination (no chief/families)
+        foreach ($players as $player_id => $player) {
+            if ($this->getFamilyCount($player_id) == 0 && $this->getChiefCount($player_id) == 0) {
+                //$this->eliminatePlayer($player_id);
+            }
+        }
+
+        // Check religions remaining
+        if (count($this->getRemainingReligions()) == 1) {
+            $this->gamestate->nextState('gameEnd');
+            return;
+        }
+
+        // Change active player
+        $this->activeNextPlayer();
+        $this->gamestate->nextState('nextPlayer');
+    }
 
     public function actPass(): void
     {
@@ -188,7 +194,7 @@ class Game extends \Table
             "player_name" => $this->getActivePlayerName(),
         ]);
 
-        // at the end of the action, move to the next state
+        // At the end of the action, move to the next state
         $this->gamestate->nextState("pass");
     }
 
@@ -197,8 +203,6 @@ class Game extends \Table
      */
     public function argPlayerTurn(): array
     {
-        // Get some values from the current game situation from the database.
-
         return [
             "playableCardsIds" => [1, 2],
         ];
@@ -210,15 +214,15 @@ class Game extends \Table
      */
     public function getGameProgression()
     {
-        //get the starting number of players and divide by the current number of players
         return 0;
     }
 
     /**
      * Game state actions
-     * The action method of state `nextPlayer` is called everytime the current game state is set to `nextPlayer`.
+     * The action method of state `nextPlayer` is called every time the current game state is set to `nextPlayer`.
      */
-    public function stNextPlayer(): void {
+    public function stNextPlayer(): void
+    {
         // Retrieve the active player ID.
         $player_id = (int)$this->getActivePlayerId();
 
@@ -227,8 +231,7 @@ class Game extends \Table
         
         $this->activeNextPlayer();
 
-        // Go to another gamestate
-        // Here, we would detect if the game is over, and in this case use "endGame" transition instead 
+        // Go to another game state
         $this->gamestate->nextState("nextPlayer");
     }
 
@@ -237,7 +240,7 @@ class Game extends \Table
      */
     public function upgradeTableDb($from_version)
     {
-
+        // Implement database upgrade logic if needed
     }
 
     /*
@@ -255,12 +258,12 @@ class Game extends \Table
         $current_player_id = (int) $this->getCurrentPlayerId();
 
         // Get information about players.
-        // NOTE: you can retrieve some extra field you added for "player" table in `dbmodel.sql` if you need it.
         $result["players"] = $this->getCollectionFromDb(
             "SELECT `player_id` `id`, `player_score` `score` FROM `player`"
         );
 
-        // TODO: Gather all information about current game situation (visible by player $current_player_id).
+        $result['hand'] = $this->disasterCards->getCardsInLocation('hand', $current_player_id);
+        $result['hand'] = $this->bonusCards->getCardsInLocation('hand', $current_player_id);
 
         return $result;
     }
@@ -277,12 +280,12 @@ class Game extends \Table
 
     /**
      * This method is called only once, when a new game is launched. In this method, you must setup the game
-     *  according to the game rules, so that the game is ready to be played.
+     * according to the game rules, so that the game is ready to be played.
      */
     protected function setupNewGame($players, $options = [])
     {
         // Set the colors of the players with HTML color code. The default below is red/green/blue/orange/brown. The
-        // number of colors defined here must correspond to the maximum number of players allowed for the gams.
+        // number of colors defined here must correspond to the maximum number of players allowed for the game.
         $gameinfos = $this->getGameinfos();
         $default_colors = $gameinfos['player_colors'];
 
@@ -298,9 +301,6 @@ class Game extends \Table
         }
 
         // Create players based on generic information.
-        //
-        // NOTE: You can add extra field on player table in the database (see dbmodel.sql) and initialize
-        // additional fields directly here.
         static::DbQuery(
             sprintf(
                 "INSERT INTO player (player_id, player_color, player_canal, player_name, player_avatar) VALUES %s",
@@ -311,37 +311,37 @@ class Game extends \Table
         $this->reattributeColorsBasedOnPreferences($players, $gameinfos["player_colors"]);
         $this->reloadPlayersBasicInfos();
 
-        // Init global values with their initial values.
+        //////////////////// Init global values with their initial values ////////////////////////
 
         //$this->setGameStateInitialValue("Update_Count", 0);
 
-        $disasterCards = array(
-            array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 2, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 3, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 4, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
-            array( 'type' => 2, 'type_arg' => 6, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 7, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 8, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 9, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 10, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 11, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 12, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 13, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 14, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 15, 'nbr' => 1 )
-        );
+        $disasterCards = [
+            ['type' => 1, 'type_arg' => 1, 'nbr' => 4],
+            ['type' => 1, 'type_arg' => 2, 'nbr' => 4],
+            ['type' => 1, 'type_arg' => 3, 'nbr' => 4],
+            ['type' => 1, 'type_arg' => 4, 'nbr' => 4],
+            ['type' => 1, 'type_arg' => 5, 'nbr' => 3],
+            ['type' => 2, 'type_arg' => 1, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 2, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 3, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 4, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 5, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 6, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 7, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 8, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 9, 'nbr' => 1],
+            ['type' => 2, 'type_arg' => 10, 'nbr' => 1]
+        ];
         $this->disasterCards->createCards($disasterCards, 'deck');
     
-        $bonusCards = array(
-            array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 3, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 4, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 )
-        );
+        $bonusCards = [
+            ['type' => 3, 'type_arg' => 1, 'nbr' => 3],
+            ['type' => 3, 'type_arg' => 2, 'nbr' => 3],
+            ['type' => 3, 'type_arg' => 3, 'nbr' => 3],
+            ['type' => 3, 'type_arg' => 4, 'nbr' => 3],
+            ['type' => 3, 'type_arg' => 5, 'nbr' => 3],
+            ['type' => 3, 'type_arg' => 6, 'nbr' => 3]
+        ];
         $this->bonusCards->createCards($bonusCards, 'deck');
 
         // Init game statistics.
@@ -354,22 +354,8 @@ class Game extends \Table
         // TODO: Setup the initial game situation here.
 
         $this->activeNextPlayer();
-        
-/*         //https://en.doc.boardgamearena.com/Main_game_logic:_Game.php
-        // Activate players for card selection once everything has been initialized and ready.
-        function st_MultiPlayerInit() {
-            $this->gamestate->setAllPlayersMultiactive();
-        }
+    }
 
-        //make each player inactive once all five cards are selected, then transition to next state
-        function actionBla($args) {
-            $this->checkAction('actionBla');
-            // handle the action using $this->getCurrentPlayerId()
-            $this->gamestate->setPlayerNonMultiactive( $this->getCurrentPlayerId(), 'next');
-        }
- */
-        }
- 
     /**
      * This method is called each time it is the turn of a player who has quit the game (= "zombie" player).
      * You can do whatever you want in order to make sure the turn of this player ends appropriately
@@ -393,10 +379,8 @@ class Game extends \Table
         if ($state["type"] === "activeplayer") {
             switch ($state_name) {
                 default:
-                {
                     $this->gamestate->nextState("zombiePass");
                     break;
-                }
             }
 
             return;
@@ -409,5 +393,15 @@ class Game extends \Table
         }
 
         throw new \feException("Zombie mode not supported at this game state: \"{$state_name}\".");
+    }
+
+    // set aux score (tie breaker)
+    function dbSetAuxScore($player_id, $score) {
+        $this->DbQuery("UPDATE player SET player_score_aux=$score WHERE player_id='$player_id'");
+    }
+
+    // set score
+    function dbSetScore($player_id, $count) {
+        $this->DbQuery("UPDATE player SET player_score='$count' WHERE player_id='$player_id'");
     }
 }

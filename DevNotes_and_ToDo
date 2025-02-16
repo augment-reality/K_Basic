@@ -6,18 +6,18 @@ won't be packaged for deployment.
 It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------To do----------------------------------------
--get data in game.php "getalldatas" for happiness/prayer/families
+-Figure out sprites
+-Card imgs
 -Make a die
--finish tying deck element to tokens
+-sql deck info: make two decks (bonus and global/local)
 -if card requires a die roll, make value 7, and replace with die roll when checked
 -keep track of held (face up) player cards for amulets/temples
-    -move to a separate div?
 -implement sequence for avoiding/doubling global effects (apply card twice?)
+-make family tokens and zone
 -handle php case for "zombie" player: remove families from game?
+-Fill out "States.inc.php"
 -game log data
--player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl
-    and therefore into the stars location on the player board. This occurs sometime after the game setup() function.
-    However this score must be updated as the game progresses using notifications.
+-player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl and therefore into the stars location on the player board. This occurs sometime after the game setup() function. However this score must be updated as the game progresses using notifications.
 
 
 ------------------------------   Setup   ------------------------------
@@ -41,7 +41,7 @@ random starting player
 
 1. Active player checks if <5 cards in hand, draw to 5. Otherwise draw 1.
 
-2. Starting with active player, if chief remains, choose 1:
+2. Starting with active player, choose 1:
 
     a) Give a speech: Increase happiness by 1.
         h = h+1
@@ -66,7 +66,7 @@ random starting player
 7. Automatic reallocation of families:
     Check distribution of happiness. Find lowest happiness score (var happy_value_low) and check for highest happiness score (var happy_value_high). If low=high, skip to step 8. 
 
-Families are sent to temporary group (var converted_pool) for redistribution: if player happiness = var happy_value_low sends 2 families/  if player happiness != var happy_value_low or var happy_value_high, sends 2 families
+Families are sent to temporary group (var converted_pool) for redistribution: if player happiness = var happy_value_low sends 2 families/  if player happiness != var happy_value_low or var happy_value_high, sends 1 families
 
 Count # of players in group 2 (var happy_value_high)
 If count of var converted_pool >= 3* count of var happy_value_high, each player gets three and remainder to Kalua (hkboard)

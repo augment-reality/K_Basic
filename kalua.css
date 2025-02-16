@@ -13,12 +13,11 @@
  *
  */
 
-#game_board_Wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 20px;
+#game_play_area {
+    display: flex; /* Use flexbox for layout */
+    flex-wrap: wrap; /* Allow wrapping of elements */
+    justify-content: left;
+    gap: 10px; /* Add some space between elements */
 }
 
 #board_background {
@@ -26,7 +25,8 @@
     width: 400px;
     height: 265px;
     background-image: url('img/kboard_400_265.jpg');
-    background-size: cover;
+    background-repeat: no-repeat;
+    background-size: auto;
     margin-bottom: 20px; /* Add margin to avoid overlap */
 }
 
@@ -34,6 +34,15 @@
     width: 400px; /* Match the width of board_background */
     height: 80px; /* Match the height of board_background */
     position: relative;
+}
+
+#playedCards {
+    width: 650px; /* needs to hold five cards */
+    height: 190px; /* Match card height */
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
 }
 
 #atheistFamilies {
@@ -47,7 +56,7 @@
     padding: 10px;
     margin: 10px;
     width: 655px;
-    min-height: 450px; /* Adjusted height to fit both player_families and player_cards */
+    min-height: 210px; /* Adjusted height to fit both player_families and player_cards */
     background-color: #f9f9f9;
     border-radius: 5px;
     text-align: right;
