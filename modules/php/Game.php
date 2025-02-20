@@ -114,6 +114,8 @@ class Game extends \Table
     public function stCardEffect(): void
     {
 
+        //$dices[$i] = bga_rand( 1,6 );
+
     }
 
     public function stEnd_Round(): void
@@ -284,6 +286,22 @@ class Game extends \Table
             "SELECT `player_id` `id`, `player_score` `score` FROM `player`"
         );
 
+        // //coordinates for hk token zones
+        // //offset is (265-15)/10 --> 25
+        // $this->hk_array = array(
+        //     array(0,5),
+        //     array(25,5),
+        //     array(50,5)
+        //     array(75,5),
+        //     array(100,5),
+        //     array(125,5),
+        //     array(150,5),
+        //     array(175,5),
+        //     array(200,5),
+        //     array(225,5)
+        // )
+
+
         // TODO: Gather all information about current game situation (visible by player $current_player_id).
 
         return $result;
@@ -434,4 +452,16 @@ class Game extends \Table
 
         throw new \feException("Zombie mode not supported at this game state: \"{$state_name}\".");
     }
+
+    // set aux score (tie breaker)
+    function dbSetAuxScore($player_id, $score) {
+        $this->DbQuery("UPDATE player SET player_score_aux=$score WHERE player_id='$player_id'");
+    }
+    // set score
+    function dbSetScore($player_id, $count) {
+        $this->DbQuery("UPDATE player SET player_score='$count' WHERE player_id='$player_id'");
+    }
+
+
+
 }

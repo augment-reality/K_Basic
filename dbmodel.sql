@@ -49,3 +49,11 @@ ADD `player_prayer` INT(11) NOT NULL DEFAULT '5',
 ADD `player_family` INT(11) NOT NULL DEFAULT '0',
 ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1';
 
+-- Use table from Cant Stop as example for hk token zones
+-- CREATE TABLE IF NOT EXISTS `col` (
+--   `col_id` int(10) unsigned NOT NULL,
+--   `col_player_id` int(10) unsigned NOT NULL DEFAULT '0',
+--   PRIMARY KEY (`col_id`,`col_player_id`),
+--   KEY `col_player_id` (`col_player_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+

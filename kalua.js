@@ -20,7 +20,7 @@ define([
     "ebg/core/gamegui",
     "ebg/counter",
     "ebg/stock",
-    "ebg/zone",
+    "ebg/zone"
 ],
 function (dojo, declare) {
     return declare("bgagame.kalua", ebg.core.gamegui, {
@@ -33,7 +33,10 @@ function (dojo, declare) {
                     <div id="hkboard"></div>
                     <div id="atheistFamilies"></div>
                 </div>
-                <div id="playedCards">Played Cards:</div>
+                <div id="playedCards">Played Cards:
+                    <div id="dice"></div>
+                </div>
+
                 <div id="player-tables" class="zone-container"></div>
             `);
         },
@@ -60,10 +63,8 @@ function (dojo, declare) {
 
                 // Make types for each color of meeple
                 for (let i = 0; i < 10; i++) {
-                    this[`fams_${player.id}`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png'// addItemType(type: number, weight: number, image: string, image_position: number ): void
-, i// addItemType(type: number, weight: number, image: string, image_position: number ): void
-);
-// addItemType(type: number, weight: number, image: string, image_position: number ): void
+                    this[`fams_${player.id}`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png')
+                    // addItemType(type: number, weight: number, image: string, image_position: number )
                 }
 
                 // Check gamedata for chief/family count
@@ -89,6 +90,7 @@ function (dojo, declare) {
                  this[`atheists`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png', i);
             }
 
+            //need to make this based on current state rather than initial state
             // Add three atheist families to hkboard for each player
             Object.values(gamedatas.players).forEach(player => {
                 for (let i = 0; i < 3; i++) {
@@ -96,11 +98,38 @@ function (dojo, declare) {
                 }
             });
 
-            // Create and add hk token stock
-            this['hkboard'] = new ebg.stock();
-            this['hkboard'].create(this, document.getElementById('atheistFamilies'), 30, 30);
-            this['hkboard'].setSelectionMode(0);
-            this['hkboard'].image_items_per_row = 10;
+
+
+            // Initialize and create hk token stock
+            this['hkToken'] = new ebg.stock();
+            this['hkToken'].create(this, document.getElementById('hkboard'), 30, 30);
+            this['hkToken'].setSelectionMode(0);
+            this['hkToken'].image_items_per_row = 10;
+            for (let i = 0; i < 10; i++) {
+                    this[`hkToken`].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
+            }
+
+            //create zone for hk tokens on board
+            this.hkZone = new ebg.zone();
+            this.hkZone.create(this, document.getElementById('hkboard'), 40, 80);
+            //zone.placeInZone( <object_id>, <weight> );
+
+            // Add hk token for each player
+            let p_count = 1;
+            Object.values(gamedatas.players).forEach(player => {
+                this['hkToken'].addToStock(p_count);
+                p_count++;
+            });
+
+
+            this.dices = new ebg.stock();
+            this.dices.create(this, document.getElementById('dice'), 50, 50);
+            for (let i = 1; i <= 6; i++) {
+                this.dices.addItemType(i, i, g_gamethemeurl + 'img/d6_300_50.png', i);
+            }
+            for (let i = 1; i <= 6; i++) {
+                this.dices.addToStock(i);
+            }
 
             // Create stock for played cards
             this['playedCards'] = new ebg.stock();  
@@ -223,7 +252,7 @@ function (dojo, declare) {
 
         onUpdateActionButtons: function(stateName, args) {
             // Make sure atheist count matches gamedata
-            this['hkboard'].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
+            //this['hkboard'].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
         },
 
         ///////////////////////////////////////////////////
@@ -232,12 +261,76 @@ function (dojo, declare) {
         getCardUniqueId: function (color, value) {
             return (color - 1) * 5 + (value - 1);
         },
+
+/*         // Get parent zone of specified token (from can't stop)
+        getParentZoneOfToken: function( node )
+        {
+            console.log( "getParentZoneOfToken" );
+            var step_id = node.parentNode.id.substr( 5 );
+            console.log( step_id );
+            var ids = step_id.split( '_' );
+            if( ids.length == 2 )
+            {
+                var column = ids[0];
+                var height = ids[1];
+                console.log( "column="+column+", height="+height );
+                
+                return this.columns[ column ][ height ];
+            }
+            else
+            {
+                console.log("getParentZoneOfToken failure");
+                return null;
+            }
+        },
+        
+        // Place a token of the specified color on the specified place (column / height) (from can't stop)
+        placeTokenOnColumn: function( color, column_id, height )
+        {
+            console.log( 'placeTokenOnColumn' );
+            var token_id = 'token_'+color+'_'+column_id;
+            var token_div = $(token_id);
+            if( ! token_div )
+            {
+                // Create new token
+                var origin = 'tokens';
+                if( color === '000000' )
+                {
+                    var bhikkhu_id = this.bhikkhu_avail;
+                    this.bhikkhu_avail --;
+                    origin = 'bhikkhu_place_'+bhikkhu_id;
+                    dojo.style( $('bhikkhu_'+bhikkhu_id), 'display', 'none' );
+                }
+                dojo.place( this.format_block('jstpl_token', {color:color,column:column_id} ), origin );
+                this.columns[ column_id ][ height ].placeInZone( token_id, 0 );
+            }
+            else
+            {
+                // Move this token to position
+                var parentZone = this.getParentZoneOfToken( token_div );                
+                
+                this.columns[ column_id ][ height ].placeInZone( token_id, 0 );
+                
+                // Remove it from precedent zone
+                parentZone.removeFromZone( token_id, false );
+            }
+        }, */
         
         ///////////////////////////////////////////////////
         //// Player's action
 
         ///////////////////////////////////////////////////
         //// Reaction to cometD notifications
+
+        // Put a token in some position (from cant stop)
+        notif_saveprogression: function( notif )
+        {
+            console.log( 'notif_saveprogression' );
+            console.log( notif );
+            
+            var color = this.gamedatas.players[ notif.args.player_id ].color;
+            this.placeTokenOnColumn( color, notif.args.column_id, notif.args.height );
+        },     
 
         // TODO: from this point and below, you can write your game notifications handling methods
     });
