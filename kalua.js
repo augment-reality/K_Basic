@@ -98,29 +98,68 @@ function (dojo, declare) {
                 }
             });
 
+            // create an array of zones
+            this.hkzone = [];
+            const hkboard = document.getElementById('hkboard');
 
+            // Get the width and height of the hkboard div
+            const hkboardWidth = hkboard.offsetWidth;
+            const hkboardHeight = hkboard.offsetHeight;
+
+            // Calculate the width of each zone
+            const zoneWidth = hkboardWidth / 10;
+
+            // Create and attach zones to the hkboard
+            for (let i = 0; i < 10; i++) {
+                this.hkzone[i] = new ebg.zone();
+                const zoneDivId = `hkzone_${i}`;
+
+                // Create a div for each zone
+                const zoneDiv = document.createElement('div');
+                zoneDiv.id = zoneDivId;
+                zoneDiv.style.width = `${zoneWidth}px`;
+                zoneDiv.style.height = `${hkboardHeight}px`;
+                zoneDiv.style.position = 'absolute';
+                zoneDiv.style.left = `${i * zoneWidth}px`;
+                zoneDiv.style.top = '0';
+                hkboard.appendChild(zoneDiv);
+
+                // Initialize the zone
+                this.hkzone[i].create(this, zoneDivId, zoneWidth, hkboardHeight);
+                this.hkzone[i].setPattern('verticalfit');
+            }
 
             // Initialize and create hk token stock
             this['hkToken'] = new ebg.stock();
-            this['hkToken'].create(this, document.getElementById('hkboard'), 30, 30);
+            this['hkToken'].create(this, hkboard, 30, 30);
             this['hkToken'].setSelectionMode(0);
             this['hkToken'].image_items_per_row = 10;
+
+            // Add hk tokens to the stock and place them in zones
             for (let i = 0; i < 10; i++) {
-                    this[`hkToken`].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
+                const tokenId = `hkToken_${i}`;
+                this['hkToken'].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
+
+                // Place the token in the corresponding zone
+                this.hkzone[i].placeInZone(tokenId, i);
+
+                // Create a visual representation of the token
+                const tokenDiv = document.createElement('div');
+                tokenDiv.id = tokenId;
+                tokenDiv.className = 'hk_token';
+                tokenDiv.style.width = '30px';
+                tokenDiv.style.height = '30px';
+                tokenDiv.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_hktoken.png)`;
+                tokenDiv.style.backgroundSize = 'cover';
+                hkboard.appendChild(tokenDiv);
             }
 
-            //create zone for hk tokens on board
-            this.hkZone = new ebg.zone();
-            this.hkZone.create(this, document.getElementById('hkboard'), 40, 80);
-            //zone.placeInZone( <object_id>, <weight> );
-
-            // Add hk token for each player
+            // Add hk tokens for each player
             let p_count = 1;
             Object.values(gamedatas.players).forEach(player => {
                 this['hkToken'].addToStock(p_count);
                 p_count++;
             });
-
 
             this.dices = new ebg.stock();
             this.dices.create(this, document.getElementById('dice'), 50, 50);
@@ -157,11 +196,8 @@ function (dojo, declare) {
             // Setting up players' side panels
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
-                    <div> Prayer count: <span id="panel_p_${player.id}"></span> <br>
-                     happiness:<span id="panel_h_${player.id}"></span><br>
-                     Cards:<span id="panel_c_${player.id}"></span><br>
-                     Temples:<span id="panel_t_${player.id}"></span><br>
-                     Amulets:<span id="panel_a_${player.id}"></span>
+                    <div> Prayer: <span id="panel_p_${player.id}"></span>    happiness:<span id="panel_h_${player.id}"></span><br>
+                     Cards:<span id="panel_c_${player.id}"></span>    Temples:<span id="panel_t_${player.id}"></span>    Amulets:<span id="panel_a_${player.id}"></span>
                      </div>
                 `);
 
@@ -261,6 +297,8 @@ function (dojo, declare) {
         getCardUniqueId: function (color, value) {
             return (color - 1) * 5 + (value - 1);
         },
+
+
 
 /*         // Get parent zone of specified token (from can't stop)
         getParentZoneOfToken: function( node )

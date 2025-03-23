@@ -59,7 +59,7 @@ $machinestates = [
         //"args" => "",
         "possibleactions" => "",
         "updateGameProgression" => false,
-        "transitions" => ["Free_Action" => 20, "Active_Turn" => 30]
+        "transitions" => ["Active_Draw" => 20, "Free_Action" => 30]
     ],
     30 => [
         "name" => "Free_Action",

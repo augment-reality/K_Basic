@@ -41,7 +41,7 @@ class Game extends \Table
             "Non-active_Turn" => 50,
             "Card_Effect" => 60,
             "End_Round" => 70,
-        ]);          
+        ]);       
 
         //Make two decks: bonus and disaster
         $this->disasterCards = $this->getNew( "module.common.deck" );
@@ -88,120 +88,90 @@ class Game extends \Table
 
     public function stInitialDraw(): void
     {
-
+        //if (count($card_ids) != 5) throw new \BgaUserException($this->_("You must give exactly 3 cards"));
+        // TODO: Implement the initial draw logic here.
+        $this->gamestate->nextState('Free_Action');
     }
 
     public function stActiveDraw(): void
     {
-
+        // TODO: Implement the active draw logic here.
+        $transition = 'Free_Action';
+        $transition = 'Active_Draw';
+        $this->gamestate->nextState($transition);
+        //$this->DbQuery("UPDATE player SET free_taken = 1 WHERE player_id = $player_id");
     }
 
     public function stFreeAction(): void
     {
+        // TODO: Implement the free action logic here.
 
+        $transition = 'Active_Turn';
+        $transition = 'Free_Action';
+        $this->gamestate->nextState($transition);
     }
 
     public function stActiveTurn(): void
     {
-
+        // TODO: Implement the active turn logic here.
+        //check if global card was picked
+        $transition = 'Non-active_Turn';
+        $transition = 'Card_Effect';
+        $this->gamestate->nextState($transition);
     }
 
     public function stNonActiveTurn(): void
     {
-
+        // TODO: Implement the non-active turn logic here.
+        $transition = 'Non-active_Turn';
+        //check if global card was picked
+        //check if all players played
+        $transition = 'Active_Turn';
+        $this->gamestate->nextState($transition);
     }
 
     public function stCardEffect(): void
     {
-
-        //$dices[$i] = bga_rand( 1,6 );
-
+        // TODO: Implement the card effect logic here.
+        $transition = 'Card_Effect';
+        //check if any cards remain
+        $transition = 'Convert';
+        $this->gamestate->nextState($transition);
     }
 
-    public function stEnd_Round(): void
+    public function stConvert(): void
     {
-
+        // TODO: Implement the convert logic here.
+        $this->gamestate->nextState("Gain_Prayer");
+        //could combine with prayer and  endgame check once mechanics are working
     }
 
-    public function stGameEnd(): void
+    public function stPrayer(): void
     {
-        // Initialize constants
-        $players = $this->loadPlayersBasicInfos();
-        $happinessScores = [];
-        $converted_pool = [];
-
-        // Collect happiness scores
-        foreach ($players as $player_id => $player) {
-            $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
-        }
-
-        // Find lowest and highest happiness scores
-        $happy_value_low = min($happinessScores);
-        $happy_value_high = max($happinessScores);
-
-        // Skip family redistribution if everyone has same happiness
-        if ($happy_value_low != $happy_value_high) {
-            // Send families to temporary group for redistribution
-            foreach ($players as $player_id => $happiness) {
-                if ($happiness == $happy_value_low) {
-                    $converted_pool[] = 0;
-                    // add logic to lose 2 families
-                } elseif ($happiness != $happy_value_high) {
-                    $converted_pool[] = 0;
-                    // add logic to lose 1 family
-                }
-            }
-
-            // Count number of players with highest happiness score
-            $high_happiness_players = array_filter($happinessScores, function($happiness) use ($happy_value_high) {
-                return $happiness == $happy_value_high;
-            });
-            $count_high_happiness_players = count($high_happiness_players);
-
-            // Redistribute families
-            if (count($converted_pool) >= 3 * $count_high_happiness_players) {
-                foreach ($high_happiness_players as $player_id => $happiness) {
-                    $this->receiveFamiliesFromPool($player_id, 3);
-                }
-                $this->sendFamiliesToKalua(count($converted_pool) - 3 * $count_high_happiness_players);
-            } else {
-                $families_per_player = intdiv(count($converted_pool), $count_high_happiness_players);
-                foreach ($high_happiness_players as $player_id => $happiness) {
-                    $this->receiveFamiliesFromPool($player_id, $families_per_player);
-                }
-                $this->sendFamiliesToKalua(count($converted_pool) % $count_high_happiness_players);
-            }
-        }
-
-        // Players receive prayers (1 per 5 family, and extra if not highest)
-        foreach ($players as $player_id => $happiness) {
-            $family_count = $this->getFamilyCount($player_id);
-            $prayers = intdiv($family_count, 5);
-            if ($happiness == $happy_value_low) {
-                $prayers += 4;
-            } elseif ($happiness != $happy_value_high) {
-                $prayers += 2;
-            }
-            // add $prayers to player prayer total
-        }
-
-        // Check for player elimination (no chief/families)
-        foreach ($players as $player_id => $player) {
-            if ($this->getFamilyCount($player_id) == 0 && $this->getChiefCount($player_id) == 0) {
-                //$this->eliminatePlayer($player_id);
-            }
-        }
-
-        // Check religions remaining
-        if (count($this->getRemainingReligions()) == 1) {
-            $this->gamestate->nextState('gameEnd');
-            return;
-        }
-
-        // Change active player
-        $this->activeNextPlayer();
-        $this->gamestate->nextState('nextPlayer');
+        // TODO: Implement the prayer logic here.
+        $this->gamestate->nextState("Endgame_Checks");
+        //could combine with prayer and  endgame check once mechanics are working
     }
+
+    public function stEndChecks(): void
+    {
+        // TODO: Implement the end round logic here.
+        $transition = 'Next_player';
+        $transition = 'End';
+        $this->gamestate->nextState($transition);
+        //could combine with prayer and  endgame check once mechanics are working
+    }
+
+    public function stNextRound(): void
+    {
+        // TODO: Implement the next round logic here.
+        $this->gamestate->nextState("Active_Draw");
+    }
+
+/*     public function stGameEnd(): void
+    {
+        // TODO: Implement the game end logic here.
+    } */
 
     public function actPass(): void
     {
@@ -285,22 +255,6 @@ class Game extends \Table
         $result["players"] = $this->getCollectionFromDb(
             "SELECT `player_id` `id`, `player_score` `score` FROM `player`"
         );
-
-        // //coordinates for hk token zones
-        // //offset is (265-15)/10 --> 25
-        // $this->hk_array = array(
-        //     array(0,5),
-        //     array(25,5),
-        //     array(50,5)
-        //     array(75,5),
-        //     array(100,5),
-        //     array(125,5),
-        //     array(150,5),
-        //     array(175,5),
-        //     array(200,5),
-        //     array(225,5)
-        // )
-
 
         // TODO: Gather all information about current game situation (visible by player $current_player_id).
 
@@ -452,16 +406,4 @@ class Game extends \Table
 
         throw new \feException("Zombie mode not supported at this game state: \"{$state_name}\".");
     }
-
-    // set aux score (tie breaker)
-    function dbSetAuxScore($player_id, $score) {
-        $this->DbQuery("UPDATE player SET player_score_aux=$score WHERE player_id='$player_id'");
-    }
-    // set score
-    function dbSetScore($player_id, $count) {
-        $this->DbQuery("UPDATE player SET player_score='$count' WHERE player_id='$player_id'");
-    }
-
-
-
 }

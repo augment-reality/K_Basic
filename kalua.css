@@ -40,10 +40,10 @@ border-radius: 5px; */
 }
 
 #hkboard {
-    margin-top: 20px; /* Add margin to create a gap above the div */
+    margin-top: 30px; /* Add margin to create a gap above the div */
     width: 400px; /* Match the width of board_background */
-    height: 75px; /* Match the height of board_background */
-    position: relative;
+    height: 85px; /* Match the height of board_background */
+    position: absolute;
 }
 
 #hkZone {
@@ -51,8 +51,8 @@ border-radius: 5px; */
     height: 80px; /* Adjust height as needed */
     position: relative;
     margin-top: 20px; /* Add margin to create a gap above the div */
-    background-color: #fff; /* Make the div visible */
-    border: 1px solid #ddd; /* Add a border */
+    background-color: #ac1313; /* Make the div visible */
+    border: 1px solid #2f4bec; /* Add a border */
     border-radius: 5px; /* Round the corners */
 }
 
@@ -66,8 +66,8 @@ border-radius: 5px; */
 #atheistFamilies {
     width: 400px; /* Match the width of board_background */
     height: 170px; /* Match the height of board_background */
-    position: relative;
-    margin-top: 20px; /* Add margin to create a gap above the div */
+    position: absolute;
+    margin-top: 100px; /* Add margin to create a gap above the div */
 }
 
 #playedCards {
