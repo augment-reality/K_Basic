@@ -98,29 +98,49 @@ function (dojo, declare) {
                 }
             });
 
+            // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
+            const hkboard = document.getElementById('hkboard');
+            for (let i = 0; i < 11; i++) {
+                const childDiv = document.createElement('div');
+                childDiv.id = `hkboard_child_${i}`;
+                childDiv.style.width = `${i % 2 === 0 ? 33.3 : 30}px`;
+                childDiv.style.height = '100%';
+                childDiv.style.display = 'inline-block';
+                hkboard.appendChild(childDiv);
 
-
-            // Initialize and create hk token stock
-            this['hkToken'] = new ebg.stock();
-            this['hkToken'].create(this, document.getElementById('hkboard'), 30, 30);
-            this['hkToken'].setSelectionMode(0);
-            this['hkToken'].image_items_per_row = 10;
-            for (let i = 0; i < 10; i++) {
-                    this[`hkToken`].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
+                // Initialize and create hk token stock for each childDiv
+                this[`hkToken_${i}`] = new ebg.stock();
+                this[`hkToken_${i}`].create(this, childDiv, 30, 30);
+                for (let j = 0; j < 10; j++) {
+                    this[`hkToken_${i}`].addItemType(j, j, g_gamethemeurl + 'img/30_30_hktoken.png', j);
+                }
+                            
+                this[`hkToken_${i}`].setSelectionMode(0);
+                // this[`hkToken_${i}`].image_items_per_row = 1;
+                this[`hkToken_${i}`].container_div.width = "30px";
+                this[`hkToken_${i}`].autowidth = false; // this is required so it obeys the width set above
+                this[`hkToken_${i}`].use_vertical_overlap_as_offset = false; // this is to use normal vertical_overlap
+                this[`hkToken_${i}`].vertical_overlap = 80; // overlap is 20%
+                this[`hkToken_${i}`].horizontal_overlap = 0; // current bug in stock - needs "-1" to for Safari z-index to work
+                this[`hkToken_${i}`].item_margin = 0; // has to be 0 if using overlap
+                this[`hkToken_${i}`].updateDisplay(); // re-layout
             }
 
-            //create zone for hk tokens on board
-            this.hkZone = new ebg.zone();
-            this.hkZone.create(this, document.getElementById('hkboard'), 40, 80);
-            //zone.placeInZone( <object_id>, <weight> );
-
-            // Add hk token for each player
-            let p_count = 1;
+            let hkTokenCount = 0;
             Object.values(gamedatas.players).forEach(player => {
-                this['hkToken'].addToStock(p_count);
-                p_count++;
+                this[`hkToken_${5}`].addToStock(3);
+                hkTokenCount++;
             });
 
+            // this[`hkToken_${i}`].setSelectionMode(0);
+            // this[`hkToken_${i}`].image_items_per_row = 1;
+            // this[`hkToken_${i}`].container_div.width = "30px";
+            // this[`hkToken_${i}`].autowidth = false; // this is required so it obeys the width set above
+            // this[`hkToken_${i}`].use_vertical_overlap_as_offset = false; // this is to use normal vertical_overlap
+
+            // this[`hkToken_${i}`].horizontal_overlap = -1; // current bug in stock - this is needed to enable z-index on overlapping items
+            // this[`hkToken_${i}`].item_margin = 0; // has to be 0 if using overlap
+            // this[`hkToken_${i}`].updateDisplay(); // re-layout
 
             this.dices = new ebg.stock();
             this.dices.create(this, document.getElementById('dice'), 50, 50);
@@ -260,6 +280,27 @@ function (dojo, declare) {
 
         getCardUniqueId: function (color, value) {
             return (color - 1) * 5 + (value - 1);
+        },
+
+        drawDisasterCard: function() {
+            console.log("Drawing a disaster card");
+
+            // Simulate drawing a card from the deck
+            const deckElement = document.getElementById('playedCards');
+            const playerHandElement = document.getElementById(`${this.player_id}_cards`);
+
+            if (deckElement && playerHandElement) {
+                const card = this['playedCards'].getRandomItem(); // Get a random card from the deck
+                if (card) {
+                    this['playedCards'].removeFromStockById(card.id); // Remove card from the deck
+                    this[`playerHand_${this.player_id}`].addToStockWithId(card.type, card.id); // Add card to player's hand
+                    console.log(`Card ${card.id} added to player ${this.player_id}'s hand`);
+                } else {
+                    console.log("No cards left in the deck");
+                }
+            } else {
+                console.error("Deck or player hand element not found");
+            }
         },
 
 /*         // Get parent zone of specified token (from can't stop)

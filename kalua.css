@@ -31,36 +31,30 @@ border-radius: 5px; */
 
 #board_background {
     position: relative;
-    width: 400px;
+    width: 356px;
     height: 265px;
     background-image: url('img/kboard_400_265.jpg');
     background-repeat: no-repeat;
     background-size: auto;
     margin-bottom: 20px; /* Add margin to avoid overlap */
+    padding: 25px; /* Add 30px padding to the div */
 }
 
 #hkboard {
-    margin-top: 20px; /* Add margin to create a gap above the div */
-    width: 400px; /* Match the width of board_background */
-    height: 75px; /* Match the height of board_background */
+    width: 350px; /* Match the width of board_background*/
+    height: 55px; /* Match the height of board_background */
     position: relative;
+
+    border: 1px solid #ccc;
 }
 
 #hkZone {
     width: 400px; /* Match the width of board_background */
-    height: 80px; /* Adjust height as needed */
+    height: 55px; /* Adjust height as needed */
     position: relative;
     margin-top: 20px; /* Add margin to create a gap above the div */
-    background-color: #fff; /* Make the div visible */
     border: 1px solid #ddd; /* Add a border */
     border-radius: 5px; /* Round the corners */
-}
-
-/* define size of hkZone element */
-.step {
-    position: absolute;
-    width: 40px;
-    height: 80px;
 }
 
 #atheistFamilies {
@@ -153,6 +147,8 @@ border-radius: 5px; */
     height: 30px;
     background-image: url('img/30_30_hktoken.png');
     background-repeat: no-repeat;
+    background-size: cover;
+    position: absolute;
 }
 
 /* Styles for card decks */
