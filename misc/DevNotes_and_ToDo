@@ -59,9 +59,9 @@ Potentially include decks for visual clarity or to click on when drawing cards
 
 --------------   Steps of Game (as summarized from rules)   -----------------------------------
 
-1. Active player checks if <5 cards in hand, draw to 5. Otherwise draw 1.
+1. (Initial_Draw) Active player checks if <5 cards in hand, draw to 5. Otherwise draw 1.
 
-2. Starting with active player, if chief remains, choose 1:
+2. (Free_Action) Starting with active player, if chief remains, choose 1:
 
     a) Give a speech: Increase happiness by 1.
         h = h+1
@@ -75,11 +75,11 @@ Potentially include decks for visual clarity or to click on when drawing cards
     d) Sacrifice Leader: Remove your Leader from play and add up to 5 Families to your religion from the Kalua board.
         set player leader = 0, player families +5
 
-3. active player selects card or passes (Convert)
+3. (Convert) active player selects card or passes 
 
-4. everyone else can play card and pay cost (global player has option to escape effect, or double it; save family count when global disaster occurs to break tie)
+4. (Non-active_Turn) everyone else can play card and pay cost (global player has option to escape effect, or double it; save family count when global disaster occurs to break tie)
 
-5. card effects happen in order (local - need to choose player at time it is resolved, can target self)
+5. (Card_Effect) card effects happen in order (local - need to choose player at time it is resolved, can target self)
 
 6. repeat from 3. until state until convert is chosen
 
@@ -95,6 +95,7 @@ Else var converted_pool / count of var happy_value_high, remainder to kalua (hk 
 8. Players receive 1 prayer for every 5 families, plus some extra
     if player happiness = var happy_value_low, get 4 extra
     if player happiness != var happy_value_low or var happy_value_high, get 2 extra
+
 
 ------------------------- Check End Game -----------------------------------------
 

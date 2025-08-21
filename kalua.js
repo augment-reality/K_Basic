@@ -44,6 +44,15 @@ function (dojo, declare) {
         setup: function(gamedatas) {
             console.log("Starting game setup");
 
+            // Declare hexadecimal color maping for player tokens (default red/green/blue/orange/brown)
+            const hktokenmap = {
+                2: "#ff0000",
+                4: "#008000",
+                1: "#0000ff",
+                8: "#e06b22ff",
+                11: "#705c50ff"
+            };
+            
             // Create player areas
             Object.values(gamedatas.players).forEach(player => {
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
@@ -67,17 +76,12 @@ function (dojo, declare) {
                     // addItemType(type: number, weight: number, image: string, image_position: number )
                 }
 
-                // Check gamedata for chief/family count
-                const playerChief = player.chief;
-                const playerFamily = player.family;
-
-                for (let i = 0; i < playerFamily; i++) {
-                    this[`fams_${player.id}`].addToStock(i, i);
+                // Use PHP-provided values for family/chief
+                for (let i = 0; i < player.player_family; i++) {
+                    this[`fams_${player.id}`].addToStock(0); // 0 = family meeple
                 }
-                
-                // Get player color and set it to p_token_color
-                if (playerChief > 0) {
-                    this[`fams_${player.id}`].addToStock(1, 1);
+                if (player.chief > 0) {
+                    this[`fams_${player.id}`].addToStock(1); // 1 = chief meeple
                 }
             });
 
@@ -89,14 +93,11 @@ function (dojo, declare) {
             for (let i = 0; i < 10; i++) {
                  this[`atheists`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png', i);
             }
-
-            //need to make this based on current state rather than initial state
-            // Add three atheist families to hkboard for each player
-            Object.values(gamedatas.players).forEach(player => {
-                for (let i = 0; i < 3; i++) {
-                    this['atheists'].addToStock(8);
-                }
-            });
+            
+            // Use PHP-provided value for atheist families
+            for (let i = 0; i < this.gamedatas.atheist_families; i++) {
+                this['atheists'].addToStock(8); // 8 = atheist meeple
+            }
 
             // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
             const hkboard = document.getElementById('hkboard');
@@ -126,12 +127,13 @@ function (dojo, declare) {
                 this[`hkToken_${i}`].updateDisplay(); // re-layout
             }
 
+            // Replace '5' with the actual value from SQL
+            // replace 3 with associated index based on player color using hktokenmap
             let hkTokenCount = 0;
             Object.values(gamedatas.players).forEach(player => {
                 this[`hkToken_${5}`].addToStock(3);
                 hkTokenCount++;
             });
-
             // this[`hkToken_${i}`].setSelectionMode(0);
             // this[`hkToken_${i}`].image_items_per_row = 1;
             // this[`hkToken_${i}`].container_div.width = "30px";
@@ -147,6 +149,7 @@ function (dojo, declare) {
             for (let i = 1; i <= 6; i++) {
                 this.dices.addItemType(i, i, g_gamethemeurl + 'img/d6_300_50.png', i);
             }
+            // Add dice based on SQL data, showing as many as necessary
             for (let i = 1; i <= 6; i++) {
                 this.dices.addToStock(i);
             }
@@ -157,20 +160,55 @@ function (dojo, declare) {
             this['playedCards'].image_items_per_row = 5;
             this['playedCards'].setSelectionMode(0);
 
-            // Create disaster card types based on UniqueId and add to each player's card div
+            // Player hand
+            this.playerHand = {};
+            Object.values(gamedatas.players).forEach(player => {
+                this.playerHand[player.id] = new ebg.stock();
+                this.playerHand[player.id].create(this, $(`${player.id}_cards`), 120, 174);
+                this.playerHand[player.id].extraClasses = 'stock_card_border'; // Add custom classes if needed
+                this.playerHand[player.id].centerItems = true;
+                this.playerHand[player.id].image_items_per_row = 5;
+                this.playerHand[player.id].setSelectionMode(1); // Select only a single card
+            });
+
+            // Create disaster card types
             for (let color = 1; color <= 3; color++) {
                 for (let value = 1; value <= 5; value++) {
                     const card_type_id = this.getCardUniqueId(color, value);
                     Object.values(gamedatas.players).forEach(player => {
-                        if (!this[`${player.id}_cards`]) {
-                            this[`${player.id}_cards`] = new ebg.stock();
-                            this[`${player.id}_cards`].create(this, document.getElementById(`${player.id}_cards`), 120, 174);
-                            this[`${player.id}_cards`].image_items_per_row = 5;
-                            this[`${player.id}_cards`].setSelectionMode(1);
-                        }
-                        this[`${player.id}_cards`].addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_type_id);
-                        this['playedCards'].addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_type_id);
+                        this.playerHand[player.id].addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_type_id);
                     });
+                }
+            }
+
+            // Create bonus card types
+            for (let color = 1; color <= 7; color++) {
+                const value = 9;
+                const card_type_id = this.getCardUniqueId(color, value);
+                Object.values(gamedatas.players).forEach(player => {
+                    this.playerHand[player.id].addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/Cards_Bonus_840_174.png', card_type_id);
+                });
+            }
+
+            // Cards in player's hand
+            if (this.gamedatas.hand) {
+                for (let i in this.gamedatas.hand) {
+                    const card = this.gamedatas.hand[i];
+                    const color = card.type;
+                    const value = card.type_arg;
+                    const player_id = card.location_arg;
+                    this.playerHand[player_id].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                }
+            }
+
+            // Cards played on table (if applicable)
+            if (this.gamedatas.cardsontable) {
+                for (let i in this.gamedatas.cardsontable) {
+                    const card = this.gamedatas.cardsontable[i];
+                    const color = card.type;
+                    const value = card.type_arg;
+                    const player_id = card.location_arg;
+                    this.addTableCard(value, color, player_id, player_id);
                 }
             }
 
@@ -218,11 +256,13 @@ function (dojo, declare) {
             });
 
             // Cards in player's hand
-            for (var i in this.gamedatas.hand) {
-                var card = this.gamedatas.hand[i];
-                var color = card.type;
-                var value = card.type_arg;
-                this.playerHand.addToStockWithId(this.getCardUniqueId(color, value), card.id);
+            if (this.gamedatas.hand) {
+                for (var i in this.gamedatas.hand) {
+                    var card = this.gamedatas.hand[i];
+                    var color = card.type;
+                    var value = card.type_arg;
+                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                }
             }
 
             // Setup game notifications to handle (see "setupNotifications" method below)
@@ -235,23 +275,35 @@ function (dojo, declare) {
         //// Game & client states
 
         onEnteringState: function(stateName, args) {
+            console.log('Entering state: ' + stateName);
             switch (stateName) {
                 case 'Initial_Draw':
-                    console.log("Entering Initial_Draw state");
-                    this.addActionButton('drawDisasterCard-btn', _('Draw a Disaster Card'), () => {
-                        this.drawDisasterCard();
-                        const counter_c = this[`counter_c_${this.player_id}`];
-                        counter_c.incValue(1);
-                    });
+                    if (this.isCurrentPlayerActive()) {
+                        this.addActionButton('drawDisasterCardButton', _('Draw a Disaster card'), function () { return this.bgaPerformAction('actDrawDisasterCard');
+                        });
+                        this.addActionButton('drawBonusCardButton', _('Draw a Bonus card'), function () { return this.bgaPerformAction('actDrawDisasterCard');
+                        });
+                        this.addActionButton('cancelButton', _('Cancel'), () => {
+                            this.actionCancel();
+                        }, null, null, 'gray');
+                    }
                     break;
                 case 'Free_Action':
                     console.log("Entering Free_Action state");
-                    if(this.isCurrentPlayerActive()) {            
-                        this.statusBar.addActionButton('Give a Speech');
-                        this.statusBar.addActionButton('Convert Atheist');
-                        this.statusBar.addActionButton('Convert Believer');
-                        this.statusBar.addActionButton('Sacrifice Leader');        
-                        this.addActionButton('actPass-btn', _('Pass'), () => this.bgaPerformAction("actPass"), null, null, 'gray'); 
+                    if (this.isCurrentPlayerActive()) {
+                        this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
+                            this.giveSpeech();
+                        });
+                        this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
+                            this.convertAtheist();
+                        });
+                        this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
+                            this.convertBeliever();
+                        });
+                        this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
+                            this.sacrificeLeader();
+                        });
+                        this.addActionButton('actPass-btn', _('Pass'), () => this.bgaPerformAction("actPass"), null, null, 'gray');
                     }
                     break;
                 case 'waitingForPlayers':
@@ -278,29 +330,98 @@ function (dojo, declare) {
         ///////////////////////////////////////////////////
         //// Utility methods
 
-        getCardUniqueId: function (color, value) {
+        getCardUniqueId: function(color, value) {
             return (color - 1) * 5 + (value - 1);
+        },
+
+        addTableCard: function(value, color, card_player_id, playerTableId) {
+            const x = value - 1;
+            const y = color - 1;
+            document.getElementById(`${playerTableId}_cards`).insertAdjacentHTML('beforeend', `
+                <div class="card cardontable" id="cardontable_${card_player_id}" style="background-position:-${x}00% -${y}00%"></div>
+            `);
         },
 
         drawDisasterCard: function() {
             console.log("Drawing a disaster card");
 
-            // Simulate drawing a card from the deck
-            const deckElement = document.getElementById('playedCards');
-            const playerHandElement = document.getElementById(`${this.player_id}_cards`);
+            if (card) {
+                const color = Math.floor(card.type / 5) + 1; // Extract color from card type
+                const value = (card.type % 5) + 1;          // Extract value from card type
+                const uniqueId = this.getCardUniqueId(color, value); // Generate unique ID
 
-            if (deckElement && playerHandElement) {
-                const card = this['playedCards'].getRandomItem(); // Get a random card from the deck
-                if (card) {
-                    this['playedCards'].removeFromStockById(card.id); // Remove card from the deck
-                    this[`playerHand_${this.player_id}`].addToStockWithId(card.type, card.id); // Add card to player's hand
-                    console.log(`Card ${card.id} added to player ${this.player_id}'s hand`);
-                } else {
-                    console.log("No cards left in the deck");
-                }
+                this['playedCards'].removeFromStockById(card.id); // Remove card from the deck
+                this[`${player.id}_cards`].addToStockWithId(uniqueId, card.id); // Add card to player's hand
+                console.log(`Card ${card.id} added to player ${this.player_id}'s hand`);
             } else {
-                console.error("Deck or player hand element not found");
+                console.log("No cards left in the deck");
             }
+        },
+
+        // drawDisasterCard: function() {
+        //     console.log("Drawing a disaster card");
+
+        //     if (deckElement && playerHandElement) {
+        //         if (card) {
+        //             const color = Math.floor(card.type / 5) + 1; // Extract color from card type
+        //             const value = (card.type % 5) + 1;          // Extract value from card type
+        //             const uniqueId = this.getCardUniqueId(color, value); // Generate unique ID
+
+        //             this['playedCards'].removeFromStockById(card.id); // Remove card from the deck
+        //             this[`${player.id}_cards`].addToStockWithId(uniqueId, card.id); // Add card to player's hand
+        //             console.log(`Card ${card.id} added to player ${this.player_id}'s hand`);
+        //         } else {
+        //             console.log("No cards left in the deck");
+        //         }
+        //     } else {
+        //         console.error("Deck or player hand element not found");
+        //     }
+        // },
+
+
+        giveSpeech: function() {
+            console.log("Giving a speech");
+            const happinessCounter = document.getElementById(`panel_h_${this.player_id}`);
+            const counter = new ebg.counter();
+            counter.create(happinessCounter);
+            counter.incValue(1); // Increase happiness by 1
+        },
+
+        convertAtheist: function() {
+            console.log("Converting atheist families");
+            const atheistFamilies = this['atheists'];
+            const playerFamilies = this[`fams_${this.player_id}`];
+            const availableAtheists = atheistFamilies.getItemCount();
+            const familiesToConvert = Math.min(availableAtheists, 2);
+            for (let i = 0; i < familiesToConvert; i++) {
+                atheistFamilies.removeFromStock(8); // Remove from atheist families
+                playerFamilies.addToStock(8); // Add to player's families
+            }
+        },
+
+        convertBeliever: function() {
+            console.log("Converting believer families");
+            const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id !== this.player_id);
+            const targetPlayer = otherPlayers.find(player => this[`fams_${player.id}`].getItemCount() > 0);
+            if (targetPlayer) {
+                const targetFamilies = this[`fams_${targetPlayer.id}`];
+                const playerFamilies = this[`fams_${this.player_id}`];
+                targetFamilies.removeFromStock(8); // Remove from target player's families
+                playerFamilies.addToStock(8); // Add to current player's families
+            }
+        },
+
+        sacrificeLeader: function() {
+            console.log("Sacrificing leader");
+            const playerFamilies = this[`fams_${this.player_id}`];
+            const atheistFamilies = this['atheists'];
+            const familiesToAdd = Math.min(5, atheistFamilies.getItemCount());
+            for (let i = 0; i < familiesToAdd; i++) {
+                atheistFamilies.removeFromStock(8); // Remove from atheist families
+                playerFamilies.addToStock(8); // Add to player's families
+            }
+            // Set leader to 0 (remove leader from play)
+            this.gamedatas.players[this.player_id].chief = 0;
         },
 
 /*         // Get parent zone of specified token (from can't stop)

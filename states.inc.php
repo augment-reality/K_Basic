@@ -27,26 +27,14 @@ $machinestates = [
         "action" => "stGameSetup",
         "transitions" => ["Initial_Draw" => 10]
     ),
-/*     10 => [
-        "name" => "Initial_Draw",
-        "description" => 'All players pick a combination of five bonus and disaster cards',
-        "type" => "multipleactiveplayer",
-        "action" => "stMakeEveryoneActive",
-        //"args" => "",
-        "possibleactions" => "stInitialDraw","actionCancel",
-        "updateGameProgression" => false,
-        "transitions" => ["Free_Action" => 20]
-    ],
-    
-    use to ignore buggy multiactive state */
    
     10 => [
         "name" => "Initial_Draw",
-        "description" => 'All players pick a combination of five bonus and disaster cards',
-        "descriptionmyturn" => "Pick a combination of five cards",
+        "description" => clienttranslate('${actplayer} must pick a combination of five bonus and disaster cards'),
+        "descriptionmyturn" => clienttranslate("Pick a combination of five bonus and disaster cards"),
         "type" => "activeplayer",
         "action" => "stInitialDraw",
-        //"args" => "",
+        "possibleactions" => ["actDrawDisasterCard", "actionCancel"],
         "updateGameProgression" => false,
         "transitions" => ["Free_Action" => 30]
     ],

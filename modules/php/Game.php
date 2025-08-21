@@ -66,7 +66,7 @@ class Game extends \Table
     //ties to undo function in js
     function actionCancel() {
         $this->gamestate->checkPossibleAction('actionCancel');
-        $this->gamestate->setPlayersMultiactive(array ($this->getCurrentPlayerId() ), 'error', false);
+        $this->gamestate->setPlayersMultiactive([$this->getActivePlayerId()], 'error', false);
     }
 
 ////////////Game State Actions /////////////////////
@@ -75,12 +75,6 @@ class Game extends \Table
     {
         // Wait for each player to select five cards
         $players = $this->loadPlayersBasicInfos();
-        foreach ($players as $player_id => $player) {
-            $selectedCards = $this->getSelectedCards($player_id);
-            if (count($selectedCards) != 5) {
-                throw new \BgaUserException($this->_("You must select exactly 5 cards"));
-            }
-        }
 
         // Proceed to the next game state
         $this->gamestate->nextState("Initial_Draw");
@@ -88,39 +82,89 @@ class Game extends \Table
 
     public function stInitialDraw(): void
     {
+        $player_id = $this->getActivePlayerId();
+        $this->notifyPlayer($player_id, "initialDraw", clienttranslate("You must pick a combination of five bonus and disaster cards"), []);
+    }
 
+    public function actDrawDisasterCard(): void
+    {
+        //$this->gamestate->checkPossibleAction('actDrawDisasterCard');
+        $player_id = $this->getActivePlayerId();
+        $card = $this->disasterCards->pickCard('deck', $player_id);
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+        ]);
     }
 
     public function stActiveDraw(): void
     {
-
+        $this->gamestate->checkPossibleAction('actDrawCard');
+        // Get the current player ID
+        $player_id = $this->getCurrentPlayerId();
+        // Draw a card from the deck
+        $card = $this->disasterCards->pickCard('deck', $player_id);
+        // Notify the player about the drawn card
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+        ]);
     }
 
     public function stFreeAction(): void
     {
-
+        // Get the current player ID
+        $player_id = $this->getCurrentPlayerId();
+        // Draw a card from the deck
+        $card = $this->disasterCards->pickCard('deck', $player_id);
+        // Notify the player about the drawn card
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+        ]);
     }
 
     public function stActiveTurn(): void
     {
-
+        // Notify all players about the active player's action
+        $player_id = $this->getCurrentPlayerId();
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+        ]);
     }
 
     public function stNonActiveTurn(): void
     {
-
+        // Notify all players about the non-active player's action
+        $player_id = $this->getCurrentPlayerId();
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+        ]);
     }
 
     public function stCardEffect(): void
     {
-
-        //$dices[$i] = bga_rand( 1,6 );
-
+        // Get the current player ID
+        $player_id = $this->getCurrentPlayerId();
+        // Check if the player has drawn enough cards (e.g., 5 cards)
+        $player_hand_count = $this->disasterCards->countCardInLocation('hand', $player_id);
+        if ($player_hand_count >= 5) {
+            $this->gamestate->setPlayerNonMultiactive($player_id, 'next');
+        }
     }
 
     public function stEnd_Round(): void
     {
+        // End round logic
+        $this->gamestate->nextState('gameEnd');
+    }
 
+    private function getCardName($card): string
+    {
+        // Return the card name based on its type and type_arg
+        return clienttranslate("Card ${card['type']}-${card['type_arg']}");
     }
 
     public function stGameEnd(): void
@@ -207,13 +251,11 @@ class Game extends \Table
     {
         // Retrieve the active player ID.
         $player_id = (int)$this->getActivePlayerId();
-
         // Notify all players about the choice to pass.
         $this->notifyAllPlayers("cardPlayed", clienttranslate('${player_name} passes'), [
             "player_id" => $player_id,
             "player_name" => $this->getActivePlayerName(),
         ]);
-
         // at the end of the action, move to the next state
         $this->gamestate->nextState("pass");
     }
@@ -224,7 +266,6 @@ class Game extends \Table
     public function argPlayerTurn(): array
     {
         // Get some values from the current game situation from the database.
-
         return [
             "playableCardsIds" => [1, 2],
         ];
@@ -252,7 +293,6 @@ class Game extends \Table
         $this->giveExtraTime($player_id);
         
         $this->activeNextPlayer();
-
         // Go to another gamestate
         // Here, we would detect if the game is over, and in this case use "endGame" transition instead 
         $this->gamestate->nextState("nextPlayer");
@@ -266,9 +306,8 @@ class Game extends \Table
 
     }
 
-    /*
+    /**
      * Gather all info for current game situation (visible by the current player).
-     *
      * The method is called each time the game interface is displayed to a player, i.e.:
      * - when the game starts
      * - when a player refreshes the game page (F5)
@@ -276,40 +315,20 @@ class Game extends \Table
     protected function getAllDatas()
     {
         $result = [];
-
-        // WARNING: We must only return information visible by the current player.
         $current_player_id = (int) $this->getCurrentPlayerId();
-
-        // Get information about players.
-        // NOTE: you can retrieve some extra field you added for "player" table in `dbmodel.sql` if you need it.
         $result["players"] = $this->getCollectionFromDb(
-            "SELECT `player_id` `id`, `player_score` `score` FROM `player`"
+            "SELECT `player_id` `id`, `player_score` `score`, `player_family` `family`, `player_chief` `chief` FROM `player`"
         );
 
-        // //coordinates for hk token zones
-        // //offset is (265-15)/10 --> 25
-        // $this->hk_array = array(
-        //     array(0,5),
-        //     array(25,5),
-        //     array(50,5)
-        //     array(75,5),
-        //     array(100,5),
-        //     array(125,5),
-        //     array(150,5),
-        //     array(175,5),
-        //     array(200,5),
-        //     array(225,5)
-        // )
-
-
-        // TODO: Gather all information about current game situation (visible by player $current_player_id).
+        // Fetch the number of atheist families from the database
+        $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
+        $result["atheist_families"] = $atheistCount;
 
         return $result;
     }
 
     /**
      * Returns the game name.
-     *
      * IMPORTANT: Please do not modify.
      */
     protected function getGameName()
@@ -319,7 +338,7 @@ class Game extends \Table
 
     /**
      * This method is called only once, when a new game is launched. In this method, you must setup the game
-     *  according to the game rules, so that the game is ready to be played.
+     * according to the game rules, so that the game is ready to be played.
      */
     protected function setupNewGame($players, $options = [])
     {
@@ -327,7 +346,6 @@ class Game extends \Table
         // number of colors defined here must correspond to the maximum number of players allowed for the gams.
         $gameinfos = $this->getGameinfos();
         $default_colors = $gameinfos['player_colors'];
-
         foreach ($players as $player_id => $player) {
             // Now you can access both $player_id and $player array
             $query_values[] = vsprintf("('%s', '%s', '%s', '%s', '%s')", [
@@ -354,7 +372,6 @@ class Game extends \Table
         $this->reloadPlayersBasicInfos();
 
         // Init global values with their initial values.
-
         //$this->setGameStateInitialValue("Update_Count", 0);
 
         $disasterCards = array(
@@ -375,7 +392,7 @@ class Game extends \Table
             array( 'type' => 2, 'type_arg' => 15, 'nbr' => 1 )
         );
         $this->disasterCards->createCards($disasterCards, 'deck');
-    
+
         $bonusCards = array(
             array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
             array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
@@ -386,7 +403,18 @@ class Game extends \Table
         );
         $this->bonusCards->createCards($bonusCards, 'deck');
 
+        // Initialize meeples for each player (families and chief)
+        foreach ($players as $player_id => $player) {
+            // Example: 5 families and 1 chief per player
+            self::DbQuery("UPDATE player SET player_family=5, player_chief=1 WHERE player_id=$player_id");
+        }
+
+        // Initialize atheist families (e.g., 3 per player, stored in a global table or variable)
+        $atheist_start = count($players) * 3;
+        $this->DbQuery("INSERT INTO global (global_id, global_value) VALUES (101, $atheist_start)");
+
         // Init game statistics.
+
         // NOTE: statistics used in this file must be defined in your `stats.inc.php` file.
 
         // Dummy content.
@@ -394,24 +422,9 @@ class Game extends \Table
         // $this->initStat("player", "player_teststat1", 0);
 
         // TODO: Setup the initial game situation here.
-
         $this->activeNextPlayer();
-        
-/*         //https://en.doc.boardgamearena.com/Main_game_logic:_Game.php
-        // Activate players for card selection once everything has been initialized and ready.
-        function st_MultiPlayerInit() {
-            $this->gamestate->setAllPlayersMultiactive();
-        }
+    }
 
-        //make each player inactive once all five cards are selected, then transition to next state
-        function actionBla($args) {
-            $this->checkAction('actionBla');
-            // handle the action using $this->getCurrentPlayerId()
-            $this->gamestate->setPlayerNonMultiactive( $this->getCurrentPlayerId(), 'next');
-        }
- */
-        }
- 
     /**
      * This method is called each time it is the turn of a player who has quit the game (= "zombie" player).
      * You can do whatever you want in order to make sure the turn of this player ends appropriately
@@ -461,7 +474,4 @@ class Game extends \Table
     function dbSetScore($player_id, $count) {
         $this->DbQuery("UPDATE player SET player_score='$count' WHERE player_id='$player_id'");
     }
-
-
-
 }

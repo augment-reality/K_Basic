@@ -6,10 +6,13 @@ won't be packaged for deployment.
 It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------To do----------------------------------------
+-move intial game setup from .js to game.php (underneath where cards are setup; also says TODO...)
+-make utility method in php to update tokens as according to sql, when game is loaded
 -Figure out sprites
 -Card imgs
 -Make a die
 -sql deck info: make two decks (bonus and global/local)
+-decide how to handle combined deck types in same areas
 -if card requires a die roll, make value 7, and replace with die roll when checked
 -keep track of held (face up) player cards for amulets/temples
 -implement sequence for avoiding/doubling global effects (apply card twice?)
