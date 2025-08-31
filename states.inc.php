@@ -34,70 +34,70 @@ $machinestates = [
         "descriptionmyturn" => clienttranslate("Pick a combination of five bonus and disaster cards"),
         "type" => "activeplayer",
         "action" => "stInitialDraw",
-        "possibleactions" => ["actDrawDisasterCard", "actionCancel"],
+        "possibleactions" => ["actDrawDisasterCard","actDrawBonusCard" ],
         "updateGameProgression" => false,
-        "transitions" => ["Free_Action" => 30]
+        "transitions" => ["Initial_Draw" => 10,"End_Round" => 70]
     ],
-    20 => [
-        "name" => "Active_Draw",
-        "description" => clienttranslate('${actplayer} must draw cards'),
-        "descriptionmyturn" => "Pick a combination of cards to take",
-        "type" => "activeplayer",
-        "action" => "stActiveDraw",
-        //"args" => "",
-        "possibleactions" => "",
-        "updateGameProgression" => false,
-        "transitions" => ["Free_Action" => 20, "Active_Turn" => 30]
-    ],
-    30 => [
-        "name" => "Free_Action",
-        "description" => clienttranslate('${actplayer} is selecting their action'),
-        "descriptionmyturn" => "Select one of the free actions",
-        "type" => "activeplayer",
-        "action" => "stFreeAction",
-        //"args" => "",
-        "possibleactions" => "",
-        "updateGameProgression" => false,
-        "transitions" => ["Free_Action" => 30, "Active_Turn" => 40]
-    ],
-    40 => [
-        "name" => "Active_Turn",
-        "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
-        "descriptionmyturn" => "Play a card or pass",
-        "type" => "activeplayer",
-        "action" => "stActiveTurn",
-        //"args" => "",
-        "possibleactions" => "",
-        "updateGameProgression" => false,
-        "transitions" => ["Non-active_Turn" => 50, "End_Round" => 60]
-    ],
-    50 => [
-        "name" => "Non-active_Turn",
-        "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
-        "descriptionmyturn" => "Play a card or pass",
-        "type" => "activeplayer",
-        "action" => "stNonActiveTurn",
-        //"args" => "",
-        "possibleactions" => "",
-        "updateGameProgression" => false,
-        "transitions" => ["Non-active_Turn" => 50, "End_Round" => 60]
-    ],
-    60 => [
-        "name" => "Card_Effects",
-        "description" => 'Card effects are resolved sequentially',
-        "type" => "game",
-        "action" => "stCardEffect",
-        //"args" => "card list",
-        "updateGameProgression" => false,
-        "transitions" => ["Active_Turn" => 40, "gameEnd" => 99]
-    ],
+    // 20 => [
+    //     "name" => "Active_Draw",
+    //     "description" => clienttranslate('${actplayer} must draw cards'),
+    //     "descriptionmyturn" => "Pick a combination of cards to take",
+    //     "type" => "activeplayer",
+    //     "action" => "stActiveDraw",
+    //     //"args" => "",
+    //     "possibleactions" => "",
+    //     "updateGameProgression" => false,
+    //     "transitions" => ["Free_Action" => 20, "Active_Turn" => 30]
+    // ],
+    // 30 => [
+    //     "name" => "Free_Action",
+    //     "description" => clienttranslate('${actplayer} is selecting their action'),
+    //     "descriptionmyturn" => "Select one of the free actions",
+    //     "type" => "activeplayer",
+    //     "action" => "stFreeAction",
+    //     //"args" => "",
+    //     "possibleactions" => "",
+    //     "updateGameProgression" => false,
+    //     "transitions" => ["Free_Action" => 30, "Active_Turn" => 40]
+    // ],
+    // 40 => [
+    //     "name" => "Active_Turn",
+    //     "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
+    //     "descriptionmyturn" => "Play a card or pass",
+    //     "type" => "activeplayer",
+    //     "action" => "stActiveTurn",
+    //     //"args" => "",
+    //     "possibleactions" => "",
+    //     "updateGameProgression" => false,
+    //     "transitions" => ["Non-active_Turn" => 50, "End_Round" => 60]
+    // ],
+    // 50 => [
+    //     "name" => "Non-active_Turn",
+    //     "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
+    //     "descriptionmyturn" => "Play a card or pass",
+    //     "type" => "activeplayer",
+    //     "action" => "stNonActiveTurn",
+    //     //"args" => "",
+    //     "possibleactions" => "",
+    //     "updateGameProgression" => false,
+    //     "transitions" => ["Non-active_Turn" => 50, "End_Round" => 60]
+    // ],
+    // 60 => [
+    //     "name" => "Card_Effects",
+    //     "description" => 'Card effects are resolved sequentially',
+    //     "type" => "game",
+    //     "action" => "stCardEffect",
+    //     //"args" => "card list",
+    //     "updateGameProgression" => false,
+    //     "transitions" => ["Active_Turn" => 40, "gameEnd" => 99]
+    // ],
     70 => [
         "name" => "End_Round",
         "description" => 'Convert Families, Gain Prayer, Check for Eliminations, Next Player or End Game',
         "type" => "game",
         "action" => "stEnd_Round",
         "updateGameProgression" => false,
-        "transitions" => ['Active_Draw' => 20, "gameEnd" => 99]
+        "transitions" => ['Initial_Draw' => 10, "gameEnd" => 99]
     ],
 
     // Final state.

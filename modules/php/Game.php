@@ -19,16 +19,6 @@ class Game extends \Table
 {
     private static array $CARD_TYPES;
 
-    /**
-     * Your global variables labels:
-     *
-     * Here, you can assign labels to global variables you are using for this game. You can use any number of global
-     * variables with IDs between 10 and 99. If your game has options (variants), you also have to associate here a
-     * label to the corresponding ID in `gameoptions.inc.php`.
-     *
-     * NOTE: afterward, you can get/set the global variables with `getGameStateValue`, `setGameStateInitialValue` or
-     * `setGameStateValue` functions.
-     */
     public function __construct()
     {
         parent::__construct();
@@ -36,10 +26,10 @@ class Game extends \Table
         $this->initGameStateLabels([
             "Initial_Draw" => 10,
             "Active_Draw" => 20,
-            "Free_Action" => 30,
-            "Active_Turn" => 40,
-            "Non-active_Turn" => 50,
-            "Card_Effect" => 60,
+            // "Free_Action" => 30,
+            // "Active_Turn" => 40,
+            // "Non-active_Turn" => 50,
+            // "Card_Effect" => 60,
             "End_Round" => 70,
         ]);          
 
@@ -49,25 +39,8 @@ class Game extends \Table
         $this->bonusCards = $this->getNew( "module.common.deck" );
         $this->bonusCards ->init( "bonus_card" );
         
-/*         self::$CARD_TYPES = [
-            1 => [
-                "card_name" => clienttranslate('Troll'), // ...
-            ],
-            2 => [
-                "card_name" => clienttranslate('Goblin'), // ...
-            ],
-            // ...
-        ]; */
     }
 
- 
-
-
-    //ties to undo function in js
-    function actionCancel() {
-        $this->gamestate->checkPossibleAction('actionCancel');
-        $this->gamestate->setPlayersMultiactive([$this->getActivePlayerId()], 'error', false);
-    }
 
 ////////////Game State Actions /////////////////////
 
@@ -88,83 +61,42 @@ class Game extends \Table
 
     public function actDrawDisasterCard(): void
     {
-        //$this->gamestate->checkPossibleAction('actDrawDisasterCard');
         $player_id = $this->getActivePlayerId();
+
+        // Pick a card from the disaster deck for the player
         $card = $this->disasterCards->pickCard('deck', $player_id);
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+
+        // Notify all players about the card draw, including card details
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a disaster card'), [
             'player_id' => $player_id,
             'player_name' => $this->getActivePlayerName(),
+            'card_id' => $card['id'],
+            'card_type' => $card['type'],
+            'card_type_arg' => $card['type_arg'],
         ]);
     }
+
+    public function actDrawBonusCard(): void
+    {
+        $player_id = $this->getActivePlayerId();
+
+        // Pick a card from the bonus deck for the player
+        $card = $this->bonusCards->pickCard('deck', $player_id);
+
+        // Notify all players about the card draw, including card details
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a bonus card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+            'card_id' => $card['id'],
+            'card_type' => $card['type'],
+            'card_type_arg' => $card['type_arg'],
+        ]);
+    }
+
 
     public function stActiveDraw(): void
     {
-        $this->gamestate->checkPossibleAction('actDrawCard');
-        // Get the current player ID
-        $player_id = $this->getCurrentPlayerId();
-        // Draw a card from the deck
-        $card = $this->disasterCards->pickCard('deck', $player_id);
-        // Notify the player about the drawn card
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-            'player_id' => $player_id,
-            'player_name' => $this->getActivePlayerName(),
-        ]);
-    }
 
-    public function stFreeAction(): void
-    {
-        // Get the current player ID
-        $player_id = $this->getCurrentPlayerId();
-        // Draw a card from the deck
-        $card = $this->disasterCards->pickCard('deck', $player_id);
-        // Notify the player about the drawn card
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-            'player_id' => $player_id,
-            'player_name' => $this->getActivePlayerName(),
-        ]);
-    }
-
-    public function stActiveTurn(): void
-    {
-        // Notify all players about the active player's action
-        $player_id = $this->getCurrentPlayerId();
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-            'player_id' => $player_id,
-            'player_name' => $this->getActivePlayerName(),
-        ]);
-    }
-
-    public function stNonActiveTurn(): void
-    {
-        // Notify all players about the non-active player's action
-        $player_id = $this->getCurrentPlayerId();
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-            'player_id' => $player_id,
-            'player_name' => $this->getActivePlayerName(),
-        ]);
-    }
-
-    public function stCardEffect(): void
-    {
-        // Get the current player ID
-        $player_id = $this->getCurrentPlayerId();
-        // Check if the player has drawn enough cards (e.g., 5 cards)
-        $player_hand_count = $this->disasterCards->countCardInLocation('hand', $player_id);
-        if ($player_hand_count >= 5) {
-            $this->gamestate->setPlayerNonMultiactive($player_id, 'next');
-        }
-    }
-
-    public function stEnd_Round(): void
-    {
-        // End round logic
-        $this->gamestate->nextState('gameEnd');
-    }
-
-    private function getCardName($card): string
-    {
-        // Return the card name based on its type and type_arg
-        return clienttranslate("Card ${card['type']}-${card['type_arg']}");
     }
 
     public function stGameEnd(): void
@@ -260,16 +192,6 @@ class Game extends \Table
         $this->gamestate->nextState("pass");
     }
 
-    /**
-     * This method returns some additional information that is very specific to the `playerTurn` game state.
-     */
-    public function argPlayerTurn(): array
-    {
-        // Get some values from the current game situation from the database.
-        return [
-            "playableCardsIds" => [1, 2],
-        ];
-    }
 
     /**
      * Compute and return game progression (integer between 0 and 100)
@@ -343,7 +265,7 @@ class Game extends \Table
     protected function setupNewGame($players, $options = [])
     {
         // Set the colors of the players with HTML color code. The default below is red/green/blue/orange/brown. The
-        // number of colors defined here must correspond to the maximum number of players allowed for the gams.
+        // number of colors defined here must correspond to the maximum number of players allowed for the game.
         $gameinfos = $this->getGameinfos();
         $default_colors = $gameinfos['player_colors'];
         foreach ($players as $player_id => $player) {
