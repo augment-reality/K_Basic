@@ -216,9 +216,20 @@ function (dojo, declare) {
                         this.addActionButton('drawDisasterCardButton', _('Draw a Disaster card'), () => {
                             this.bgaPerformAction('actDrawDisasterCard').then(result => {
                                     this.drawDisasterCard(result.card_id);
+                                    this[`dice`].addToStock(3);
+
+                                    // if (this.gamedatas.hand) {
+                                    // for (var i in this.gamedatas.hand) {
+                                    //     var card = this.gamedatas.hand[i];
+                                    //     var color = card.type;
+                                    //     var value = card.type_arg;
+                                    //     this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                                    //     }
+                                    // }
+
+
                             });
                         });
-
                         this.addActionButton('cancelButton', _('Cancel'), () => {
                             this.actionCancel();
                         }, null, null, 'gray');
@@ -258,14 +269,6 @@ function (dojo, declare) {
                         switch (stateName) {
                 case 'Initial_Draw':
                     if (this.isCurrentPlayerActive()) {
-            if (this.gamedatas.hand) {
-                for (var i in this.gamedatas.hand) {
-                    var card = this.gamedatas.hand[i];
-                    var color = card.type;
-                    var value = card.type_arg;
-                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
-                }
-            }
                     }
                     break;
                 case 'Free_Action':

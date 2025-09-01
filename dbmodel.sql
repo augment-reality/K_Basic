@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS `bonus_card` (
   PRIMARY KEY (`card_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
+CREATE TABLE IF NOT EXISTS `dice` (
+  `dice_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `dice_value` smallint(5) UNSIGNED NOT NULL DEFAULT '5',
+  PRIMARY KEY (`dice_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 ALTER TABLE `player` 
 ADD `player_first` BOOLEAN NOT NULL DEFAULT '0',
 ADD `player_happiness` INT(11) NOT NULL DEFAULT '5',
