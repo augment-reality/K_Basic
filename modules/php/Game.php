@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 namespace Bga\Games\kalua;
 
+use BonusCard;
+use CardType;
+use GlobalDisasterCard;
+use LocalDisasterCard;
+
 require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
 
 class Game extends \Table
@@ -519,31 +524,33 @@ class Game extends \Table
         //$this->setGameStateInitialValue("Update_Count", 0);
 
         $disasterCards = array(
-            array( 'type' => 1, 'type_arg' => 1, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 2, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 3, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 4, 'nbr' => 4 ),
-            array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
-            array( 'type' => 2, 'type_arg' => 6, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 7, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 8, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 9, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 10, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 11, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 12, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 13, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 14, 'nbr' => 1 ),
-            array( 'type' => 2, 'type_arg' => 15, 'nbr' => 1 )
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Tsunami->value,       'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Famine->value,        'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Floods->value,        'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::MassiveFire->value,   'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Drought->value,       'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Death->value,         'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Thunderstorm->value,  'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Revenge->value,       'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Epidemic->value,      'nbr' => 1),
+            array( 'type' => CardType::GlobalDisaster->value, 'type_arg' => GlobalDisasterCard::Riots->value,         'nbr' => 1),
+
+            array( 'type' => CardType::LocalDisaster->value,  'type_arg' => LocalDisasterCard::Tornado->value,        'nbr' => 4),
+            array( 'type' => CardType::LocalDisaster->value,  'type_arg' => LocalDisasterCard::Earthquake->value,     'nbr' => 4),
+            array( 'type' => CardType::LocalDisaster->value,  'type_arg' => LocalDisasterCard::BadWeather->value,     'nbr' => 4),
+            array( 'type' => CardType::LocalDisaster->value,  'type_arg' => LocalDisasterCard::Locust->value,         'nbr' => 4),
+            array( 'type' => CardType::LocalDisaster->value,  'type_arg' => LocalDisasterCard::TempleDestroyed->value,'nbr' => 5),
         );
         $this->disasterCards->createCards($disasterCards, 'deck');
 
         $bonusCards = array(
-            array( 'type' => 1, 'type_arg' => 1, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 2, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 3, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 4, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 5, 'nbr' => 3 ),
-            array( 'type' => 1, 'type_arg' => 6, 'nbr' => 3 )
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::GoodWeather->value,           'nbr' => 3),
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::DoubleHarvest->value,         'nbr' => 3),
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::Fertility->value,             'nbr' => 3),
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::Festivities->value,           'nbr' => 3),
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::NewLeader->value,             'nbr' => 3),
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::Temple->value,                'nbr' => 3),
+            array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::Amulets->value,               'nbr' => 3),
         );
         $this->bonusCards->createCards($bonusCards, 'deck');
 
@@ -633,16 +640,16 @@ class Game extends \Table
     {
         $card = null;
         $player_id = $this->getCurrentPlayerId();
-        if ($type != "disaster" && $type != "bonus")
+        if ($type != STR_CARD_TYPE_DISASTER && $type != STR_CARD_TYPE_BONUS)
         {
             throw new \BgaVisibleSystemException($this->_("Unknown card type " + $type));
         }
         $this->trace( "KALUA draw a card!!" );
-        if ("disaster" == $type)
+        if (STR_CARD_TYPE_DISASTER == $type)
         {
             $card = $this->disasterCards->pickCard( "deck", $player_id);
         }
-        else if ("bonus" == $type)
+        else if (STR_CARD_TYPE_BONUS == $type)
         {           
             $card = $this->bonusCards->pickCard( "deck", $player_id);
         }

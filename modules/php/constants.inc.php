@@ -35,4 +35,50 @@ const ST_PHASE_FIVE_PRAYING = 51;
 /* End game */
 const ST_END_GAME = 99;
 
+/* Card constants and enumerations */
+
+const STR_CARD_TYPE_DISASTER = "disaster";
+const STR_CARD_TYPE_BONUS = "bonus";
+
+enum CardType: int
+{
+    case GlobalDisaster = 1;
+    case LocalDisaster = 2;
+    case Bonus = 3;
+}
+
+enum GlobalDisasterCard: int
+{
+    case Tsunami = 1;
+    case Famine = 2;
+    case Floods = 3;
+    case MassiveFire = 4;
+    case Drought = 5;
+    case Death = 6;
+    case Thunderstorm = 7;
+    case Revenge = 8;
+    case Epidemic = 9;
+    case Riots = 10;
+}
+
+enum LocalDisasterCard: int
+{
+    case Tornado = 1;
+    case Earthquake = 2;
+    case BadWeather = 3;
+    case Locust = 4;
+    case TempleDestroyed = 5;
+}
+
+enum BonusCard: int
+{
+    case GoodWeather = 1;
+    case DoubleHarvest = 2;
+    case Fertility = 3;
+    case Festivities = 4;
+    case NewLeader = 5;
+    case Temple = 6;
+    case Amulets = 7;
+}
+
 ?>
