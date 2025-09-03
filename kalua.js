@@ -218,7 +218,7 @@ function (dojo, declare) {
 
 
             // Setup game notifications to handle (see "setupNotifications" method below)
-            // this.setupNotifications();
+            this.setupNotifications();
 
             console.log("Ending game setup");
         },
@@ -302,9 +302,42 @@ function (dojo, declare) {
                             })
                         });
 
-                        this.addActionButton('cancelButton', _('Cancel'), () => {
-                            this.actionCancel();
-                        }, null, null, 'gray');
+                        this.addActionButton('drawBonusCardButton', _('Draw a Bonus card'), () => {
+                            this.bgaPerformAction('actDrawCardInit', {
+                                type: "bonus"
+                            })
+                        });
+                        break;
+                    case 'phaseOneDraw':
+                        this.addActionButton('drawDisasterCardButton', _('Draw a Disaster card'), () => {
+                            this.bgaPerformAction('actDrawCard', {
+                                type: "disaster"
+                            })
+                        });
+
+                        this.addActionButton('drawBonusCardButton', _('Draw a Bonus card'), () => {
+                            this.bgaPerformAction('actDrawCard', {
+                                type: "bonus"
+                            })
+                        });
+                        break;
+                    case 'phaseTwoActivateLeader':
+                        if (this.isCurrentPlayerActive()) 
+                        {
+                            this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
+                                this.bgaPerformAction("actGiveSpeech");
+                            });
+                            this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
+                                this.bgaPerformAction("actGiveSpeech");
+                            });
+                            this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
+                                /* This one requires more decisions */
+                                this.convertBeliever();
+                            });
+                            this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
+                                this.bgaPerformAction("actMassiveSpeech");
+                            });
+                        }
                         break;
                 }
             }
@@ -383,6 +416,39 @@ function (dojo, declare) {
         
         ///////////////////////////////////////////////////
         //// Player's action
+        setupNotifications: function()
+        {
+            console.log( 'notifications subscriptions setup' );
+
+            // automatically listen to the notifications, based on the `notif_xxx` function on this class.
+            this.bgaSetupPromiseNotifications();
+        },
+
+        notif_playerDrewCard: async function( args )
+        {
+            // const player_id = args.player_id;
+            // const type = args.card_type;
+            // const card_id = args.card_id;
+
+            // //console.log( 'player ' + player_id + ' drew card ' + card_id + ' of type ' + type);
+
+            // /* TODO add to hand of player who drew it*/
+            // if (player_id == this.player_id)
+            // {
+            //     //console.log('It\'s me!');
+            // }
+        },
+
+        notif_giveSpeech: async function( args )
+        {
+            const player_id = args.player_id;
+
+            console.log ('player ' + player_id + ' gives a speech');
+            if (player_id == this.player_id)
+            {
+                giveSpeech();
+            }
+        }
 
         ///////////////////////////////////////////////////
         //// Reaction to cometD notifications

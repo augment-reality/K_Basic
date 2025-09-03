@@ -33,8 +33,8 @@ $machinestates = [
     /* Initial setup */
     ST_INITIAL_DRAW => GameStateBuilder::create()
         ->name('initialDraw')
-        ->description(clienttranslate('All players must pick a combination of five bonus and disaster cards teeeest'))
-		->descriptionmyturn(clienttranslate('${you} must pick a combination of five bonus and disaster cards tteeeeest123'))
+        ->description(clienttranslate('All players must pick a combination of five bonus and disaster cards'))
+		->descriptionmyturn(clienttranslate('${you} must pick a combination of five bonus and disaster cards'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
         ->action('stInitialDraw')
         ->possibleactions([
@@ -59,8 +59,8 @@ $machinestates = [
     /* Draw phase */
     ST_PHASE_ONE_DRAW => GameStateBuilder::create()
         ->name('phaseOneDraw')
-        ->description(clienttranslate('${actplayer} must draw cards'))
-		->descriptionmyturn(clienttranslate('${you} must draw cards'))
+        ->description(clienttranslate('${actplayer} must draw cards for round'))
+		->descriptionmyturn(clienttranslate('${you} must draw cards for round'))
         ->type(StateType::ACTIVE_PLAYER)
         ->possibleactions([
             'actDrawCard',

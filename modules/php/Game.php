@@ -58,12 +58,19 @@ class Game extends \Table
 
     public function stPhaseOneDone(): void
     {
-        /* Set the first player */
+        /* Not much to do here for now */
+        $this->gamestate->nextState();
     }
 
     public function stActivateLeader(): void
     {
         /* Skip handling for leader (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
+        // $args = $this->argActivateLeader();
+        // if ($args['_no_notify']) 
+        // {
+        //     /* Notify all players that the player is being skipped? */
+        //     $this->gamestate->nextState('');
+        // }
     }
 
     public function stNextPlayer(): void
@@ -71,6 +78,13 @@ class Game extends \Table
         /* Update the active player to next. 
         If the active player is now the trick leader (everyone has had a chance), 
         go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
+        // $this->activeNextPlayer();
+    
+        // if ($this->getActivePlayerId() == $this->setGameStateValue("roundLeader"))
+        // {
+        //     $this->gamestate->nextState('phaseDone');
+        // }
+        // $this->gamestate->nextState("nextPlayer");
     }
 
     public function stPlayCard(): void
@@ -114,35 +128,53 @@ class Game extends \Table
             Notifies UI to draw a card, and how many cards left to draw to reach 5
             UI will update with cards drawn, or waiting once we hit 0 cards remaining
             Checks if all users have drawn 5 cards - if they have, go to INITIAL FINISH */
-        if ("disaster" == $type)
+        
+        $this->drawCard_private($type);
+        $player_id = $this->getCurrentPlayerId();
+        
+        if ($this->disasterCards->countCardInLocation("hand", $player_id) 
+            + $this->bonusCards->countCardInLocation("hand", $player_id)
+            == 5 )
         {
-            $this->trace( "KALUA draw a disaster card!!" );
-            $player_id = $this->getCurrentPlayerId();
             $this->gamestate->setPlayerNonMultiactive($player_id, '');
         }
-
-        //$this->gamestate->nextState();
     }
 
-    public function actDrawCard(int $type): void
+    public function actDrawCard(string $type): void
     {
         /* Draws a card of the given type
             TODO what if the decks are empty? Does UI need to know that?
             Updates player with drawn card
             If player hand size is 5 or more, done drawing
             Else stay in state */
-
+        $this->drawCard_private($type);
+        $player_id = $this->getCurrentPlayerId();
+        
+        /* Once the player has at least five cards, move to next phase */
+        if ($this->disasterCards->countCardInLocation("hand", $player_id) 
+            + $this->bonusCards->countCardInLocation("hand", $player_id)
+            >= 5 )
+        {
+            $this->gamestate->nextState();
+        }
     }
 
     /***** Leader state actions *****/
     public function actGiveSpeech(): void
     {
+        // $this->trace("KALUA give speech!");
 
+        // $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
+        //         'player_id' => $player_id,
+        //         'player_name' => $this->getActivePlayerName()
+        //     ]);
+        
+        // $this->gamestate->nextState();
     }
 
     public function actConvertAtheists(): void
     {
-
+        $this->trace("KALUA convert atheists!");
     }
 
     public function actConvertBelievers(int $target_player_id): void
@@ -152,7 +184,7 @@ class Game extends \Table
 
     public function actMassiveSpeech(): void
     {
-
+        $this->trace("KALUA give massive speech!");
     }
     /***************************************/
 
@@ -198,6 +230,16 @@ class Game extends \Table
     {
 
     }
+    /******************************/
+
+
+    /******* Arg functions ************/
+    // function argActivateLeader() : array
+    // {
+    //     // return [
+    //     //     '_no_notify' => false /* TODO!! */
+    //     // ];
+    // }   
     
 
 
@@ -582,5 +624,33 @@ class Game extends \Table
     // set score
     function dbSetScore($player_id, $count) {
         $this->DbQuery("UPDATE player SET player_score='$count' WHERE player_id='$player_id'");
+    }
+
+    /* Helpers */
+    private function drawCard_private(string $type) : void
+    {
+        $card = null;
+        $player_id = $this->getCurrentPlayerId();
+        if ($type != "disaster" && $type != "bonus")
+        {
+            throw new \BgaVisibleSystemException($this->_("Unknown card type " + $type));
+        }
+        $this->trace( "KALUA draw a card!!" );
+        if ("disaster" == $type)
+        {
+            $card = $this->disasterCards->pickCard( "deck", $player_id);
+        }
+        else if ("bonus" == $type)
+        {           
+            $card = $this->bonusCards->pickCard( "deck", $player_id);
+        }
+
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getCurrentPlayerName(),
+                'card_id' => $card['id'],
+                'card_type' => $card['type'],
+                'card_type_arg' => $card['type_arg']
+            ]);
     }
 }
