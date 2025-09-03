@@ -78,13 +78,13 @@ class Game extends \Table
         /* Update the active player to next. 
         If the active player is now the trick leader (everyone has had a chance), 
         go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
-        // $this->activeNextPlayer();
+        $this->activeNextPlayer();
     
-        // if ($this->getActivePlayerId() == $this->setGameStateValue("roundLeader"))
-        // {
-        //     $this->gamestate->nextState('phaseDone');
-        // }
-        // $this->gamestate->nextState("nextPlayer");
+        if ($this->getActivePlayerId() == $this->getGameStateValue("roundLeader"))
+        {
+            $this->gamestate->nextState("phaseDone");
+        }
+        $this->gamestate->nextState("nextPlayer");
     }
 
     public function stPlayCard(): void
@@ -162,14 +162,16 @@ class Game extends \Table
     /***** Leader state actions *****/
     public function actGiveSpeech(): void
     {
-        // $this->trace("KALUA give speech!");
+        $this->trace("KALUA give speech!");
 
-        // $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
-        //         'player_id' => $player_id,
-        //         'player_name' => $this->getActivePlayerName()
-        //     ]);
+        $player_id = $this->getCurrentPlayerId();
+
+        $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getActivePlayerName()
+            ]);
         
-        // $this->gamestate->nextState();
+        $this->gamestate->nextState();
     }
 
     public function actConvertAtheists(): void

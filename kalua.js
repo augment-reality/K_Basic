@@ -426,17 +426,17 @@ function (dojo, declare) {
 
         notif_playerDrewCard: async function( args )
         {
-            // const player_id = args.player_id;
-            // const type = args.card_type;
-            // const card_id = args.card_id;
+            const player_id = args.player_id;
+            const type = args.card_type;
+            const card_id = args.card_id;
 
-            // //console.log( 'player ' + player_id + ' drew card ' + card_id + ' of type ' + type);
+            console.log( 'player ' + player_id + ' drew card ' + card_id + ' of type ' + type);
 
-            // /* TODO add to hand of player who drew it*/
-            // if (player_id == this.player_id)
-            // {
-            //     //console.log('It\'s me!');
-            // }
+            /* TODO add to hand of player who drew it*/
+            if (player_id == this.player_id)
+            {
+                console.log('It\'s me!');
+            }
         },
 
         notif_giveSpeech: async function( args )
@@ -446,7 +446,7 @@ function (dojo, declare) {
             console.log ('player ' + player_id + ' gives a speech');
             if (player_id == this.player_id)
             {
-                giveSpeech();
+                this.giveSpeech();
             }
         }
 
