@@ -23,14 +23,9 @@ class Game extends \Table
     {
         parent::__construct();
 
+        /* Global variables */
         $this->initGameStateLabels([
-            // "Initial_Draw" => 10,
-            // "Active_Draw" => 20,
-            // // "Free_Action" => 30,
-            // // "Active_Turn" => 40,
-            // // "Non-active_Turn" => 50,
-            // // "Card_Effect" => 60,
-            // "End_Round" => 70,
+            "roundLeader" => 10 /* Player who leads the current round */
         ]);          
 
         //Make two decks: bonus and disaster
@@ -44,12 +39,21 @@ class Game extends \Table
 
 ////////////Game State Actions /////////////////////
 
+    public function stInitialDraw(): void
+    {
+        $this->gamestate->setAllPlayersMultiactive();
+    }
+
     public function stInitialFinish(): void
     {
         /* State to do any necessary cleanup, 
         notifications to UI (e.g. cards drawn by other players) 
         and set the active player to the first player */
+        $this->trace("KALUA Made it to initial finish");
 
+        /* Active player is already set */
+        //$this->activeNextPlayer();
+        $this->gamestate->nextState();
     }
 
     public function stPhaseOneDone(): void
@@ -104,14 +108,20 @@ class Game extends \Table
     }
 
 ///////////Player Actions /////////////////////
-    public function actDrawCardInit(int $type): void
+    public function actDrawCardInit(string $type /* either "disaster" or "bonus" */): void
     {
         /* Draws a card and notifies that user of the drawn card
             Notifies UI to draw a card, and how many cards left to draw to reach 5
             UI will update with cards drawn, or waiting once we hit 0 cards remaining
             Checks if all users have drawn 5 cards - if they have, go to INITIAL FINISH */
+        if ("disaster" == $type)
+        {
+            $this->trace( "KALUA draw a disaster card!!" );
+            $player_id = $this->getCurrentPlayerId();
+            $this->gamestate->setPlayerNonMultiactive($player_id, '');
+        }
 
-        $this->gamestate->nextState();
+        //$this->gamestate->nextState();
     }
 
     public function actDrawCard(int $type): void
@@ -521,7 +531,7 @@ class Game extends \Table
         // $sql = "INSERT INTO dice (dice_id, dice_value) VALUES ".implode(',', $dice);
 
         // TODO: Setup the initial game situation here.
-        $this->activeNextPlayer();
+        $this->setGameStateValue("roundLeader", $this->activeNextPlayer());
     }
 
     /**

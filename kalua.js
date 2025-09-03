@@ -230,19 +230,6 @@ function (dojo, declare) {
         onEnteringState: function(stateName, args) {
             console.log('Entering state: ' + stateName);
             switch (stateName) {
-                case 'Initial_Draw':
-                    if (this.isCurrentPlayerActive()) {
-                        this.addActionButton('drawDisasterCardButton', _('Draw a Disaster card'), () => {
-                            this.bgaPerformAction('actDrawDisasterCard').then(result => {
-                                    this.drawDisasterCard(result.card_id);
-                            });
-                        });
-
-                        this.addActionButton('cancelButton', _('Cancel'), () => {
-                            this.actionCancel();
-                        }, null, null, 'gray');
-                    }
-                    break;
                 case 'Free_Action':
                     console.log("Entering Free_Action state");
                     if (this.isCurrentPlayerActive()) {
@@ -303,8 +290,24 @@ function (dojo, declare) {
         }, 
 
         onUpdateActionButtons: function(stateName, args) {
-            // Make sure atheist count matches gamedata
-            //this['hkboard'].addItemType(i, i, g_gamethemeurl + 'img/30_30_hktoken.png', i);
+            console.log ('onUpdateActionButtons: ' + stateName);
+            if (this.isCurrentPlayerActive()) 
+            {
+                switch (stateName)
+                {
+                    case 'initialDraw':
+                        this.addActionButton('drawDisasterCardButton', _('Draw a Disaster card'), () => {
+                            this.bgaPerformAction('actDrawCardInit', {
+                                type: "disaster"
+                            })
+                        });
+
+                        this.addActionButton('cancelButton', _('Cancel'), () => {
+                            this.actionCancel();
+                        }, null, null, 'gray');
+                        break;
+                }
+            }
         },
 
         ///////////////////////////////////////////////////

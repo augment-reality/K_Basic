@@ -33,9 +33,10 @@ $machinestates = [
     /* Initial setup */
     ST_INITIAL_DRAW => GameStateBuilder::create()
         ->name('initialDraw')
-        ->description(clienttranslate('All players must pick a combination of five bonus and disaster cards'))
-		->descriptionmyturn(clienttranslate('${you} must pick a combination of five bonus and disaster cards'))
+        ->description(clienttranslate('All players must pick a combination of five bonus and disaster cards teeeest'))
+		->descriptionmyturn(clienttranslate('${you} must pick a combination of five bonus and disaster cards tteeeeest123'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->action('stInitialDraw')
         ->possibleactions([
             'actDrawCardInit',
         ])
