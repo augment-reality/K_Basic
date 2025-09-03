@@ -71,12 +71,12 @@ function (dojo, declare) {
              // Create prayer counter in player panel
             const counter_p = new ebg.counter();
             counter_p.create(document.getElementById(`panel_p_${player.id}`));
-            counter_p.setValue(5);
-
+            //counter_p.setValue(gamedatas[players].prayer);
+                    
             // Create happiness counter in player panel
             const counter_h = new ebg.counter();
             counter_h.create(document.getElementById(`panel_h_${player.id}`));
-            counter_h.setValue(5);
+            //counter_h.setValue(gamedatas.players[player.id].happiness);
 
             // Create card counter in player panel
             const counter_c = new ebg.counter();
@@ -91,6 +91,7 @@ function (dojo, declare) {
                 this[`fams_${player.id}`].create(this, $(`${player.id}_families`), 30, 30);
                 this[`fams_${player.id}`].image_items_per_row = 10;
 
+
                 // Make types for each color of meeple
                 for (let i = 0; i < 10; i++) {
                     this[`fams_${player.id}`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png')
@@ -98,12 +99,16 @@ function (dojo, declare) {
                 }
 
                 // Use PHP-provided values for family/chief
-                for (let i = 0; i < player.player_family; i++) {
-                    this[`fams_${player.id}`].addToStock(0); // 0 = family meeple
-                }
-                if (player.chief > 0) {
-                    this[`fams_${player.id}`].addToStock(1); // 1 = chief meeple
-                }
+                // Object.values(gamedatas.players).forEach(player => {
+                // for (let i = 0; i < this.gamedatas.player_id[player.family]; i++) {
+                //     this[`${player.id}_families`].addToStock(8); // 8 = atheist meeple
+                // }
+                // if (player.chief > 0) {
+                //     this[`fams_${player.id}`].addToStock(1); // 1 = chief meeple
+                // }
+                // })
+    
+                
             });
 
             // Initialize and create atheist families stock
@@ -119,6 +124,8 @@ function (dojo, declare) {
             for (let i = 0; i < this.gamedatas.atheist_families; i++) {
                 this['atheists'].addToStock(8); // 8 = atheist meeple
             }
+
+
 
             // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
             const hkboard = document.getElementById('hkboard');
@@ -194,7 +201,8 @@ function (dojo, declare) {
             Object.values(gamedatas.players).forEach(player => {
                 for (let i = 1; i <= 3; i++) {
                     // const card_type_id = this.getCardUniqueId(Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 5) + 1); // Example card type id
-                    this[`${player.id}_cards`].addToStock(2);
+                    const rando = Math.floor(Math.random() * 14) + 1;
+                    this[`${player.id}_cards`].addToStock(rando);
                 }
             });
 
@@ -216,20 +224,9 @@ function (dojo, declare) {
                         this.addActionButton('drawDisasterCardButton', _('Draw a Disaster card'), () => {
                             this.bgaPerformAction('actDrawDisasterCard').then(result => {
                                     this.drawDisasterCard(result.card_id);
-                                    this[`dice`].addToStock(3);
-
-                                    // if (this.gamedatas.hand) {
-                                    // for (var i in this.gamedatas.hand) {
-                                    //     var card = this.gamedatas.hand[i];
-                                    //     var color = card.type;
-                                    //     var value = card.type_arg;
-                                    //     this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
-                                    //     }
-                                    // }
-
-
                             });
                         });
+
                         this.addActionButton('cancelButton', _('Cancel'), () => {
                             this.actionCancel();
                         }, null, null, 'gray');
@@ -269,6 +266,14 @@ function (dojo, declare) {
                         switch (stateName) {
                 case 'Initial_Draw':
                     if (this.isCurrentPlayerActive()) {
+            if (this.gamedatas.hand) {
+                for (var i in this.gamedatas.hand) {
+                    var card = this.gamedatas.hand[i];
+                    var color = card.type;
+                    var value = card.type_arg;
+                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                }
+            }
                     }
                     break;
                 case 'Free_Action':

@@ -42,18 +42,14 @@ CREATE TABLE IF NOT EXISTS `bonus_card` (
   PRIMARY KEY (`card_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
-CREATE TABLE IF NOT EXISTS `dice` (
-  `dice_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `dice_value` smallint(5) UNSIGNED NOT NULL DEFAULT '5',
-  PRIMARY KEY (`dice_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
 ALTER TABLE `player` 
 ADD `player_first` BOOLEAN NOT NULL DEFAULT '0',
 ADD `player_happiness` INT(11) NOT NULL DEFAULT '5',
 ADD `player_prayer` INT(11) NOT NULL DEFAULT '5',
 ADD `player_family` INT(11) NOT NULL DEFAULT '0',
-ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1';
+ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1',
+ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
+ADD `player_amulet` INT(11) NOT NULL DEFAULT '0';
 
 -- Use table from Cant Stop as example for hk token zones
 -- CREATE TABLE IF NOT EXISTS `col` (

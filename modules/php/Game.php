@@ -74,8 +74,6 @@ class Game extends \Table
             'card_type' => $card['type'],
             'card_type_arg' => $card['type_arg'],
         ]);
-        //increment sql value for card count
-        //$this->DiceRoll();
     }
 
     public function actDrawBonusCard(): void
@@ -194,20 +192,6 @@ class Game extends \Table
         $this->gamestate->nextState("pass");
     }
 
-    public function DiceRoll()
-    {
-        // Roll the dice and update sql
-
-        $dices = array();
-        for( $i=1;$i<=5;$i++ )
-        {
-            $dices[$i] = bga_rand( 1,6 );
-            self::setGameStateValue('dice'.$i, $dices[$i]);
-            self::DbQuery("UPDATE dice SET dice_value = {$dices[$i]} WHERE dice_id = $i");
-        }
-
-    }
-
 
     /**
      * Compute and return game progression (integer between 0 and 100)
@@ -261,11 +245,6 @@ class Game extends \Table
         // Fetch the number of atheist families from the database
         $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
         $result["atheist_families"] = $atheistCount;
-
-        // Fetch the dice information from the database
-        $result["dices"] = $this->getCollectionFromDb(
-            "SELECT `dice_id` `id`, `dice_value` `value` FROM `dice`"
-        );
 
         return $result;
     }
@@ -363,15 +342,6 @@ class Game extends \Table
         // Dummy content.
         // $this->initStat("table", "table_teststat1", 0);
         // $this->initStat("player", "player_teststat1", 0);
-
-
-        // Create dice entries in the database
-        {
-            $dice = []; 
-            $dice[] = "(1, 2, 3, 4, 5),(9, 8, 7, 6, 5)";
-        }
-
-        $sql = "INSERT INTO dice (dice_id, dice_value) VALUES ".implode(',', $dice);
 
         // TODO: Setup the initial game situation here.
         $this->activeNextPlayer();
