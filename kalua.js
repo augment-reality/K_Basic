@@ -34,7 +34,6 @@ function (dojo, declare) {
                     <div id="atheistFamilies"></div>
                 </div>
                 <div id="playedCards">Played Cards:
-                    <div id="dice"></div>
                 </div>
 
                 <div id="player-tables" class="zone-container"></div>
@@ -53,6 +52,7 @@ function (dojo, declare) {
                         <div class="player_name">${player.name}</div>
                         <div id="${player.id}_cards" class="player_cards"></div>
                         <div id="${player.id}_families" class="player_families"></div>
+                        <div id="${player.id}_dice" class="player_dice">is your die</div>
                     </div>
                 `);
             });
@@ -91,6 +91,15 @@ function (dojo, declare) {
                 this[`fams_${player.id}`].create(this, $(`${player.id}_families`), 30, 30);
                 this[`fams_${player.id}`].image_items_per_row = 10;
 
+                // Initialize dice as a stock in each player's dice div
+                this[`${player.id}_dice`] = new ebg.stock();
+                this[`${player.id}_dice`].create(this, $(`${player.id}_dice`), 50, 50);
+                this[`${player.id}_dice`].image_items_per_row = 6;
+                
+                //Add types for dice faces
+                for (let i = 1; i <= 6; i++) {
+                    this[`${player.id}_dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_50.png');
+                }
 
                 // Make types for each color of meeple
                 for (let i = 0; i < 10; i++) {
@@ -162,12 +171,6 @@ function (dojo, declare) {
                 hkTokenCount++;
             });
 
-            // Initialize dice stock
-            this.dices = new ebg.stock();
-            this.dices.create(this, document.getElementById('dice'), 50, 50);
-            for (let i = 1; i <= 6; i++) {
-                this.dices.addItemType(i, i, g_gamethemeurl + 'img/d6_300_50.png', i);
-            }
 
             // Create stock for played cards
             this['playedCards'] = new ebg.stock();  
@@ -205,6 +208,14 @@ function (dojo, declare) {
                     this[`${player.id}_cards`].addToStock(rando);
                 }
             });
+
+            // Add a die to each player's hand
+            Object.values(gamedatas.players).forEach(player => {
+                    // add a random die face
+                    const rando = Math.floor(Math.random() * 5) + 1;
+                    this[`${player.id}_dice`].addToStock(rando);
+            });
+
 
             // Setup game notifications to handle (see "setupNotifications" method below)
             // this.setupNotifications();
