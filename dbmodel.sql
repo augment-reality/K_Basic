@@ -47,7 +47,11 @@ ADD `player_first` BOOLEAN NOT NULL DEFAULT '0',
 ADD `player_happiness` INT(11) NOT NULL DEFAULT '5',
 ADD `player_prayer` INT(11) NOT NULL DEFAULT '5',
 ADD `player_family` INT(11) NOT NULL DEFAULT '0',
-ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1';
+ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1',
+ADD `player_die` smallint(5) NOT NULL DEFAULT '0',
+ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
+ADD `player_amulet` INT(11) NOT NULL DEFAULT '0';
+
 
 -- Use table from Cant Stop as example for hk token zones
 -- CREATE TABLE IF NOT EXISTS `col` (
