@@ -16,28 +16,239 @@
 
 //    !! It is not a good idea to modify this file when a game is running !!
 
+use Bga\GameFramework\GameStateBuilder;
+use Bga\GameFramework\StateType;
+
+if (!defined('ST_PHASE_THREE_RESOLVE_AMULET')) {
+   require_once("modules/php/constants.inc.php");
+}
+
+
 $machinestates = [
 
     // The initial state. Please do not modify.
 
-    1 => array(
-        "name" => "gameSetup",
-        "description" => "",
-        "type" => "manager",
-        "action" => "stGameSetup",
-        "transitions" => ["Initial_Draw" => 10]
-    ),
+    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_INITIAL_DRAW)->build(),
+
+    /* Initial setup */
+    ST_INITIAL_DRAW => GameStateBuilder::create()
+        ->name('initialDraw')
+        ->description(clienttranslate('All players must pick a combination of five bonus and disaster cards'))
+		->descriptionmyturn(clienttranslate('${you} must pick a combination of five bonus and disaster cards'))
+        ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->action('stInitialDraw')
+        ->possibleactions([
+            'actDrawCardInit',
+        ])
+        ->transitions([
+            '' => ST_INITIAL_FINISH
+        ])
+        ->build(),
+    
+    ST_INITIAL_FINISH => GameStateBuilder::create()
+        ->name('initialFinish')
+        ->type(StateType::GAME)
+        ->action('stInitialFinish')
+        ->transitions([
+            '' => ST_PHASE_ONE_DRAW
+        ])
+        
+        ->build(),
+
+    
+    /* Draw phase */
+    ST_PHASE_ONE_DRAW => GameStateBuilder::create()
+        ->name('phaseOneDraw')
+        ->description(clienttranslate('${actplayer} must draw cards for round'))
+		->descriptionmyturn(clienttranslate('${you} must draw cards for round'))
+        ->type(StateType::ACTIVE_PLAYER)
+        ->possibleactions([
+            'actDrawCard',
+        ])
+        ->transitions([
+            '' => ST_PHASE_ONE_DONE
+        ])
+        ->build(),
+
+    ST_PHASE_ONE_DONE => GameStateBuilder::create()
+        ->name('phaseOneDone')
+        ->type(StateType::GAME)
+        ->action('stPhaseOneDone')
+        ->transitions([
+            '' => ST_PHASE_TWO_ACTIVATE_LEADER
+        ])
+        ->build(),
+
+    /* Activate leader phase */
+    ST_PHASE_TWO_ACTIVATE_LEADER => GameStateBuilder::create()
+        ->name('phaseTwoActivateLeader')
+        ->description(clienttranslate('${actplayer} must choose a leader action'))
+		->descriptionmyturn(clienttranslate('${you} must choose a leader action'))
+        ->type(StateType::ACTIVE_PLAYER)
+        ->action('stActivateLeader')
+        ->possibleactions([
+            'actGiveSpeech',
+            'actConvertAtheists',
+            'actConvertBelievers',
+            'actMassiveSpeech'
+        ])
+        ->transitions([
+            '' => ST_PHASE_TWO_NEXT_PLAYER
+        ])
+        ->build(),
+
+    ST_PHASE_TWO_NEXT_PLAYER => GameStateBuilder::create()
+        ->name('phaseTwoNextPlayer')
+        ->type(StateType::GAME)
+        ->action('stNextPlayer') /* Note - same as phase three next player */
+        ->transitions([
+            'nextPlayer' => ST_PHASE_TWO_ACTIVATE_LEADER,
+            'phaseDone'  => ST_PHASE_THREE_PLAY_CARD
+        ])
+        ->build(),
+
+    /* Play cards phase */
+    ST_PHASE_THREE_PLAY_CARD => GameStateBuilder::create()
+        ->name('phaseThreePlayCard')
+        ->description(clienttranslate('${actplayer} must play a card'))
+		->descriptionmyturn(clienttranslate('${you} must play a card'))
+        ->type(StateType::ACTIVE_PLAYER)
+        ->action('stPlayCard')
+        ->possibleactions([
+            'actPlayCard',
+            'actBuyCard',
+            'actPlayCardPass',
+            'actSayConvert'
+        ])
+        ->transitions([
+            'nextPlayer' => ST_PHASE_THREE_NEXT_PLAYER,
+            'convert' => ST_PHASE_FOUR_CONVERT
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create()
+        ->name('phaseThreeNextPlayer')
+        ->type(StateType::GAME)
+        ->action('stNextPlayer') /* Note - same as phase two next player */
+        ->transitions([
+            'nextPlayer' => ST_PHASE_THREE_PLAY_CARD,
+            'phaseDone'  => ST_PHASE_THREE_RESOLVE_CARD
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create()
+        ->name('phaseThreeResolveCard')
+        ->type(StateType::GAME)
+        ->action('stResolveCard')
+        ->transitions([
+            'noCards' => ST_PHASE_THREE_PLAY_CARD,
+            'phaseDone'  => ST_PHASE_THREE_RESOLVE_CARD,
+            'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
+            'selectTargets' => ST_PHASE_THREE_SELECT_TARGETS,
+            'rollDice' => ST_PHASE_THREE_ROLL_DICE,
+            'discard' => ST_PHASE_THREE_DISCARD
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_SELECT_TARGETS => GameStateBuilder::create()
+        ->name('phaseThreeSelectTargets')
+        ->description(clienttranslate('${actplayer} must select a target'))
+		->descriptionmyturn(clienttranslate('${you} must select a target'))
+        ->type(StateType::ACTIVE_PLAYER)
+        ->action('stSelectTarget')
+        ->possibleactions([
+            'actSelectPlayer'
+        ])
+        ->transitions([
+            '' => ST_PHASE_THREE_RESOLVE_CARD
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_RESOLVE_AMULETS => GameStateBuilder::create()
+        ->name('phaseThreeResolveAmulets')
+        ->description(clienttranslate('Some players may choose to use their amulets'))
+		->descriptionmyturn(clienttranslate('${you} must choose whether to use your amulet'))
+        ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->possibleactions([
+            'actAmuletChoose',
+        ])
+        ->transitions([
+            '' => ST_PHASE_THREE_RESOLVE_CARD
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_ROLL_DICE => GameStateBuilder::create()
+        ->name('phaseThreeRollDice')
+        ->description(clienttranslate('Players must roll a die'))
+		->descriptionmyturn(clienttranslate('${you} must roll a die'))
+        ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->possibleactions([
+            'actRollDie',
+        ])
+        ->transitions([
+            '' => ST_PHASE_THREE_RESOLVE_CARD
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_DISCARD => GameStateBuilder::create()
+        ->name('phaseThreeDiscard')
+        ->description(clienttranslate('Players must choose a discard'))
+		->descriptionmyturn(clienttranslate('${you} must choose a card to discard'))
+        ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->possibleactions([
+            'actDiscard',
+        ])
+        ->transitions([
+            '' => ST_PHASE_THREE_RESOLVE_CARD
+        ])
+        ->build(),
+
+    /* Convert phase */
+    ST_PHASE_FOUR_CONVERT => GameStateBuilder::create()
+        ->name('phaseFourConvert')
+        ->type(StateType::GAME)
+        ->action('stConvert')
+        ->transitions([
+            '' => ST_PHASE_FIVE_PRAYING
+        ])
+        ->build(),
+
+    /* Praying phase */
+    ST_PHASE_FIVE_PRAYING => GameStateBuilder::create()
+        ->name('phaseFivePraying')
+        ->type(StateType::GAME)
+        ->action('stPraying')
+        ->transitions([
+            'nextRound' => ST_PHASE_ONE_DRAW,
+            'gameOver'  => ST_END_GAME
+        ])
+        ->build(),
+
+
+    
+    
+    
+
+    
+
+    // 1 => array(
+    //     "name" => "gameSetup",
+    //     "description" => "",
+    //     "type" => "manager",
+    //     "action" => "stGameSetup",
+    //     "transitions" => ["Initial_Draw" => 10]
+    // ),
    
-    10 => [
-        "name" => "Initial_Draw",
-        "description" => clienttranslate('${actplayer} must pick a combination of five bonus and disaster cards'),
-        "descriptionmyturn" => clienttranslate("Pick a combination of five bonus and disaster cards"),
-        "type" => "activeplayer",
-        "action" => "stInitialDraw",
-        "possibleactions" => ["actDrawDisasterCard","actDrawBonusCard" ],
-        "updateGameProgression" => false,
-        "transitions" => ["Initial_Draw" => 10,"End_Round" => 70]
-    ],
+    // 10 => [
+    //     "name" => "Initial_Draw",
+    //     "description" => clienttranslate('${actplayer} must pick a combination of five bonus and disaster cards'),
+    //     "descriptionmyturn" => clienttranslate("Pick a combination of five bonus and disaster cards"),
+    //     "type" => "activeplayer",
+    //     "action" => "stInitialDraw",
+    //     "possibleactions" => ["actDrawDisasterCard","actDrawBonusCard" ],
+    //     "updateGameProgression" => false,
+    //     "transitions" => ["Initial_Draw" => 10,"End_Round" => 70]
+    // ],
     // 20 => [
     //     "name" => "Active_Draw",
     //     "description" => clienttranslate('${actplayer} must draw cards'),
@@ -91,24 +302,24 @@ $machinestates = [
     //     "updateGameProgression" => false,
     //     "transitions" => ["Active_Turn" => 40, "gameEnd" => 99]
     // ],
-    70 => [
-        "name" => "End_Round",
-        "description" => 'Convert Families, Gain Prayer, Check for Eliminations, Next Player or End Game',
-        "type" => "game",
-        "action" => "stEnd_Round",
-        "updateGameProgression" => false,
-        "transitions" => ['Initial_Draw' => 10, "gameEnd" => 99]
-    ],
+    // 70 => [
+    //     "name" => "End_Round",
+    //     "description" => 'Convert Families, Gain Prayer, Check for Eliminations, Next Player or End Game',
+    //     "type" => "game",
+    //     "action" => "stEnd_Round",
+    //     "updateGameProgression" => false,
+    //     "transitions" => ['Initial_Draw' => 10, "gameEnd" => 99]
+    // ],
 
     // Final state.
     // Please do not modify (and do not overload action/args methods).
-    99 => [
-        "name" => "gameEnd",
-        "description" => clienttranslate("End of game"),
-        "type" => "manager",
-        "action" => "stGameEnd",
-        "args" => "argGameEnd"
-    ],
+    // 99 => [
+    //     "name" => "gameEnd",
+    //     "description" => clienttranslate("End of game"),
+    //     "type" => "manager",
+    //     "action" => "stGameEnd",
+    //     "args" => "argGameEnd"
+    // ],
 
 ];
 
