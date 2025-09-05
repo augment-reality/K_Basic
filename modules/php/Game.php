@@ -167,9 +167,12 @@ class Game extends \Table
     /***** Leader state actions *****/
     public function actGiveSpeech(): void
     {
+        /* Increase player's happiness by one */
         $this->trace("KALUA give speech!");
 
         $player_id = $this->getCurrentPlayerId();
+
+        self::DbQuery( "UPDATE player SET player_happiness = player_happiness + 1 WHERE player_id = {$this->getActivePlayerId()}");
 
         $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
                 'player_id' => $player_id,
@@ -460,8 +463,8 @@ class Game extends \Table
     {
         $result = [];
         $current_player_id = (int) $this->getCurrentPlayerId();
-        $result["players"] = $this->getCollectionFromDb(
-            "SELECT `player_id` `id`, `player_score` `score`, `player_family` `family`, `player_chief` `chief` FROM `player`"
+        $result["players"] = self::getCollectionFromDb(
+            "SELECT player_id id, player_score score, player_family family, player_chief chief, player_happiness happiness FROM player"
         );
 
         // Fetch the number of atheist families from the database
@@ -472,6 +475,10 @@ class Game extends \Table
         // $result["dices"] = $this->getCollectionFromDb(
         //     "SELECT `dice_id` `id`, `dice_value` `value` FROM `dice`"
         // );
+
+        /* Get all cards each player has and where it is */
+        $result["handDisaster"] = $this->disasterCards->getPlayerHand($current_player_id);
+        $result["handBonus"] = $this->bonusCards->getPlayerHand($current_player_id);
 
         return $result;
     }
@@ -559,7 +566,7 @@ class Game extends \Table
         // Initialize meeples for each player (families and chief)
         foreach ($players as $player_id => $player) {
             // Example: 5 families and 1 chief per player
-            self::DbQuery("UPDATE player SET player_family=5, player_chief=1 WHERE player_id=$player_id");
+            self::DbQuery("UPDATE player SET player_family=5, player_chief=1, player_happiness=5 WHERE player_id=$player_id");
         }
 
         // Initialize atheist families (e.g., 3 per player, stored in a global table or variable)

@@ -48,6 +48,7 @@ function (dojo, declare) {
             this.ID_GLOBAL_DISASTER = 1;
             this.ID_LOCAL_DISASTER = 2;
             this.ID_BONUS = 3;
+            this.happinessCounter = {}
 
         },
         
@@ -88,7 +89,11 @@ function (dojo, declare) {
                 // Create happiness counter in player panel
                 const counter_h = new ebg.counter();
                 counter_h.create(document.getElementById(`panel_h_${player.id}`));
-                //counter_h.setValue(gamedatas.players[player.id].happiness);
+                console.log("player: " + player);
+                happiness = player.happiness;
+                console.log("happiness: " + happiness);
+                counter_h.setValue(happiness);
+                this.happinessCounter[player.id] = counter_h;
 
                 // Create card counter in player panel
                 const counter_c = new ebg.counter();
@@ -242,6 +247,12 @@ function (dojo, declare) {
                     this[`${player.id}_dice`].addToStock(rando);
             });
 
+
+            /* Update player's hands with their drawn cards */
+            Object.values(gamedatas.handDisaster).forEach(card => {
+                console.log("id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
+                this.drawDisasterCard(this.player_id, card.id, card.type, card.type_arg);
+            })
 
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
@@ -409,12 +420,9 @@ function (dojo, declare) {
         },
 
 
-        giveSpeech: function() {
+        giveSpeech: function(player_id) {
             console.log("Giving a speech");
-            const happinessCounter = document.getElementById(`panel_h_${this.player_id}`);
-            const counter = new ebg.counter();
-            counter.create(happinessCounter);
-            counter.incValue(1); // Increase happiness by 1
+            this.happinessCounter[player_id].incValue(1); // Increase happiness by 1
         },
 
         convertAtheist: function() {
@@ -487,10 +495,7 @@ function (dojo, declare) {
             const player_id = args.player_id;
 
             console.log ('player ' + player_id + ' gives a speech');
-            if (player_id == this.player_id)
-            {
-                this.giveSpeech();
-            }
+            this.giveSpeech(player_id);
         }
 
         ///////////////////////////////////////////////////
