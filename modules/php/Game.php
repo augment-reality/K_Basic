@@ -542,6 +542,7 @@ class Game extends \Table
             array( 'type' => CardType::LocalDisaster->value,  'type_arg' => LocalDisasterCard::TempleDestroyed->value,'nbr' => 5),
         );
         $this->disasterCards->createCards($disasterCards, 'deck');
+        $this->disasterCards->shuffle('deck');
 
         $bonusCards = array(
             array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::GoodWeather->value,           'nbr' => 3),
@@ -553,6 +554,7 @@ class Game extends \Table
             array( 'type' => CardType::Bonus->value,           'type_arg' => BonusCard::Amulets->value,               'nbr' => 3),
         );
         $this->bonusCards->createCards($bonusCards, 'deck');
+        $this->bonusCards->shuffle('deck');
 
         // Initialize meeples for each player (families and chief)
         foreach ($players as $player_id => $player) {

@@ -44,6 +44,11 @@ function (dojo, declare) {
 
                 <div id="player-tables" class="zone-container"></div>
             `);
+
+            this.ID_GLOBAL_DISASTER = 1;
+            this.ID_LOCAL_DISASTER = 2;
+            this.ID_BONUS = 3;
+
         },
         
         setup: function(gamedatas) {
@@ -75,21 +80,23 @@ function (dojo, declare) {
                      </div>
                 `);
 
-             // Create prayer counter in player panel
-            const counter_p = new ebg.counter();
-            counter_p.create(document.getElementById(`panel_p_${player.id}`));
-            //counter_p.setValue(gamedatas[players].prayer);
-                    
-            // Create happiness counter in player panel
-            const counter_h = new ebg.counter();
-            counter_h.create(document.getElementById(`panel_h_${player.id}`));
-            //counter_h.setValue(gamedatas.players[player.id].happiness);
+                // Create prayer counter in player panel
+                const counter_p = new ebg.counter();
+                counter_p.create(document.getElementById(`panel_p_${player.id}`));
+                //counter_p.setValue(gamedatas[players].prayer);
+                        
+                // Create happiness counter in player panel
+                const counter_h = new ebg.counter();
+                counter_h.create(document.getElementById(`panel_h_${player.id}`));
+                //counter_h.setValue(gamedatas.players[player.id].happiness);
 
-            // Create card counter in player panel
-            const counter_c = new ebg.counter();
-            this[`counter_c_${player.id}`] = counter_c;
-            counter_c.create(document.getElementById(`panel_c_${player.id}`));
-            counter_c.setValue(0);
+                // Create card counter in player panel
+                const counter_c = new ebg.counter();
+                this[`counter_c_${player.id}`] = counter_c;
+                counter_c.create(document.getElementById(`panel_c_${player.id}`));
+                counter_c.setValue(0);
+
+            });
 
 
             // Initialize meeples as a stock in each player's family div
@@ -194,27 +201,39 @@ function (dojo, declare) {
 
             });
 
-            // Create disaster card types
-            for (let color = 1; color <= 3; color++) {
-                for (let value = 1; value <= 5; value++) {
-                    const card_type_id = this.getCardUniqueId(color, value);
-                    Object.values(gamedatas.players).forEach(player => {
-                        this[`${player.id}_cards`].addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_type_id);
-                    });
-                }
+            /* Add local disaster cards */
+            const card_type_local_disaster = this.ID_LOCAL_DISASTER;
+            const num_local_disaster_cards = 5;
+            for (let card_id = 1; card_id <= num_local_disaster_cards; card_id++)
+            {
+                const uniqueId = this.getCardUniqueId(card_type_local_disaster, card_id);
+                console.log("uniqueID: " + uniqueId);
+                Object.values(gamedatas.players).forEach(player => {
+                    /* Note: image ID 0 - 4 for local disaster cards */
+                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_id - 1);
+                });
             }
 
+            /* Add global disaster cards */
+            const card_type_global_disaster = this.ID_GLOBAL_DISASTER;
+            const num_global_disaster_cards = 10;
+            for (let card_id = 1; card_id <= num_global_disaster_cards; card_id++)
+            {
+                const uniqueId = this.getCardUniqueId(card_type_global_disaster, card_id);
+                console.log("uniqueID: " + uniqueId);
+                Object.values(gamedatas.players).forEach(player => {
+                    /* Note: image ID 5 - 14 for local disaster cards */
+                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_Disaster_600_522.png', card_id + 4);
+                });
+            } 
 
-            });
+            // DEBUG Add all cards to each player's hand
+            // Object.values(gamedatas.players).forEach(player => {
+            //     for (let i = 1; i <= 15; i++) {
+            //         this[`${player.id}_cards`].addToStock(i);
+            //     }
+            // });
 
-            // Add three cards to each player's hand
-            Object.values(gamedatas.players).forEach(player => {
-                for (let i = 1; i <= 3; i++) {
-                    // const card_type_id = this.getCardUniqueId(Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 5) + 1); // Example card type id
-                    const rando = Math.floor(Math.random() * 14) + 1;
-                    this[`${player.id}_cards`].addToStock(rando);
-                }
-            });
 
             // Add a die to each player's hand
             Object.values(gamedatas.players).forEach(player => {
@@ -353,24 +372,40 @@ function (dojo, declare) {
         ///////////////////////////////////////////////////
         //// Utility methods
 
-        getCardUniqueId: function(color, value) {
-            return (color - 1) * 5 + (value - 1);
+        // getCardUniqueId: function(color, value) {
+        //     return (color - 1) * 5 + (value - 1);
+        // },
+
+        /* Maps card type (bonus, local disaster, global disaster) and type_id 
+         * (which of those type cards it is) to a unique number */
+        getCardUniqueId: function(type, type_id)
+        {
+            /* Unique ids will be based on the type and type_id */
+            if (type == this.ID_GLOBAL_DISASTER) /* global disaster */
+            {
+                return type_id;
+            }
+            else if (type == this.ID_LOCAL_DISASTER) /* local disaster - 10 globals + this type_id */
+            {
+                return 10 + type_id;
+            }
+            else if (type == this.ID_BONUS) /* bonus = globals + local + type_id */
+            {
+                return 10 + 5 + type_id;
+            }
+            console.log("INVALID CARD TYPE!!"); /* TODO exception? */
+            return 0;
         },
 
-            drawDisasterCard: function(player, card) {
+        drawDisasterCard: function(player, card_id, card_type, card_type_arg) {
             console.log("Drawing a disaster card");
 
-            if (player && card) {
-                const color = Math.floor(card.type / 5) + 1; // Extract color from card type
-                const value = (card.type % 5) + 1;          // Extract value from card type
-                const uniqueId = this.getCardUniqueId(color, value); // Generate unique ID
+            const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
+            console.log("drawing unique ID " + uniqueId)
 
-                this['playedCards'].removeFromStockById(card.id); // Remove card from the deck
-                this[`${player}_cards`].addToStockWithId(uniqueId, card.id); // Add card to player's hand
-                console.log(`Card ${card} added to player ${this.player}'s hand`);
-            } else {
-                console.log("No cards left in the deck");
-            }
+            this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
+            console.log(`Card ${card_id} added to player ${this.player}'s hand`);
+            
         },
 
 
@@ -437,11 +472,12 @@ function (dojo, declare) {
             const type = args.card_type;
             const card_id = args.card_id;
 
-            console.log( 'player ' + player_id + ' drew card ' + card_id + ' of type ' + type);
+            console.log( 'player ' + player_id + ' drew card ' + card_id + ' of type ' + type + ', type arg ' + args.card_type_arg);
 
             /* TODO add to hand of player who drew it*/
             if (player_id == this.player_id)
             {
+                this.drawDisasterCard(player_id, args.card_id, args.card_type, args.card_type_arg);
                 console.log('It\'s me!');
             }
         },
