@@ -11,7 +11,6 @@ const ST_INITIAL_FINISH = 11;
 
 /* Phase one - drawing */
 const ST_PHASE_ONE_DRAW = 20;
-const ST_PHASE_ONE_DONE = 21;
 
 /* Phase two - activate leader */
 const ST_PHASE_TWO_ACTIVATE_LEADER = 30;
@@ -27,10 +26,7 @@ const ST_PHASE_THREE_ROLL_DICE = 45;
 const ST_PHASE_THREE_DISCARD = 46;
 
 /* Phase four - convert */
-const ST_PHASE_FOUR_CONVERT = 50;
-
-/* Phase five - praying */
-const ST_PHASE_FIVE_PRAYING = 51;
+const ST_PHASE_FOUR_CONVERT_PRAY = 50;
 
 /* End game */
 const ST_END_GAME = 99;

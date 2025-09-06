@@ -66,15 +66,6 @@ $machinestates = [
             'actDrawCard',
         ])
         ->transitions([
-            '' => ST_PHASE_ONE_DONE
-        ])
-        ->build(),
-
-    ST_PHASE_ONE_DONE => GameStateBuilder::create()
-        ->name('phaseOneDone')
-        ->type(StateType::GAME)
-        ->action('stPhaseOneDone')
-        ->transitions([
             '' => ST_PHASE_TWO_ACTIVATE_LEADER
         ])
         ->build(),
@@ -122,7 +113,7 @@ $machinestates = [
         ])
         ->transitions([
             'nextPlayer' => ST_PHASE_THREE_NEXT_PLAYER,
-            'convert' => ST_PHASE_FOUR_CONVERT
+            'convert' => ST_PHASE_FOUR_CONVERT_PRAY,
         ])
         ->build(),
 
@@ -203,125 +194,14 @@ $machinestates = [
         ])
         ->build(),
 
-    /* Convert phase */
-    ST_PHASE_FOUR_CONVERT => GameStateBuilder::create()
-        ->name('phaseFourConvert')
+    /* Convert then pray phase */
+    ST_PHASE_FOUR_CONVERT_PRAY => GameStateBuilder::create()
+        ->name('phaseFourConvertPray')
         ->type(StateType::GAME)
-        ->action('stConvert')
-        ->transitions([
-            '' => ST_PHASE_FIVE_PRAYING
-        ])
-        ->build(),
-
-    /* Praying phase */
-    ST_PHASE_FIVE_PRAYING => GameStateBuilder::create()
-        ->name('phaseFivePraying')
-        ->type(StateType::GAME)
-        ->action('stPraying')
+        ->action('stConvertPray')
         ->transitions([
             'nextRound' => ST_PHASE_ONE_DRAW,
             'gameOver'  => ST_END_GAME
         ])
         ->build(),
-
-
-    
-    
-    
-
-    
-
-    // 1 => array(
-    //     "name" => "gameSetup",
-    //     "description" => "",
-    //     "type" => "manager",
-    //     "action" => "stGameSetup",
-    //     "transitions" => ["Initial_Draw" => 10]
-    // ),
-   
-    // 10 => [
-    //     "name" => "Initial_Draw",
-    //     "description" => clienttranslate('${actplayer} must pick a combination of five bonus and disaster cards'),
-    //     "descriptionmyturn" => clienttranslate("Pick a combination of five bonus and disaster cards"),
-    //     "type" => "activeplayer",
-    //     "action" => "stInitialDraw",
-    //     "possibleactions" => ["actDrawDisasterCard","actDrawBonusCard" ],
-    //     "updateGameProgression" => false,
-    //     "transitions" => ["Initial_Draw" => 10,"End_Round" => 70]
-    // ],
-    // 20 => [
-    //     "name" => "Active_Draw",
-    //     "description" => clienttranslate('${actplayer} must draw cards'),
-    //     "descriptionmyturn" => "Pick a combination of cards to take",
-    //     "type" => "activeplayer",
-    //     "action" => "stActiveDraw",
-    //     //"args" => "",
-    //     "possibleactions" => "",
-    //     "updateGameProgression" => false,
-    //     "transitions" => ["Free_Action" => 20, "Active_Turn" => 30]
-    // ],
-    // 30 => [
-    //     "name" => "Free_Action",
-    //     "description" => clienttranslate('${actplayer} is selecting their action'),
-    //     "descriptionmyturn" => "Select one of the free actions",
-    //     "type" => "activeplayer",
-    //     "action" => "stFreeAction",
-    //     //"args" => "",
-    //     "possibleactions" => "",
-    //     "updateGameProgression" => false,
-    //     "transitions" => ["Free_Action" => 30, "Active_Turn" => 40]
-    // ],
-    // 40 => [
-    //     "name" => "Active_Turn",
-    //     "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
-    //     "descriptionmyturn" => "Play a card or pass",
-    //     "type" => "activeplayer",
-    //     "action" => "stActiveTurn",
-    //     //"args" => "",
-    //     "possibleactions" => "",
-    //     "updateGameProgression" => false,
-    //     "transitions" => ["Non-active_Turn" => 50, "End_Round" => 60]
-    // ],
-    // 50 => [
-    //     "name" => "Non-active_Turn",
-    //     "description" => clienttranslate('${actplayer} is deciding to play a card or pass'),
-    //     "descriptionmyturn" => "Play a card or pass",
-    //     "type" => "activeplayer",
-    //     "action" => "stNonActiveTurn",
-    //     //"args" => "",
-    //     "possibleactions" => "",
-    //     "updateGameProgression" => false,
-    //     "transitions" => ["Non-active_Turn" => 50, "End_Round" => 60]
-    // ],
-    // 60 => [
-    //     "name" => "Card_Effects",
-    //     "description" => 'Card effects are resolved sequentially',
-    //     "type" => "game",
-    //     "action" => "stCardEffect",
-    //     //"args" => "card list",
-    //     "updateGameProgression" => false,
-    //     "transitions" => ["Active_Turn" => 40, "gameEnd" => 99]
-    // ],
-    // 70 => [
-    //     "name" => "End_Round",
-    //     "description" => 'Convert Families, Gain Prayer, Check for Eliminations, Next Player or End Game',
-    //     "type" => "game",
-    //     "action" => "stEnd_Round",
-    //     "updateGameProgression" => false,
-    //     "transitions" => ['Initial_Draw' => 10, "gameEnd" => 99]
-    // ],
-
-    // Final state.
-    // Please do not modify (and do not overload action/args methods).
-    // 99 => [
-    //     "name" => "gameEnd",
-    //     "description" => clienttranslate("End of game"),
-    //     "type" => "manager",
-    //     "action" => "stGameEnd",
-    //     "args" => "argGameEnd"
-    // ],
-
 ];
-
-
-

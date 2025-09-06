@@ -61,12 +61,6 @@ class Game extends \Table
         $this->gamestate->nextState();
     }
 
-    public function stPhaseOneDone(): void
-    {
-        /* Not much to do here for now */
-        $this->gamestate->nextState();
-    }
-
     public function stActivateLeader(): void
     {
         /* Skip handling for leader (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
@@ -111,20 +105,124 @@ class Game extends \Table
         /* Active player must select the player to target with their disaster */
     }
 
-    public function stConvert(): void
+    public function stConvertPray(): void
     {
         /* Based on rules, update family counts */
-    }
 
-    public function stPraying(): void
-    {
-       /* Based on rules, update praying points
+               /* Based on rules, update praying points
     Check for end game condition
     Update trick leader to next player 
     Check that they haven’t been completely eliminated - cycle until we found someone who hasn’t 
     Set active player to selected trick leader */
 
+        // {
+    //     // Initialize constants
+    //     $players = $this->loadPlayersBasicInfos();
+    //     $happinessScores = [];
+    //     $converted_pool = [];
+
+    //     // Collect happiness scores
+    //     foreach ($players as $player_id => $player) {
+    //         $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
+    //     }
+
+    //     // Find lowest and highest happiness scores
+    //     $happy_value_low = min($happinessScores);
+    //     $happy_value_high = max($happinessScores);
+
+    //     // Skip family redistribution if everyone has same happiness
+    //     if ($happy_value_low != $happy_value_high) {
+    //         // Send families to temporary group for redistribution
+    //         foreach ($players as $player_id => $happiness) {
+    //             if ($happiness == $happy_value_low) {
+    //                 $converted_pool[] = 0;
+    //                 // add logic to lose 2 families
+    //             } elseif ($happiness != $happy_value_high) {
+    //                 $converted_pool[] = 0;
+    //                 // add logic to lose 1 family
+    //             }
+    //         }
+
+    //         // Count number of players with highest happiness score
+    //         $high_happiness_players = array_filter($happinessScores, function($happiness) use ($happy_value_high) {
+    //             return $happiness == $happy_value_high;
+    //         });
+    //         $count_high_happiness_players = count($high_happiness_players);
+
+    //         // Redistribute families
+    //         if (count($converted_pool) >= 3 * $count_high_happiness_players) {
+    //             foreach ($high_happiness_players as $player_id => $happiness) {
+    //                 $this->receiveFamiliesFromPool($player_id, 3);
+    //             }
+    //             $this->sendFamiliesToKalua(count($converted_pool) - 3 * $count_high_happiness_players);
+    //         } else {
+    //             $families_per_player = intdiv(count($converted_pool), $count_high_happiness_players);
+    //             foreach ($high_happiness_players as $player_id => $happiness) {
+    //                 $this->receiveFamiliesFromPool($player_id, $families_per_player);
+    //             }
+    //             $this->sendFamiliesToKalua(count($converted_pool) % $count_high_happiness_players);
+    //         }
+    //     }
+
+    //     // Players receive prayers (1 per 5 family, and extra if not highest)
+    //     foreach ($players as $player_id => $happiness) {
+    //         $family_count = $this->getFamilyCount($player_id);
+    //         $prayers = intdiv($family_count, 5);
+    //         if ($happiness == $happy_value_low) {
+    //             $prayers += 4;
+    //         } elseif ($happiness != $happy_value_high) {
+    //             $prayers += 2;
+    //         }
+    //         // add $prayers to player prayer total
+    //     }
+
+    //     // Check for player elimination (no chief/families)
+    //     foreach ($players as $player_id => $player) {
+    //         if ($this->getFamilyCount($player_id) == 0 && $this->getChiefCount($player_id) == 0) {
+    //             //$this->eliminatePlayer($player_id);
+    //         }
+    //     }
+
+    //     // Check religions remaining
+    //     if (count($this->getRemainingReligions()) == 1) {
+    //         $this->gamestate->nextState('gameEnd');
+    //         return;
+    //     }
+
+    //     // Change active player
+    //     $this->activeNextPlayer();
+    //     $this->gamestate->nextState('nextPlayer');
+    // }
+
+    // public function actPass(): void
+    // {
+    //     // Retrieve the active player ID.
+    //     $player_id = (int)$this->getActivePlayerId();
+    //     // Notify all players about the choice to pass.
+    //     $this->notifyAllPlayers("cardPlayed", clienttranslate('${player_name} passes'), [
+    //         "player_id" => $player_id,
+    //         "player_name" => $this->getActivePlayerName(),
+    //     ]);
+    //     // at the end of the action, move to the next state
+    //     $this->gamestate->nextState("pass");
+    // }
+
+    // public function DiceRoll()
+    // {
+    //     // Roll the dice and update sql
+
+    //     $dices = array();
+    //     for( $i=1;$i<=5;$i++ )
+    //     {
+    //         $dices[$i] = bga_rand( 1,6 );
+    //         self::setGameStateValue('dice'.$i, $dices[$i]);
+    //         self::DbQuery("UPDATE dice SET dice_value = {$dices[$i]} WHERE dice_id = $i");
+    //     }
+
+    // }
+
     }
+
 
 ///////////Player Actions /////////////////////
     public function actDrawCardInit(string $type /* either "disaster" or "bonus" */): void
@@ -262,160 +360,6 @@ class Game extends \Table
     //     $this->gamestate->nextState("Initial_Draw");
     // }
 
-    // public function stInitialDraw(): void
-    // {
-    //     $player_id = $this->getActivePlayerId();
-    //     $this->notifyPlayer($player_id, "initialDraw", clienttranslate("You must pick a combination of five bonus and disaster cards"), []);
-    // }
-
-    // public function actDrawDisasterCard(): void
-    // {
-    //     $player_id = $this->getActivePlayerId();
-
-    //     // Pick a card from the disaster deck for the player
-    //     $card = $this->disasterCards->pickCard('deck', $player_id);
-
-    //     // Notify all players about the card draw, including card details
-    //     $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a disaster card'), [
-    //         'player_id' => $player_id,
-    //         'player_name' => $this->getActivePlayerName(),
-    //         'card_id' => $card['id'],
-    //         'card_type' => $card['type'],
-    //         'card_type_arg' => $card['type_arg'],
-    //     ]);
-    //     //increment sql value for card count
-    //     //$this->DiceRoll();
-    // }
-
-    // public function actDrawBonusCard(): void
-    // {
-    //     $player_id = $this->getActivePlayerId();
-
-    //     // Pick a card from the bonus deck for the player
-    //     $card = $this->bonusCards->pickCard('deck', $player_id);
-
-    //     // Notify all players about the card draw, including card details
-    //     $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a bonus card'), [
-    //         'player_id' => $player_id,
-    //         'player_name' => $this->getActivePlayerName(),
-    //         'card_id' => $card['id'],
-    //         'card_type' => $card['type'],
-    //         'card_type_arg' => $card['type_arg'],
-    //     ]);
-    // }
-
-
-    // public function stActiveDraw(): void
-    // {
-
-    // }
-
-    // public function stGameEnd(): void
-    // {
-    //     // Initialize constants
-    //     $players = $this->loadPlayersBasicInfos();
-    //     $happinessScores = [];
-    //     $converted_pool = [];
-
-    //     // Collect happiness scores
-    //     foreach ($players as $player_id => $player) {
-    //         $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
-    //     }
-
-    //     // Find lowest and highest happiness scores
-    //     $happy_value_low = min($happinessScores);
-    //     $happy_value_high = max($happinessScores);
-
-    //     // Skip family redistribution if everyone has same happiness
-    //     if ($happy_value_low != $happy_value_high) {
-    //         // Send families to temporary group for redistribution
-    //         foreach ($players as $player_id => $happiness) {
-    //             if ($happiness == $happy_value_low) {
-    //                 $converted_pool[] = 0;
-    //                 // add logic to lose 2 families
-    //             } elseif ($happiness != $happy_value_high) {
-    //                 $converted_pool[] = 0;
-    //                 // add logic to lose 1 family
-    //             }
-    //         }
-
-    //         // Count number of players with highest happiness score
-    //         $high_happiness_players = array_filter($happinessScores, function($happiness) use ($happy_value_high) {
-    //             return $happiness == $happy_value_high;
-    //         });
-    //         $count_high_happiness_players = count($high_happiness_players);
-
-    //         // Redistribute families
-    //         if (count($converted_pool) >= 3 * $count_high_happiness_players) {
-    //             foreach ($high_happiness_players as $player_id => $happiness) {
-    //                 $this->receiveFamiliesFromPool($player_id, 3);
-    //             }
-    //             $this->sendFamiliesToKalua(count($converted_pool) - 3 * $count_high_happiness_players);
-    //         } else {
-    //             $families_per_player = intdiv(count($converted_pool), $count_high_happiness_players);
-    //             foreach ($high_happiness_players as $player_id => $happiness) {
-    //                 $this->receiveFamiliesFromPool($player_id, $families_per_player);
-    //             }
-    //             $this->sendFamiliesToKalua(count($converted_pool) % $count_high_happiness_players);
-    //         }
-    //     }
-
-    //     // Players receive prayers (1 per 5 family, and extra if not highest)
-    //     foreach ($players as $player_id => $happiness) {
-    //         $family_count = $this->getFamilyCount($player_id);
-    //         $prayers = intdiv($family_count, 5);
-    //         if ($happiness == $happy_value_low) {
-    //             $prayers += 4;
-    //         } elseif ($happiness != $happy_value_high) {
-    //             $prayers += 2;
-    //         }
-    //         // add $prayers to player prayer total
-    //     }
-
-    //     // Check for player elimination (no chief/families)
-    //     foreach ($players as $player_id => $player) {
-    //         if ($this->getFamilyCount($player_id) == 0 && $this->getChiefCount($player_id) == 0) {
-    //             //$this->eliminatePlayer($player_id);
-    //         }
-    //     }
-
-    //     // Check religions remaining
-    //     if (count($this->getRemainingReligions()) == 1) {
-    //         $this->gamestate->nextState('gameEnd');
-    //         return;
-    //     }
-
-    //     // Change active player
-    //     $this->activeNextPlayer();
-    //     $this->gamestate->nextState('nextPlayer');
-    // }
-
-    // public function actPass(): void
-    // {
-    //     // Retrieve the active player ID.
-    //     $player_id = (int)$this->getActivePlayerId();
-    //     // Notify all players about the choice to pass.
-    //     $this->notifyAllPlayers("cardPlayed", clienttranslate('${player_name} passes'), [
-    //         "player_id" => $player_id,
-    //         "player_name" => $this->getActivePlayerName(),
-    //     ]);
-    //     // at the end of the action, move to the next state
-    //     $this->gamestate->nextState("pass");
-    // }
-
-    // public function DiceRoll()
-    // {
-    //     // Roll the dice and update sql
-
-    //     $dices = array();
-    //     for( $i=1;$i<=5;$i++ )
-    //     {
-    //         $dices[$i] = bga_rand( 1,6 );
-    //         self::setGameStateValue('dice'.$i, $dices[$i]);
-    //         self::DbQuery("UPDATE dice SET dice_value = {$dices[$i]} WHERE dice_id = $i");
-    //     }
-
-    // }
 
 
     /**
