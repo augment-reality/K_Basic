@@ -433,6 +433,17 @@ function (dojo, declare) {
             // Update card counter in player panel
             const counter_c = this[`counter_c_${player}`];
             counter_c.incValue(1); // Increment card count by 1
+
+            //Update counters for temples and amulets if needed
+            // if (card_type == this.ID_BONUS) {
+            //     if (card_type_arg == 1) { // Assuming type_arg 1 is temple
+            //         const counter_t = this[`counter_t_${player}`];
+            //         counter_t.incValue(1); // Increment temple count by 1
+            //     } else if (card_type_arg == 2) { // Assuming type_arg 2 is amulet
+            //         const counter_a = this[`counter_a_${player}`];
+            //         counter_a.incValue(1); // Increment amulet count by 1
+            //     }
+            // }
             
         },
 

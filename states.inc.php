@@ -41,7 +41,7 @@ $machinestates = [
             'actDrawCardInit',
         ])
         ->transitions([
-            '' => ST_INITIAL_FINISH
+            'cleanupInit' => ST_INITIAL_FINISH
         ])
         ->build(),
     
@@ -50,7 +50,7 @@ $machinestates = [
         ->type(StateType::GAME)
         ->action('stInitialFinish')
         ->transitions([
-            '' => ST_PHASE_ONE_DRAW
+            'drawToFive' => ST_PHASE_ONE_DRAW
         ])
         
         ->build(),
@@ -66,7 +66,7 @@ $machinestates = [
             'actDrawCard',
         ])
         ->transitions([
-            '' => ST_PHASE_TWO_ACTIVATE_LEADER
+            'FreeAction' => ST_PHASE_TWO_ACTIVATE_LEADER
         ])
         ->build(),
 
@@ -84,7 +84,7 @@ $machinestates = [
             'actMassiveSpeech'
         ])
         ->transitions([
-            '' => ST_PHASE_TWO_NEXT_PLAYER
+            'nextPlayer' => ST_PHASE_TWO_NEXT_PLAYER
         ])
         ->build(),
 
@@ -93,8 +93,8 @@ $machinestates = [
         ->type(StateType::GAME)
         ->action('stNextPlayer') /* Note - same as phase three next player */
         ->transitions([
-            'nextPlayer' => ST_PHASE_TWO_ACTIVATE_LEADER,
-            'phaseDone'  => ST_PHASE_THREE_PLAY_CARD
+            'activateLeader' => ST_PHASE_TWO_ACTIVATE_LEADER,
+            'beginAllPlay'  => ST_PHASE_THREE_PLAY_CARD
         ])
         ->build(),
 
@@ -123,7 +123,7 @@ $machinestates = [
         ->action('stNextPlayer') /* Note - same as phase two next player */
         ->transitions([
             'nextPlayer' => ST_PHASE_THREE_PLAY_CARD,
-            'phaseDone'  => ST_PHASE_THREE_RESOLVE_CARD
+            'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD
         ])
         ->build(),
 
@@ -133,11 +133,11 @@ $machinestates = [
         ->action('stResolveCard')
         ->transitions([
             'noCards' => ST_PHASE_THREE_PLAY_CARD,
-            'phaseDone'  => ST_PHASE_THREE_RESOLVE_CARD,
-            'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
             'selectTargets' => ST_PHASE_THREE_SELECT_TARGETS,
+            'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
             'rollDice' => ST_PHASE_THREE_ROLL_DICE,
-            'discard' => ST_PHASE_THREE_DISCARD
+            'discard' => ST_PHASE_THREE_DISCARD,
+            'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD,
         ])
         ->build(),
 
@@ -151,7 +151,10 @@ $machinestates = [
             'actSelectPlayer'
         ])
         ->transitions([
-            '' => ST_PHASE_THREE_RESOLVE_CARD
+            'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
+            'rollDice' => ST_PHASE_THREE_ROLL_DICE,
+            'discard' => ST_PHASE_THREE_DISCARD,
+            'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD,
         ])
         ->build(),
 
@@ -164,7 +167,9 @@ $machinestates = [
             'actAmuletChoose',
         ])
         ->transitions([
-            '' => ST_PHASE_THREE_RESOLVE_CARD
+            'rollDice' => ST_PHASE_THREE_ROLL_DICE,
+            'discard' => ST_PHASE_THREE_DISCARD,
+            'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD,
         ])
         ->build(),
 
@@ -177,7 +182,8 @@ $machinestates = [
             'actRollDie',
         ])
         ->transitions([
-            '' => ST_PHASE_THREE_RESOLVE_CARD
+            'discard' => ST_PHASE_THREE_DISCARD,
+            'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD,
         ])
         ->build(),
 
@@ -190,7 +196,7 @@ $machinestates = [
             'actDiscard',
         ])
         ->transitions([
-            '' => ST_PHASE_THREE_RESOLVE_CARD
+            'beginAllPlay' => ST_PHASE_THREE_RESOLVE_CARD
         ])
         ->build(),
 
