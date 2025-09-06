@@ -7,20 +7,15 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ---------------------------   Summary so far ----------------------------------------
 
-Partial implementation of States.inc.php, kalua.js/css/php, and sql file.
-Rough copies of cards and board scanned in manually - waiting for high-res digital copy from publisher
-Deck, meeple, and token stock are functional, but not integrated with persistent data
+State machine is implemented, but st...  and possible player actions are just stubs.
+Stock elements for game pieces are in place, but not fully validated.
+
 
 ----------------------------    To do   -------------------------------------------
 
--Make zones for the hktokens
--Make a die and make zones for five items underneath/on the played cards div
--finish tying deck element to tokens
--if card requires a die roll, make value 7, and make die visible, then replace with die roll when checked
--keep track of held (face up) player cards for amulets/temples
-    -move to a separate "expandablesection" div?
--get data in game.php "getalldatas" for happiness/prayer/families
--implement sequence for avoiding/doubling global effects (apply card twice?)
+-update transition states for "Resolve_Card" possible subphases
+-what value to use as placeholder for die roll?
+-potential timing for undo buttons
 -handle php case for "zombie" player: remove families from game and pass all options to play card
 -game log data
 -player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl
@@ -47,14 +42,7 @@ Potentially include decks for visual clarity or to click on when drawing cards
 
 ---------------------------  Game States and intended events  -------------------------------
 
-"Initial_Draw" => 10; Players select five cards from either deck
-"Active_Draw" => 20; Active player draws to 5 cards, or 1 additional card
-"Free_Action" => 30; Players can perform a non-card action
-"Active_Turn" => 40; the active player plays card (option to modify effect of "global" cards if resources allow) or passes and game proceeds to end round events
-"Non-active_Turn" => 50; Other players can play a card (option to modify effect of "global" cards if resources allow)
-"Card_Effect" => 60; In order played, resolve effects of cards (some cards require a die roll)
-"End_Round" => 70; automated effects on all player's happiness/prayer. Check for eliminations or a winner and proceed to next round with new active player
-
+A list of game states is found in constants.php
 
 
 --------------   Steps of Game (as summarized from rules)   -----------------------------------

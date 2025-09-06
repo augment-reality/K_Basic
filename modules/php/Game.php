@@ -207,20 +207,6 @@ class Game extends \Table
     //     $this->gamestate->nextState("pass");
     // }
 
-    // public function DiceRoll()
-    // {
-    //     // Roll the dice and update sql
-
-    //     $dices = array();
-    //     for( $i=1;$i<=5;$i++ )
-    //     {
-    //         $dices[$i] = bga_rand( 1,6 );
-    //         self::setGameStateValue('dice'.$i, $dices[$i]);
-    //         self::DbQuery("UPDATE dice SET dice_value = {$dices[$i]} WHERE dice_id = $i");
-    //     }
-
-    // }
-
     }
 
 

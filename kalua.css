@@ -29,23 +29,29 @@ background-color: #fff;
 border: 1px solid #ddd;
 border-radius: 5px; */
 
+#game_play_area {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
 #board_background {
     position: relative;
     width: 356px;
-    height: 265px;
+    height: 215px;
     background-image: url('img/kboard_400_265.jpg');
     background-repeat: no-repeat;
     background-size: auto;
-    margin-left: 150px;
-    margin-bottom: 20px; /* Add margin to avoid overlap */
     padding: 25px; /* Add 30px padding to the div */
+    flex: 0 0 auto;
 }
 
 #hkboard {
     width: 350px; /* Match the width of board_background*/
     height: 55px; /* Match the height of board_background */
     position: relative;
-
     border: 1px solid #ccc;
 }
 
@@ -94,13 +100,17 @@ border-radius: 5px; */
     display: flex;
     flex-direction: column;
     justify-content: left;
+    flex: 0 0 700px;
+    min-width: 350px;
+    max-width: 700px;
+    margin-left: 0;
 }
 
 .player_area {
     border: 1px solid #ccc;
     padding: 10px;
     margin: 10px;
-    width: 655px;
+    width: 705px;
     min-height: 210px; /* Adjusted height to fit both player_families and player_cards */
     background-color: #f9f9f9;
     border-radius: 5px;
@@ -112,7 +122,7 @@ border-radius: 5px; */
 
 .player_hand {
     min-height: 100px;
-    min-width: 650px;
+    min-width: 700px;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
