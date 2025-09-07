@@ -48,7 +48,7 @@ function (dojo, declare) {
             this.ID_GLOBAL_DISASTER = 1;
             this.ID_LOCAL_DISASTER = 2;
             this.ID_BONUS = 3;
-            this.happinessCounter = {}
+            this.happinessCounters = {}
 
         },
         
@@ -83,6 +83,7 @@ function (dojo, declare) {
 
                 // Create prayer counter in player panel
                 const counter_p = new ebg.counter();
+
                 counter_p.create(document.getElementById(`panel_p_${player.id}`));
                 counter_p.setValue(5); // All players start with 5 prayer
 
@@ -90,6 +91,7 @@ function (dojo, declare) {
                 const counter_h = new ebg.counter();
                 counter_h.create(document.getElementById(`panel_h_${player.id}`));
                 counter_h.setValue(5); // All players start with 5 happiness
+                this.happinessCounters[player.id] = counter_h;
 
 
                 // Create card counter in player panel
@@ -237,7 +239,7 @@ function (dojo, declare) {
                 const uniqueId = this.getCardUniqueId(card_type_global_disaster, card_id);
                 console.log("uniqueID: " + uniqueId);
                 Object.values(gamedatas.players).forEach(player => {
-                    /* Note: image ID 5 - 14 for local disaster cards */
+                    /* Note: image ID 5 - 14 for global disaster cards */
                     this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 4);
                 });
             } 
@@ -257,7 +259,7 @@ function (dojo, declare) {
 
             // DEBUG Add all cards to each player's hand
             // Object.values(gamedatas.players).forEach(player => {
-            //     for (let i = 1; i <= 15; i++) {
+            //     for (let i = 1; i <= 22; i++) {
             //         this[`${player.id}_cards`].addToStock(i);
             //     }
             // });
@@ -414,7 +416,7 @@ function (dojo, declare) {
         },
 
         drawCard: function(player, card_id, card_type, card_type_arg) {
-            console.log("Drawing a disaster card");
+            console.log("Drawing a card");
 
             const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
             console.log("drawing unique ID " + uniqueId)
@@ -442,7 +444,7 @@ function (dojo, declare) {
 
         giveSpeech: function(player_id) {
             console.log("Giving a speech");
-            this.happinessCounter[player_id].incValue(1); // Increase happiness by 1
+            this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
         },
 
         convertAtheist: function() {

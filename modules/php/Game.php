@@ -258,30 +258,12 @@ class Game extends \Table
         $this->trace("KALUA gives a speech!");
         $player_id = $this->getCurrentPlayerId();
 
-        // Set player_chief to 0 only if not already zero
-        $chiefCount = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$player_id}");
-        if ($chiefCount > 0) {
-            self::DbQuery("UPDATE player SET player_chief = 0 WHERE player_id = {$player_id}");
-        }
-
-        // Get current number of atheist families (global_id = 101)
-        $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
-
-        // Calculate how many families to add (up to 5, but not more than available atheists)
-        $familiesToAdd = min(5, $atheistCount);
-
-        if ($familiesToAdd > 0) {
-            // Subtract from global atheist pool
-            self::DbQuery("UPDATE global SET global_value = global_value - {$familiesToAdd} WHERE global_id = 101");
-            // Add to player's family count
-            self::DbQuery("UPDATE player SET player_family = player_family + {$familiesToAdd} WHERE player_id = {$player_id}");
-        }
+        self::DbQuery( "UPDATE player SET player_happiness = player_happiness + 1 WHERE player_id = {$this->getActivePlayerId()}");
 
         // Notify all players
-        $this->notifyAllPlayers('massiveSpeech', clienttranslate('${player_name} gave a massive speech and gained ${families} families'), [
+        $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
             'player_id' => $player_id,
-            'player_name' => $this->getActivePlayerName(),
-            'families' => $familiesToAdd
+            'player_name' => $this->getActivePlayerName()
         ]);
 
         $this->gamestate->nextState();
