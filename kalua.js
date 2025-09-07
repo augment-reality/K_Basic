@@ -193,14 +193,14 @@ function (dojo, declare) {
             
             // Create stock for played cards
             this['playedCards'] = new ebg.stock();  
-            this['playedCards'].create(this, document.getElementById('playedCards'), 120, 174);
+            this['playedCards'].create(this, document.getElementById('playedCards'), 120, 177.4);
             this['playedCards'].image_items_per_row = 5;
             this['playedCards'].setSelectionMode(0);
 
             // Initialize card stock for each player card div
             Object.values(gamedatas.players).forEach(player => {
                 this[`${player.id}_cards`] = new ebg.stock();
-                this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 174);
+                this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 177.4);
                 this[`${player.id}_cards`].image_items_per_row = 5;
                 this[`${player.id}_cards`].setSelectionMode(1);
 
@@ -215,7 +215,7 @@ function (dojo, declare) {
                 console.log("uniqueID: " + uniqueId);
                 Object.values(gamedatas.players).forEach(player => {
                     /* Note: image ID 0 - 4 for local disaster cards */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_2620_174.png', card_id - 1);
+                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id - 1);
                 });
             }
 
@@ -228,7 +228,7 @@ function (dojo, declare) {
                 console.log("uniqueID: " + uniqueId);
                 Object.values(gamedatas.players).forEach(player => {
                     /* Note: image ID 5 - 14 for local disaster cards */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_2620_174.png', card_id + 4);
+                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 4);
                 });
             } 
 
@@ -241,7 +241,7 @@ function (dojo, declare) {
                 console.log("uniqueID: " + uniqueId);
                 Object.values(gamedatas.players).forEach(player => {
                     /* Note: image ID 15-21 for bonus cards */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_2620_174.png', card_id + 14);
+                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 14);
                 });
             } 
 

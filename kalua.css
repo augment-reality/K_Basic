@@ -110,7 +110,7 @@ border-radius: 5px; */
     border: 1px solid #ccc;
     padding: 10px;
     margin: 10px;
-    width: 705px;
+    width: 620px;
     min-height: 210px; /* Adjusted height to fit both player_families and player_cards */
     background-color: #f9f9f9;
     border-radius: 5px;
@@ -122,7 +122,7 @@ border-radius: 5px; */
 
 .player_hand {
     min-height: 100px;
-    min-width: 700px;
+    min-width: 610px;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -194,7 +194,7 @@ border-radius: 5px; */
 /* Styles for card decks */
 .deck {
     width: 120px; /* Width of each card */
-    height: 174px; /* Height of each card */
+    height: 177.4px; /* Height of each card */
     background-size: cover;
     border: 1px solid #000;
     border-radius: 5px;

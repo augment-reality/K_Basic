@@ -7,15 +7,15 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ---------------------------   Summary so far ----------------------------------------
 
-State machine is implemented, but st...  and possible player actions are just stubs.
-Stock elements for game pieces are in place, but not fully validated.
+State machine is implemented, but stXXX  and possible player actions are just stubs.
+Stock elements (and side bar) for game pieces are in place, but not being generated on refresh according to db
 
 
 ----------------------------    To do   -------------------------------------------
 
--update transition states for "Resolve_Card" possible subphases
+-color code dice and move them to a div below the board, so the html flow isn't as clunky
 -what value to use as placeholder for die roll?
--potential timing for undo buttons
+-undo buttons
 -handle php case for "zombie" player: remove families from game and pass all options to play card
 -game log data
 -player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl
