@@ -277,6 +277,11 @@ function (dojo, declare) {
                 this.drawCard(this.player_id, card.id, card.type, card.type_arg);
             })
 
+            Object.values(gamedatas.handBonus).forEach(card => {
+                console.log("id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
+                this.drawCard(this.player_id, card.id, card.type, card.type_arg);
+            })
+
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
 
@@ -290,28 +295,6 @@ function (dojo, declare) {
         onEnteringState: function(stateName, args) {
             console.log('Entering state: ' + stateName);
             switch (stateName) {
-                case 'Free_Action':
-                    console.log("Entering Free_Action state");
-                    if (this.isCurrentPlayerActive()) {
-                        this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
-                            this.giveSpeech();
-                        });
-                        this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
-                            this.convertAtheist();
-                        });
-                        this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
-                            this.convertBeliever();
-                        });
-                        this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
-                            this.sacrificeLeader();
-                        });
-                        this.addActionButton('actPass-btn', _('Pass'), () => this.bgaPerformAction("actPass"), null, null, 'gray');
-                    }
-                    break;
-                case 'waitingForPlayers':
-                    console.log("Entering waitingForPlayers state");
-                    // Perform actions specific to waitingForPlayers state
-                    break;
                 default:
                     console.log("Entering unknown state: " + stateName);
                     // Perform actions for unknown state
@@ -385,7 +368,7 @@ function (dojo, declare) {
                         if (this.isCurrentPlayerActive()) 
                         {
                             this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
-                                this.bgaPerformAction("actSpeech");
+                                this.bgaPerformAction("actGiveSpeech");
                             });
                             this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
                                 this.bgaPerformAction("actConvertAtheists");

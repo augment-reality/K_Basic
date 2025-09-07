@@ -62,7 +62,6 @@ $machinestates = [
         ->description(clienttranslate('${actplayer} must draw cards for round'))
 		->descriptionmyturn(clienttranslate('${you} must draw cards for round'))
         ->type(StateType::ACTIVE_PLAYER)
-        ->action('stDrawFive')
         ->possibleactions([
             'actDrawCard',
         ])
@@ -82,7 +81,7 @@ $machinestates = [
             'actSacrificeLeader',
             'actConvertAtheists',
             'actConvertBelievers',
-            'actSpeech'
+            'actGiveSpeech'
         ])
         ->transitions([
             'nextPlayer' => ST_PHASE_TWO_NEXT_PLAYER
@@ -94,8 +93,8 @@ $machinestates = [
         ->type(StateType::GAME)
         ->action('stNextPlayer') /* Note - same as phase three next player */
         ->transitions([
-            'activateLeader' => ST_PHASE_TWO_ACTIVATE_LEADER,
-            'beginAllPlay'  => ST_PHASE_THREE_PLAY_CARD
+            'nextPlayer' => ST_PHASE_TWO_ACTIVATE_LEADER,
+            'phaseDone'  => ST_PHASE_THREE_PLAY_CARD
         ])
         ->build(),
 

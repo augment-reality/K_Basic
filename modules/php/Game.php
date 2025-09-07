@@ -61,22 +61,18 @@ class Game extends \Table
         $this->gamestate->nextState();
     }
 
-    public function stDrawFive(): void
-    {
-        $player_id = $this->getCurrentPlayerId();
-        $hand_count = $this->disasterCards->countCardInLocation("hand", $player_id)
-            + $this->bonusCards->countCardInLocation("hand", $player_id);
-
-        if ($hand_count >= 5) {
-            $this->gamestate->nextState();
-        }
-    }
-
     public function stActivateLeader(): void
     {
-        // Set the current player as active and wait for an action from the frontend
-        $this->gamestate->setActivePlayer($this->getActivePlayerId());
-        // No immediate action; wait for player to choose one of the allowed actions
+        /* No need to set the active player here */
+        //$this->gamestate->setActivePlayer($this->getActivePlayerId());
+        /* TODO there is a way to skip players cleanly from BGA API */
+        /* Skip handling for leader (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
+        // $args = $this->argActivateLeader();
+        // if ($args['_no_notify']) 
+        // {
+        //     /* Notify all players that the player is being skipped? */
+        //     $this->gamestate->nextState('');
+        // }
     }
 
     public function stNextPlayer(): void
@@ -252,7 +248,7 @@ class Game extends \Table
             + $this->bonusCards->countCardInLocation("hand", $player_id)
             >= 5 )
         {
-            $this->gamestate->nextState();
+            $this->gamestate->nextState('FreeAction');
         }
     }
 
