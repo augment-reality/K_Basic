@@ -48,8 +48,11 @@ function (dojo, declare) {
             this.ID_GLOBAL_DISASTER = 1;
             this.ID_LOCAL_DISASTER = 2;
             this.ID_BONUS = 3;
-            this.happinessCounters = {}
-
+            this.prayerCounters = {};
+            this.happinessCounters = {};
+            this.cardCounters = {};
+            this.templeCounters = {};
+            this.amuletCounters = {};
         },
         
         setup: function(gamedatas) {
@@ -83,9 +86,9 @@ function (dojo, declare) {
 
                 // Create prayer counter in player panel
                 const counter_p = new ebg.counter();
-
                 counter_p.create(document.getElementById(`panel_p_${player.id}`));
                 counter_p.setValue(5); // All players start with 5 prayer
+                this.prayerCounters[player.id] = counter_p;
 
                 // Create happiness counter in player panel
                 const counter_h = new ebg.counter();
@@ -96,23 +99,21 @@ function (dojo, declare) {
 
                 // Create card counter in player panel
                 const counter_c = new ebg.counter();
-                this[`counter_c_${player.id}`] = counter_c;
                 counter_c.create(document.getElementById(`panel_c_${player.id}`));
                 counter_c.setValue(0);
+                this.cardCounters[player.id] = counter_c;
 
                 // Create temple counter in player panel
                 const counter_t = new ebg.counter();
-                this[`counter_t_${player.id}`] = counter_t;
                 counter_t.create(document.getElementById(`panel_t_${player.id}`));
                 counter_t.setValue(0);
+                this.templeCounters[player.id] = counter_t;
 
                 // Create amulet counter in player panel
                 const counter_a = new ebg.counter();
-                this[`counter_a_${player.id}`] = counter_a;
                 counter_a.create(document.getElementById(`panel_a_${player.id}`));
                 counter_a.setValue(0);
-
-
+                this.amuletCounters[player.id] = counter_a;
             });
 
 
@@ -164,8 +165,6 @@ function (dojo, declare) {
             for (let i = 0; i < this.gamedatas.atheist_families; i++) {
                 this['atheists'].addToStock(8); // 8 = atheist meeple
             }
-
-
 
             // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
             const hkboard = document.getElementById('hkboard');
@@ -272,6 +271,16 @@ function (dojo, declare) {
                     this[`${player.id}_dice`].addToStock(rando);
             });
 
+            /*** Update the UI with gamedata ***/
+
+            /* Update counters */
+            Object.values(gamedatas.players).forEach(player => {
+                this.prayerCounters[player.id].setValue(player.prayer);
+                this.happinessCounters[player.id].setValue(player.happiness);
+                this.templeCounters[player.id].setValue(player.temple);
+                this.amuletCounters[player.id].setValue(player.amulet);
+                /* TODO get each player's hand length to update counters */
+            });
 
             /* Update player's hands with their drawn cards */
             Object.values(gamedatas.handDisaster).forEach(card => {
@@ -424,10 +433,6 @@ function (dojo, declare) {
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
             console.log(`Card ${card_id} added to player ${this.player}'s hand`);
 
-            // Update card counter in player panel
-            const counter_c = this[`counter_c_${player}`];
-            counter_c.incValue(1); // Increment card count by 1
-
             //Update counters for temples and amulets if needed
             // if (card_type == this.ID_BONUS) {
             //     if (card_type_arg == 1) { // Assuming type_arg 1 is temple
@@ -510,6 +515,8 @@ function (dojo, declare) {
                 this.drawCard(player_id, args.card_id, args.card_type, args.card_type_arg);
                 console.log('It\'s me!');
             }
+            /* Update counter */
+            this.cardCounters[player_id].incValue(1);
         },
 
         notif_giveSpeech: async function( args )

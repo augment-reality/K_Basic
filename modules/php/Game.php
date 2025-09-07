@@ -446,7 +446,15 @@ class Game extends \Table
         $result = [];
         $current_player_id = (int) $this->getCurrentPlayerId();
         $result["players"] = self::getCollectionFromDb(
-            "SELECT player_id id, player_score score, player_family family, player_chief chief, player_happiness happiness FROM player"
+            "SELECT player_id id, 
+                player_score score, 
+                player_family family, 
+                player_chief chief, 
+                player_happiness happiness,
+                player_prayer prayer,
+                player_temple temple,
+                player_amulet amulet
+                FROM player"
         );
 
         // Fetch the number of atheist families from the database
@@ -458,9 +466,11 @@ class Game extends \Table
         //     "SELECT `dice_id` `id`, `dice_value` `value` FROM `dice`"
         // );
 
-        /* Get all cards each player has and where it is */
+        /* Get all cards this player has and where it is */
         $result["handDisaster"] = $this->disasterCards->getPlayerHand($current_player_id);
         $result["handBonus"] = $this->bonusCards->getPlayerHand($current_player_id);
+
+        /* TODO get size of each players hand */
 
         return $result;
     }
