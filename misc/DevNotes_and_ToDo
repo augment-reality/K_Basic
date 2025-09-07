@@ -13,6 +13,8 @@ Stock elements (and side bar) for game pieces are in place, but not being genera
 
 ----------------------------    To do   -------------------------------------------
 
+-player can't have more than five cards during initial draw, but should we check at other times? how does actdrawcard account for this
+-card backs need to show up for other players
 -color code dice and move them to a div below the board, so the html flow isn't as clunky
 -what value to use as placeholder for die roll?
 -undo buttons

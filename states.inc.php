@@ -62,6 +62,7 @@ $machinestates = [
         ->description(clienttranslate('${actplayer} must draw cards for round'))
 		->descriptionmyturn(clienttranslate('${you} must draw cards for round'))
         ->type(StateType::ACTIVE_PLAYER)
+        ->action('stDrawFive')
         ->possibleactions([
             'actDrawCard',
         ])
@@ -78,10 +79,10 @@ $machinestates = [
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stActivateLeader')
         ->possibleactions([
-            'actGiveSpeech',
+            'actSacrificeLeader',
             'actConvertAtheists',
             'actConvertBelievers',
-            'actMassiveSpeech'
+            'actSpeech'
         ])
         ->transitions([
             'nextPlayer' => ST_PHASE_TWO_NEXT_PLAYER

@@ -84,22 +84,32 @@ function (dojo, declare) {
                 // Create prayer counter in player panel
                 const counter_p = new ebg.counter();
                 counter_p.create(document.getElementById(`panel_p_${player.id}`));
-                //counter_p.setValue(gamedatas[players].prayer);
-                        
+                counter_p.setValue(5); // All players start with 5 prayer
+
                 // Create happiness counter in player panel
                 const counter_h = new ebg.counter();
                 counter_h.create(document.getElementById(`panel_h_${player.id}`));
-                console.log("player: " + player);
-                happiness = player.happiness;
-                console.log("happiness: " + happiness);
-                counter_h.setValue(happiness);
-                this.happinessCounter[player.id] = counter_h;
+                counter_h.setValue(5); // All players start with 5 happiness
+
 
                 // Create card counter in player panel
                 const counter_c = new ebg.counter();
                 this[`counter_c_${player.id}`] = counter_c;
                 counter_c.create(document.getElementById(`panel_c_${player.id}`));
                 counter_c.setValue(0);
+
+                // Create temple counter in player panel
+                const counter_t = new ebg.counter();
+                this[`counter_t_${player.id}`] = counter_t;
+                counter_t.create(document.getElementById(`panel_t_${player.id}`));
+                counter_t.setValue(0);
+
+                // Create amulet counter in player panel
+                const counter_a = new ebg.counter();
+                this[`counter_a_${player.id}`] = counter_a;
+                counter_a.create(document.getElementById(`panel_a_${player.id}`));
+                counter_a.setValue(0);
+
 
             });
 
@@ -375,17 +385,16 @@ function (dojo, declare) {
                         if (this.isCurrentPlayerActive()) 
                         {
                             this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
-                                this.bgaPerformAction("actGiveSpeech");
+                                this.bgaPerformAction("actSpeech");
                             });
                             this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
-                                this.bgaPerformAction("actGiveSpeech");
+                                this.bgaPerformAction("actConvertAtheists");
                             });
                             this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
-                                /* This one requires more decisions */
-                                this.convertBeliever();
+                                this.bgaPerformAction("actConvertBelievers");
                             });
                             this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
-                                this.bgaPerformAction("actMassiveSpeech");
+                                this.bgaPerformAction("actSacrificeLeader");
                             });
                         }
                         break;

@@ -61,15 +61,22 @@ class Game extends \Table
         $this->gamestate->nextState();
     }
 
+    public function stDrawFive(): void
+    {
+        $player_id = $this->getCurrentPlayerId();
+        $hand_count = $this->disasterCards->countCardInLocation("hand", $player_id)
+            + $this->bonusCards->countCardInLocation("hand", $player_id);
+
+        if ($hand_count >= 5) {
+            $this->gamestate->nextState();
+        }
+    }
+
     public function stActivateLeader(): void
     {
-        /* Skip handling for leader (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
-        // $args = $this->argActivateLeader();
-        // if ($args['_no_notify']) 
-        // {
-        //     /* Notify all players that the player is being skipped? */
-        //     $this->gamestate->nextState('');
-        // }
+        // Set the current player as active and wait for an action from the frontend
+        $this->gamestate->setActivePlayer($this->getActivePlayerId());
+        // No immediate action; wait for player to choose one of the allowed actions
     }
 
     public function stNextPlayer(): void
@@ -227,6 +234,7 @@ class Game extends \Table
         {
             $this->gamestate->setPlayerNonMultiactive($player_id, '');
         }
+        
     }
 
     public function actDrawCard(string $type): void
@@ -250,9 +258,90 @@ class Game extends \Table
 
     /***** Leader state actions *****/
     public function actGiveSpeech(): void
+{
+        $this->trace("KALUA gives a speech!");
+        $player_id = $this->getCurrentPlayerId();
+
+        // Set player_chief to 0 only if not already zero
+        $chiefCount = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$player_id}");
+        if ($chiefCount > 0) {
+            self::DbQuery("UPDATE player SET player_chief = 0 WHERE player_id = {$player_id}");
+        }
+
+        // Get current number of atheist families (global_id = 101)
+        $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
+
+        // Calculate how many families to add (up to 5, but not more than available atheists)
+        $familiesToAdd = min(5, $atheistCount);
+
+        if ($familiesToAdd > 0) {
+            // Subtract from global atheist pool
+            self::DbQuery("UPDATE global SET global_value = global_value - {$familiesToAdd} WHERE global_id = 101");
+            // Add to player's family count
+            self::DbQuery("UPDATE player SET player_family = player_family + {$familiesToAdd} WHERE player_id = {$player_id}");
+        }
+
+        // Notify all players
+        $this->notifyAllPlayers('massiveSpeech', clienttranslate('${player_name} gave a massive speech and gained ${families} families'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getActivePlayerName(),
+            'families' => $familiesToAdd
+        ]);
+
+        $this->gamestate->nextState();
+    }
+
+    public function actConvertAtheists(): void
     {
+        $this->trace("KALUA convert atheists!");
+        $player_id = $this->getCurrentPlayerId();
+
+        // Get current number of atheist families
+        $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
+        // Move up to two atheist families to the player, if they exist
+        $toConvert = min(2, $atheistCount);
+        if ($toConvert > 0) {
+            self::DbQuery("UPDATE global SET global_value = global_value - $toConvert WHERE global_id = 101");
+            self::DbQuery("UPDATE player SET player_family = player_family + $toConvert WHERE player_id = {$player_id}");
+        }
+
+        $this->notifyAllPlayers('convertAtheists', clienttranslate('${player_name} converted an atheist'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getActivePlayerName()
+            ]);
+
+        $this->gamestate->nextState();
+    }
+
+    public function actConvertBelievers(int $target_player_id): void
+    {
+        // Move one family from target_player_id to current player
+        $current_player_id = $this->getCurrentPlayerId();
+
+        // Get family counts
+        $target_family = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $target_player_id");
+        $current_family = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $current_player_id");
+
+        // Only transfer if target has at least one family
+        if ($target_family > 0) {
+            self::DbQuery("UPDATE player SET player_family = player_family - 1 WHERE player_id = $target_player_id");
+            self::DbQuery("UPDATE player SET player_family = player_family + 1 WHERE player_id = $current_player_id");
+
+            $this->notifyAllPlayers('convertBelievers', clienttranslate('${player_name} converted a believer from ${target_name}'), [
+                'player_id' => $current_player_id,
+                'player_name' => $this->getActivePlayerName(),
+                'target_id' => $target_player_id,
+                'target_name' => $this->getPlayerNameById($target_player_id)
+            ]);
+        }
+
+        $this->gamestate->nextState();
+    }
+
+    public function actSacrificeLeader(): void
+        {
         /* Increase player's happiness by one */
-        $this->trace("KALUA give speech!");
+        $this->trace("KALUA sacrifices leader!");
 
         $player_id = $this->getCurrentPlayerId();
 
@@ -264,21 +353,6 @@ class Game extends \Table
             ]);
         
         $this->gamestate->nextState();
-    }
-
-    public function actConvertAtheists(): void
-    {
-        $this->trace("KALUA convert atheists!");
-    }
-
-    public function actConvertBelievers(int $target_player_id): void
-    {
-
-    }
-
-    public function actMassiveSpeech(): void
-    {
-        $this->trace("KALUA give massive speech!");
     }
     /***************************************/
 
@@ -501,7 +575,7 @@ class Game extends \Table
 
         // Initialize atheist families (e.g., 3 per player, stored in a global table or variable)
         $atheist_start = count($players) * 3;
-        $this->DbQuery("INSERT INTO global (global_id, global_value) VALUES (101, $atheist_start)");
+        $this->DbQuery("UPDATE global SET global_value = $atheist_start WHERE global_id = 101");
 
         // Init game statistics.
 
