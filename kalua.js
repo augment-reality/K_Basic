@@ -161,9 +161,9 @@ function (dojo, declare) {
                  this[`atheists`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png', i);
             }
             
-            // Use PHP-provided value for atheist families
+            /* TODO get number of atheists from the database */
             for (let i = 0; i < this.gamedatas.atheist_families; i++) {
-                this['atheists'].addToStock(8); // 8 = atheist meeple
+                this['atheists'].addToStock(1); // 8 = atheist meeple
             }
 
             // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
@@ -384,6 +384,13 @@ function (dojo, declare) {
                             this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
                                 this.bgaPerformAction("actConvertAtheists");
                             });
+                            /* check if there are enough atheists and disable the button if there aren't */
+                            if (this['atheists'].count() == 0)
+                            {
+                                console.log('only ' + this['atheists'].count() + ' atheists left! disabling convert button');
+                                dojo.addClass('convertAtheist-btn', 'disabled');
+                            }
+
                             this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
                                 this.bgaPerformAction("actConvertBelievers");
                             });
