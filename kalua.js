@@ -396,6 +396,7 @@ function (dojo, declare) {
                                 this.bgaPerformAction("actConvertAtheists");
                                 convertAtheist();
                             });
+                            
                             /* check if there are enough atheists and disable the button if there aren't */
                             if (this['atheists'].count() == 0)
                             {
