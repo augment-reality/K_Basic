@@ -13,9 +13,11 @@ Stock elements (and side bar) for game pieces are in place, but not being genera
 
 ----------------------------    To do   -------------------------------------------
 
--player can't have more than five cards during initial draw, but should we check at other times? how does actdrawcard account for this
--card backs need to show up for other players
--color code dice and move them to a div below the board, so the html flow isn't as clunky
+-Game is jumping through "ST_pHASE_TWO_NEXT_PLAYER" - Guess this is why we need stPhaseOneDone, which I deleted :'/
+-card backs for other players
+-option to hide other players divs?
+-coordinate token colors with player colors
+-color code dice (code commented out - seems to be issue loading png)
 -what value to use as placeholder for die roll?
 -undo buttons
 -handle php case for "zombie" player: remove families from game and pass all options to play card

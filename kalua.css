@@ -40,7 +40,7 @@ border-radius: 5px; */
 #board_background {
     position: relative;
     width: 356px;
-    height: 215px;
+    height: 305px;
     background-image: url('img/kboard_400_265.jpg');
     background-repeat: no-repeat;
     background-size: auto;
@@ -70,6 +70,21 @@ border-radius: 5px; */
     position: relative;
     margin-top: 20px; /* Add margin to create a gap above the div */
 }
+
+
+#dice {
+    min-width: 60px;
+    width: 170px;
+    height: 120px;
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 
 #playedCards {
     width: 650px; /* needs to hold five cards */
@@ -110,7 +125,7 @@ border-radius: 5px; */
     border: 1px solid #ccc;
     padding: 10px;
     margin: 10px;
-    width: 620px;
+    width: 655px;
     min-height: 210px; /* Adjusted height to fit both player_families and player_cards */
     background-color: #f9f9f9;
     border-radius: 5px;
@@ -122,7 +137,7 @@ border-radius: 5px; */
 
 .player_hand {
     min-height: 100px;
-    min-width: 610px;
+    min-width: 650px;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -158,9 +173,6 @@ border-radius: 5px; */
     display: block;
 }
 
-.player_dice {
-    min-width: 60px; /* same as card div */
-}
 
 .player_kept_cards {
     min-width: 650px; /* same as card div */

@@ -52,9 +52,6 @@ ADD `player_die` smallint(5) NOT NULL DEFAULT '0',
 ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
 ADD `player_amulet` INT(11) NOT NULL DEFAULT '0';
 
-ALTER TABLE `global` 
-ADD `101` int(11) NOT NULL DEFAULT '0', --counter for atheist families
-
 
 -- Use table from Cant Stop as example for hk token zones
 -- CREATE TABLE IF NOT EXISTS `col` (

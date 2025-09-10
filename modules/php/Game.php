@@ -563,7 +563,7 @@ class Game extends \Table
 
         // Initialize atheist families (e.g., 3 per player, stored in a global table or variable)
         $atheist_start = count($players) * 3;
-        $this->DbQuery("UPDATE global SET global_value = $atheist_start WHERE global_id = 101");
+        $this->DbQuery("INSERT INTO global (global_id, global_value) VALUES (101, $atheist_start)");
 
         // Init game statistics.
 
@@ -572,15 +572,6 @@ class Game extends \Table
         // Dummy content.
         // $this->initStat("table", "table_teststat1", 0);
         // $this->initStat("player", "player_teststat1", 0);
-
-
-        // Create dice entries in the database
-        // {
-        //     $dice = []; 
-        //     $dice[] = "(1, 2, 3, 4, 5),(9, 8, 7, 6, 5)";
-        // }
-
-        // $sql = "INSERT INTO dice (dice_id, dice_value) VALUES ".implode(',', $dice);
 
         // TODO: Setup the initial game situation here.
         $this->setGameStateValue("roundLeader", $this->activeNextPlayer());
