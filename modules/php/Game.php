@@ -283,9 +283,10 @@ class Game extends \Table
             self::DbQuery("UPDATE player SET player_family = player_family + $toConvert WHERE player_id = {$player_id}");
         }
 
-        $this->notifyAllPlayers('convertAtheists', clienttranslate('${player_name} converted an atheist'), [
+        $this->notifyAllPlayers('convertAtheists', clienttranslate('${player_name} converted ${num_atheists} atheist(s)'), [
                 'player_id' => $player_id,
-                'player_name' => $this->getActivePlayerName()
+                'player_name' => $this->getActivePlayerName(),
+                'num_atheists' => $toConvert
             ]);
 
         $this->gamestate->nextState();

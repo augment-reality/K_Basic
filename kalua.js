@@ -55,6 +55,7 @@ function (dojo, declare) {
             this.cardCounters = {};
             this.templeCounters = {};
             this.amuletCounters = {};
+            this.familyCounters = {};
         },
         
         setup: function(gamedatas) {
@@ -81,7 +82,8 @@ function (dojo, declare) {
                      happiness:<span id="panel_h_${player.id}"></span><br>
                      Cards:<span id="panel_c_${player.id}"></span><br>
                      Temples:<span id="panel_t_${player.id}"></span><br>
-                     Amulets:<span id="panel_a_${player.id}"></span>
+                     Amulets:<span id="panel_a_${player.id}"></span><br>
+                     Families:<span id="panel_f_${player.id}"></span>
                      </div>
                 `);
 
@@ -115,6 +117,12 @@ function (dojo, declare) {
                 counter_a.create(document.getElementById(`panel_a_${player.id}`));
                 counter_a.setValue(0);
                 this.amuletCounters[player.id] = counter_a;
+
+                // Create family counter in player panel
+                const counter_f = new ebg.counter();
+                counter_f.create(document.getElementById(`panel_f_${player.id}`));
+                counter_f.setValue(10);
+                this.familyCounters[player.id] = counter_f;
             });
 
 
@@ -289,6 +297,7 @@ function (dojo, declare) {
                 this.happinessCounters[player.id].setValue(player.happiness);
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
+                this.familyCounters[player.id].setValue(player.family);
                 /* TODO get each player's hand length to update counters */
             });
 
@@ -390,11 +399,9 @@ function (dojo, declare) {
                         {
                             this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
                                 this.bgaPerformAction("actGiveSpeech");
-                                giveSpeech();
                             });
-                            this.addActionButton('convertAtheist-btn', _('Convert Atheist'), () => {
+                            this.addActionButton('convertAtheist-btn', _('Convert Atheists'), () => {
                                 this.bgaPerformAction("actConvertAtheists");
-                                convertAtheist();
                             });
                             
                             /* check if there are enough atheists and disable the button if there aren't */
@@ -406,11 +413,9 @@ function (dojo, declare) {
 
                             this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
                                 this.bgaPerformAction("actConvertBelievers");
-                                convertBeliever();
                             });
                             this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
                                 this.bgaPerformAction("actSacrificeLeader");
-                                sacrificeLeader();
                             });
                         }
                         break;
@@ -453,19 +458,7 @@ function (dojo, declare) {
             console.log("drawing unique ID " + uniqueId)
 
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
-            console.log(`Card ${card_id} added to player ${this.player}'s hand`);
-
-            //Update counters for temples and amulets if needed
-            // if (card_type == this.ID_BONUS) {
-            //     if (card_type_arg == 1) { // Assuming type_arg 1 is temple
-            //         const counter_t = this[`counter_t_${player}`];
-            //         counter_t.incValue(1); // Increment temple count by 1
-            //     } else if (card_type_arg == 2) { // Assuming type_arg 2 is amulet
-            //         const counter_a = this[`counter_a_${player}`];
-            //         counter_a.incValue(1); // Increment amulet count by 1
-            //     }
-            // }
-            
+            console.log(`Card ${card_id} added to player ${this.player}'s hand`);            
         },
 
 
@@ -474,16 +467,15 @@ function (dojo, declare) {
             this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
         },
 
-        convertAtheist: function() {
-            console.log("Converting atheist families");
+        convertAtheists: function(player_id, num_atheists) {
+            console.log("Converting " + num_atheists + " atheist families");
             const atheistFamilies = this['atheists'];
             const playerFamilies = this[`fams_${this.player_id}`];
-            const availableAtheists = atheistFamilies.getItemCount();
-            const familiesToConvert = Math.min(availableAtheists, 2);
-            for (let i = 0; i < familiesToConvert; i++) {
+            for (let i = 0; i < num_atheists; i++) {
                 atheistFamilies.removeFromStock(8); // Remove from atheist families
                 playerFamilies.addToStock(8); // Add to player's families
             }
+            this.familyCounters[player_id].incValue(num_atheists);
         },
 
         convertBeliever: function() {
@@ -524,12 +516,12 @@ function (dojo, declare) {
         notif_playerDrewCard: async function( args )
         {
             const player_id = args.player_id;
+            const player_name = args.player_name;
             const type = args.card_type;
             const card_id = args.card_id;
 
-            console.log( 'player ' + player_id + ' drew card ' + card_id + ' of type ' + type + ', type arg ' + args.card_type_arg);
+            console.log( player_name + ' drew card ' + card_id + ' of type ' + type + ', type arg ' + args.card_type_arg);
 
-            /* TODO add to hand of player who drew it*/
             if (player_id == this.player_id)
             {
                 this.drawCard(player_id, args.card_id, args.card_type, args.card_type_arg);
@@ -542,9 +534,20 @@ function (dojo, declare) {
         notif_giveSpeech: async function( args )
         {
             const player_id = args.player_id;
+            const player_name = args.player_name;
 
-            console.log ('player ' + player_id + ' gives a speech');
+            console.log(player_name + ' gives a speech');
             this.giveSpeech(player_id);
+        },
+
+        notif_convertAtheists: async function(args)
+        {
+            const player_id = args.player_id;
+            const player_name = args.player_name;
+            const num_atheists = args.num_atheists;
+
+            console.log(player_name + ' converted ' + num_atheists + ' atheists');
+            this.convertAtheists(player_id, num_atheists);
         }
 
         ///////////////////////////////////////////////////
