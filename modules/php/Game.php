@@ -294,6 +294,7 @@ class Game extends \Table
 
     public function actConvertBelievers(int $target_player_id): void
     {
+        $this->trace("KALUA convert believers!");
         // Move one family from target_player_id to current player
         $current_player_id = $this->getCurrentPlayerId();
 
@@ -303,6 +304,7 @@ class Game extends \Table
 
         // Only transfer if target has at least one family
         if ($target_family > 0) {
+            $this->trace("KALUA at least one family!");
             self::DbQuery("UPDATE player SET player_family = player_family - 1 WHERE player_id = $target_player_id");
             self::DbQuery("UPDATE player SET player_family = player_family + 1 WHERE player_id = $current_player_id");
 
@@ -312,6 +314,9 @@ class Game extends \Table
                 'target_id' => $target_player_id,
                 'target_name' => $this->getPlayerNameById($target_player_id)
             ]);
+        }
+        else{
+            $this->trace("KALUA not converting any families!");
         }
 
         $this->gamestate->nextState();
@@ -335,8 +340,8 @@ class Game extends \Table
             self::DbQuery("UPDATE player SET player_family = player_family + $toConvert WHERE player_id = {$player_id}");
         }
 
-        $this->notifyAllPlayers('sacraficeLeader', clienttranslate('${player_name}\'s leader gave a massive speeach
-                                    and sacraficed themself, converting ${num_atheists} atheists'), [
+        $this->notifyAllPlayers('sacrificeLeader', clienttranslate('${player_name}\'s leader gave a massive speeach
+                                    and sacrificed themself, converting ${num_atheists} atheists'), [
                 'player_id' => $player_id,
                 'player_name' => $this->getActivePlayerName(),
                 'num_atheists' => $toConvert
@@ -468,6 +473,11 @@ class Game extends \Table
                 player_amulet amulet
                 FROM player"
         );
+        /* add name */
+        foreach ($result["players"] as $player)
+        {
+            $player["name"] = $this->getPlayerNameById($player["id"]);
+        }
 
         // Fetch the number of atheist families from the database
         $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");

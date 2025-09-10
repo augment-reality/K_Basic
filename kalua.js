@@ -422,7 +422,7 @@ function (dojo, declare) {
                             }
 
                             this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
-                                this.bgaPerformAction("actConvertBelievers");
+                                this.chooseConvertTarget()
                             });
                             this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
                                 this.bgaPerformAction("actSacrificeLeader");
@@ -435,10 +435,6 @@ function (dojo, declare) {
 
         ///////////////////////////////////////////////////
         //// Utility methods
-
-        // getCardUniqueId: function(color, value) {
-        //     return (color - 1) * 5 + (value - 1);
-        // },
 
         /* Maps card type (bonus, local disaster, global disaster) and type_id 
          * (which of those type cards it is) to a unique number */
@@ -480,7 +476,7 @@ function (dojo, declare) {
         convertAtheists: function(player_id, num_atheists) {
             console.log("Converting " + num_atheists + " atheist families");
             const atheistFamilies = this['atheists'];
-            const playerFamilies = this[`fams_${this.player_id}`];
+            const playerFamilies = this[`fams_${player_id}`];
             for (let i = 0; i < num_atheists; i++) {
                 atheistFamilies.removeFromStock(8); // Remove from atheist families
                 playerFamilies.addToStock(8); // Add to player's families
@@ -488,16 +484,29 @@ function (dojo, declare) {
             this.familyCounters[player_id].incValue(num_atheists);
         },
 
-        convertBeliever: function() {
-            console.log("Converting believer families");
-            const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id !== this.player_id);
-            const targetPlayer = otherPlayers.find(player => this[`fams_${player.id}`].getItemCount() > 0);
-            if (targetPlayer) {
-                const targetFamilies = this[`fams_${targetPlayer.id}`];
-                const playerFamilies = this[`fams_${this.player_id}`];
-                targetFamilies.removeFromStock(8); // Remove from target player's families
-                playerFamilies.addToStock(8); // Add to current player's families
-            }
+        chooseConvertTarget: function() {
+            console.log("Choosing convert target");
+            /* Present the option of the other players to the user as buttons */
+            this.gamedatas.gamestate.descriptionmyturn = _('Choose a player to convert from: ');
+            this.updatePageTitle();
+            this.statusBar.removeActionButtons();
+            const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id != this.player_id);
+            otherPlayers.forEach(player =>
+            {
+                /* TODO disable button if no families? but what if no one else has families? warning? */
+                button = this.statusBar.addActionButton(_(player.name), () => 
+                    this.bgaPerformAction('actConvertBelievers', { target_player_id: player.id}))
+            });
+        },
+
+        convertBelievers : function(player_id, target_player_id) {
+            const targetFamilies = this[`fams_${target_player_id}`];
+            const playerFamilies = this[`fams_${player_id}`];
+            targetFamilies.removeFromStock(8); // Remove from target player's families
+            playerFamilies.addToStock(8); // Add to current player's families
+
+            this.familyCounters[player_id].incValue(1);
+            this.familyCounters[target_player_id].incValue(-1);
         },
 
         sacrificeLeader: function(player_id, num_atheists) {
@@ -564,16 +573,27 @@ function (dojo, declare) {
             this.convertAtheists(player_id, num_atheists);
         },
 
-        notif_sacraficeLeader: async function(args)
+        notif_sacrificeLeader: async function(args)
         {
             const player_id = args.player_id;
             const player_name = args.player_name;
             const num_atheists = args.num_atheists;
 
-            console.log(player_name + '\'s leader gave a massive speech and sacraficed themselves - ' 
+            console.log(player_name + '\'s leader gave a massive speech and sacrificed themselves - ' 
                             + num_atheists + ' were converted');
 
             this.sacrificeLeader(player_id, num_atheists);
+        },
+
+        notif_convertBelievers: async function(args)
+        {
+            const player_id = args.player_id;
+            const player_name = args.player_name;
+            const target_id = args.target_id;
+            const target_name = args.target_name;
+
+            console.log(player_name + ' converted a believer from ' + target_name);
+
         }
 
         ///////////////////////////////////////////////////
