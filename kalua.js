@@ -79,7 +79,8 @@ function (dojo, declare) {
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div> Prayer count: <span id="panel_p_${player.id}"></span> <br>
-                     happiness:<span id="panel_h_${player.id}"></span><br>
+                     Happiness:<span id="panel_h_${player.id}"></span><br>
+                     Has leader:<span id="panel_l_${player.id}"></span><br>
                      Cards:<span id="panel_c_${player.id}"></span><br>
                      Temples:<span id="panel_t_${player.id}"></span><br>
                      Amulets:<span id="panel_a_${player.id}"></span><br>
@@ -299,6 +300,15 @@ function (dojo, declare) {
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
                 /* TODO get each player's hand length to update counters */
+                element = $(`panel_l_${player.id}`);
+                if (player.chief == 1)
+                {
+                    element.innerHTML = "true";
+                }
+                else
+                {
+                    element.innerHTML = "false";
+                }
             });
 
             /* Update player's hands with their drawn cards */
@@ -490,15 +500,19 @@ function (dojo, declare) {
             }
         },
 
-        sacrificeLeader: function() {
-            console.log("Sacrificing leader");
+        sacrificeLeader: function(player_id, num_atheists) {
+            console.log("Sacrificing leader and gaining " + num_atheists + " atheists");
             const playerFamilies = this[`fams_${this.player_id}`];
             const atheistFamilies = this['atheists'];
-            const familiesToAdd = Math.min(5, atheistFamilies.getItemCount());
-            for (let i = 0; i < familiesToAdd; i++) {
+            for (let i = 0; i < num_atheists; i++) 
+            {
                 atheistFamilies.removeFromStock(8); // Remove from atheist families
                 playerFamilies.addToStock(8); // Add to player's families
             }
+            playerFamilies.removeFromStock(1);
+            this.familyCounters[player_id].incValue(num_atheists);
+            element = $(`panel_l_${player_id}`);
+            element.innerHTML = "false";
         },
 
 
@@ -548,6 +562,18 @@ function (dojo, declare) {
 
             console.log(player_name + ' converted ' + num_atheists + ' atheists');
             this.convertAtheists(player_id, num_atheists);
+        },
+
+        notif_sacraficeLeader: async function(args)
+        {
+            const player_id = args.player_id;
+            const player_name = args.player_name;
+            const num_atheists = args.num_atheists;
+
+            console.log(player_name + '\'s leader gave a massive speech and sacraficed themselves - ' 
+                            + num_atheists + ' were converted');
+
+            this.sacrificeLeader(player_id, num_atheists);
         }
 
         ///////////////////////////////////////////////////

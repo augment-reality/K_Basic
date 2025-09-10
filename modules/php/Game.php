@@ -226,7 +226,7 @@ class Game extends \Table
         
         if ($this->disasterCards->countCardInLocation("hand", $player_id) 
             + $this->bonusCards->countCardInLocation("hand", $player_id)
-            == 5 )
+            == HAND_SIZE )
         {
             $this->gamestate->setPlayerNonMultiactive($player_id, '');
         }
@@ -246,7 +246,7 @@ class Game extends \Table
         /* Once the player has at least five cards, move to next phase */
         if ($this->disasterCards->countCardInLocation("hand", $player_id) 
             + $this->bonusCards->countCardInLocation("hand", $player_id)
-            >= 5 )
+            >= HAND_SIZE)
         {
             $this->gamestate->nextState('FreeAction');
         }
@@ -318,17 +318,28 @@ class Game extends \Table
     }
 
     public function actSacrificeLeader(): void
-        {
+    {
         /* Increase player's happiness by one */
         $this->trace("KALUA sacrifices leader!");
 
         $player_id = $this->getCurrentPlayerId();
 
-        self::DbQuery( "UPDATE player SET player_happiness = player_happiness + 1 WHERE player_id = {$this->getActivePlayerId()}");
+        /* Remove the player's leader */
+        self::DbQuery( "UPDATE player SET player_chief=0 WHERE player_id = {$player_id}");
 
-        $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
+        /* Convert up to 5 atheist families */
+        $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
+        $toConvert = min(5, $atheistCount);
+        if ($toConvert > 0) {
+            self::DbQuery("UPDATE global SET global_value = global_value - $toConvert WHERE global_id = 101");
+            self::DbQuery("UPDATE player SET player_family = player_family + $toConvert WHERE player_id = {$player_id}");
+        }
+
+        $this->notifyAllPlayers('sacraficeLeader', clienttranslate('${player_name}\'s leader gave a massive speeach
+                                    and sacraficed themself, converting ${num_atheists} atheists'), [
                 'player_id' => $player_id,
-                'player_name' => $this->getActivePlayerName()
+                'player_name' => $this->getActivePlayerName(),
+                'num_atheists' => $toConvert
             ]);
         
         $this->gamestate->nextState();
