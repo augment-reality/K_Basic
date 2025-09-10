@@ -77,6 +77,7 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must choose a leader action'))
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stActivateLeader')
+        ->args('argActivateLeader')
         ->possibleactions([
             'actSacrificeLeader',
             'actConvertAtheists',

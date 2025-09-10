@@ -67,12 +67,13 @@ class Game extends \Table
         //$this->gamestate->setActivePlayer($this->getActivePlayerId());
         /* TODO there is a way to skip players cleanly from BGA API */
         /* Skip handling for leader (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
-        // $args = $this->argActivateLeader();
-        // if ($args['_no_notify']) 
-        // {
-        //     /* Notify all players that the player is being skipped? */
-        //     $this->gamestate->nextState('');
-        // }
+        $args = $this->argActivateLeader();
+        if ($args['_no_notify']) 
+        {
+            $this->trace("KALUA skipping to next player!");
+            /* Notify all players that the player is being skipped? */
+            $this->gamestate->nextState();
+        }
     }
 
     public function stNextPlayer(): void
@@ -395,14 +396,22 @@ class Game extends \Table
     }
     /******************************/
 
+    /***** helpers ******/
+    public function check_playerHasLeader() : bool
+    {
+        $leader_int = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$this->getActivePlayerId()}");
+        $this->trace(sprintf("KALUA leader int: %d", $leader_int));
+        return $leader_int == 1;
+    }
+
 
     /******* Arg functions ************/
-    // function argActivateLeader() : array
-    // {
-    //     // return [
-    //     //     '_no_notify' => false /* TODO!! */
-    //     // ];
-    // }   
+    public function argActivateLeader() : array
+    {
+        return [
+            '_no_notify' => !$this->check_playerHasLeader(),
+        ];
+    }   
     
 
 

@@ -593,7 +593,7 @@ function (dojo, declare) {
             const target_name = args.target_name;
 
             console.log(player_name + ' converted a believer from ' + target_name);
-
+            this.convertBelievers(player_id, target_id);
         }
 
         ///////////////////////////////////////////////////
