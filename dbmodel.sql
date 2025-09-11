@@ -21,7 +21,7 @@
 -- Create a "card" table to be used with the "Deck" tools:
 -- card_type (global/local/bonus) 21 Bonus, 19 Local Disaster, 10 Global Disaster
 -- card_type_arg(1,2,3)
--- card_location (deck, hand)
+-- card_location (deck, hand, discard, played, resolved)
 -- card_location_arg (player id)
 
 CREATE TABLE IF NOT EXISTS `disaster_card` (

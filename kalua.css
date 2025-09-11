@@ -121,6 +121,29 @@ border-radius: 5px; */
     margin-left: 0;
 }
 
+#icon_h {
+    width: 30px;
+    height: 30px;
+    background-image: url('img/SidebarIcon_Happy_30_30.png');  
+
+}
+#icon_p {
+    width: 30px;
+    height: 30px;
+    background-image: url('img/SidebarIcon_Pray_30_30.png');  
+
+}
+#icon_f {
+    width: 30px;
+    height: 30px;
+    background-image: url('img/SidebarIcon_Fam1_30_30.png');
+}
+#icon_l {
+    width: 30px;
+    height: 30px;
+    background-image: url('img/SidebarIcon_Lead_30_30.png');
+}
+
 .player_area {
     border: 1px solid #ccc;
     padding: 10px;

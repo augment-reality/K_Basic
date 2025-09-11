@@ -349,22 +349,27 @@ class Game extends \Table
         
         $this->gamestate->nextState();
     }
+
+
     /***************************************/
 
     /***** Play card actions ******/
-    public function actPlayCard(int $card_type, int $card_id): void
+    public function actPlayCard(string $type, int $card_id): void
     {
-
+        // Handle deck type?
+        $this->cards->moveCard($card_id, 'played', $player_id);
+        $this->trace("KALUA plays a card.");
     }
 
     public function actBuyCard(): void
     {
-
+        // Handle deck type?
+        $this->trace("KALUA buys a card.");
     }
 
     public function actPlayCardPass(): void
     {
-
+        
     }
 
     public function actSayConvert(): void

@@ -78,13 +78,13 @@ function (dojo, declare) {
             // Set up players' side panels
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
-                    <div> Prayer count: <span id="panel_p_${player.id}"></span> <br>
-                     Happiness:<span id="panel_h_${player.id}"></span><br>
-                     Has leader:<span id="panel_l_${player.id}"></span><br>
+                    <div> Prayer: <span id="panel_p_${player.id}"></span><div id="icon_p"></div><br>
+                     Happiness:<span id="panel_h_${player.id}"></span><div id="icon_h"></div><br>
+                     Leader:<span id="panel_l_${player.id}"></span><div id="icon_l"></div><br>
                      Cards:<span id="panel_c_${player.id}"></span><br>
                      Temples:<span id="panel_t_${player.id}"></span><br>
                      Amulets:<span id="panel_a_${player.id}"></span><br>
-                     Families:<span id="panel_f_${player.id}"></span>
+                     Families:<span id="panel_f_${player.id}"></span><div id="icon_f"></div>
                      </div>
                 `);
 
@@ -152,23 +152,20 @@ function (dojo, declare) {
             });
 
 
-            // //Add dice faces (each row is a different color)
-            // this['dice'] = new ebg.stock();
-            // this['dice'].create(this, document.getElementById('dice'), 50, 48.1);
-            // this['dice'].setSelectionMode(0);
-            // this['dice'].image_items_per_row = 6;
-            // for (let i = 1; i <= 20; i++) {
-            //     this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_481.png');
-            // }
-
             //Add dice faces (each row is a different color)
             this['dice'] = new ebg.stock();
-            this['dice'].create(this, document.getElementById('dice'), 50, 50);
+            this['dice'].create(this, document.getElementById('dice'), 50, 49.2);
             this['dice'].setSelectionMode(0);
             this['dice'].image_items_per_row = 6;
-            for (let i = 1; i <= 6; i++) {
-                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_50.png');
+            for (let i = 1; i <= 30; i++) {
+                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i);
             }
+
+            Object.values(gamedatas.players).forEach((player, idx) => {
+                // generate a number 1-6 and multiply by the iteration number (idx + 1)
+                const dieValue = (Math.floor(Math.random() * 6) + 1) * (idx + 1);
+                this['dice'].addToStock(dieValue);
+            });
 
 
             // Initialize and create atheist families stock
@@ -274,21 +271,6 @@ function (dojo, declare) {
                     this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 14);
                 });
             } 
-
-            // DEBUG Add all cards to each player's hand
-            // Object.values(gamedatas.players).forEach(player => {
-            //     for (let i = 1; i <= 22; i++) {
-            //         this[`${player.id}_cards`].addToStock(i);
-            //     }
-            // });
-
-
-            // Add a die to each player's hand
-            Object.values(gamedatas.players).forEach(player => {
-                    // add a random die face
-                    const rando = Math.floor(Math.random() * 6) + 1;
-                    this[`dice`].addToStock(rando);
-            });
 
             /*** Update the UI with gamedata ***/
 
@@ -429,6 +411,14 @@ function (dojo, declare) {
                             });
                         }
                         break;
+                                            case 'phaseThreePlayCard':
+                        if (this.isCurrentPlayerActive()) 
+                        {
+                            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                            const card = selectedCards[0];
+                            this.statusBar.addActionButton(_('Play card'), () => this.onBtnPlayCard(card));
+                        }
+                        break;
                 }
             }
         },
@@ -523,6 +513,22 @@ function (dojo, declare) {
             element = $(`panel_l_${player_id}`);
             element.innerHTML = "false";
         },
+
+        onBtnPlayCard: function () {
+        const action = "actPlayCard";
+        if (!this.checkAction(action)) return;
+
+        // Check the number of selected items
+        const selectedCards = this.playerHand.getSelectedItems();
+        if (selectedCards.length !== 1) {
+            this.showMessage(_('Please select a card'), "error");
+            return;
+        }
+
+        // Play the card
+        this.playerHand.unselectAll();
+        this.bgaPerformAction(action, {card_id: card_id});
+    },
 
 
         
