@@ -187,18 +187,40 @@ function (dojo, declare,) {
                 this['atheists'].addToStock(8); // 8 = atheist meeple
             }
 
-                // Initialize and create hk token stock for hkboard
-                this[`hkToken`] = new ebg.stock();
-                this[`hkToken`].create(this, document.getElementById('hkboard'), 30, 30);
-                this[`hkToken`].image_items_per_row = 10;
+            // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
+            const hkboard = document.getElementById('hkboard');
+            for (let i = 0; i < 11; i++) {
+                const childDiv = document.createElement('div');
+                childDiv.id = `hkboard_child_${i}`;
+                childDiv.style.width = `${i % 2 === 0 ? 33.3 : 30}px`;
+                childDiv.style.height = '100%';
+                childDiv.style.display = 'inline-block';
+                hkboard.appendChild(childDiv);
+
+                // Initialize and create hk token stock for each childDiv
+                this[`hkToken_${i}`] = new ebg.stock();
+                this[`hkToken_${i}`].create(this, childDiv, 30, 30);
                 for (let j = 0; j < 10; j++) {
-                    this[`hkToken`].addItemType(j, j, g_gamethemeurl + 'img/30_30_hktoken.png', j);
+                    this[`hkToken_${i}`].addItemType(j, j, g_gamethemeurl + 'img/30_30_hktoken.png', j);
                 }
 
-            for (let i = 0; i < 3; i++) {
-                const hk_id = `happy_${i}`;
-                this.hkToken.addToStockWithId(i, hk_id);
+                this[`hkToken_${i}`].setSelectionMode(0);
+                // this[`hkToken_${i}`].image_items_per_row = 1;
+                this[`hkToken_${i}`].container_div.width = "30px";
+                this[`hkToken_${i}`].autowidth = false; // this is required so it obeys the width set above
+                this[`hkToken_${i}`].use_vertical_overlap_as_offset = false; // this is to use normal vertical_overlap
+                this[`hkToken_${i}`].vertical_overlap = 80; // overlap is 20%
+                this[`hkToken_${i}`].horizontal_overlap = 0; // current bug in stock - needs "-1" to for Safari z-index to work
+                this[`hkToken_${i}`].item_margin = 0; // has to be 0 if using overlap
+                this[`hkToken_${i}`].updateDisplay(); // re-layout
             }
+
+            // Get current HK token count for players - index for player color
+            let hkTokenCount = 0;
+            Object.values(gamedatas.players).forEach(() => {
+                this[`hkToken_${5}`].addToStock(hkTokenCount);
+                hkTokenCount++;
+            });
 
 
             // Create stock for played cards
