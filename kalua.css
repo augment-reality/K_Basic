@@ -122,26 +122,32 @@ border-radius: 5px; */
 }
 
 #icon_h {
-    width: 30px;
-    height: 30px;
-    background-image: url('img/SidebarIcon_Happy_30_30.png');  
-
+    background-image: url('img/SidebarIcon_Happy_30_30.png');
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
 }
 #icon_p {
-    width: 30px;
-    height: 30px;
     background-image: url('img/SidebarIcon_Pray_30_30.png');  
-
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
 }
 #icon_f {
-    width: 30px;
-    height: 30px;
     background-image: url('img/SidebarIcon_Fam1_30_30.png');
+    width: 5em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
 }
 #icon_l {
-    width: 30px;
-    height: 30px;
     background-image: url('img/SidebarIcon_Lead_30_30.png');
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
 }
 
 .player_area {

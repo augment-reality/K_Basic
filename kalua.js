@@ -20,9 +20,11 @@ define([
     "ebg/core/gamegui",
     "ebg/counter",
     "ebg/stock",
-    "ebg/zone"
+    "ebg/zone",
+
 ],
-function (dojo, declare) {
+
+function (dojo, declare,) {
     return declare("bgagame.kalua", ebg.core.gamegui, {
         constructor: function(){
             console.log('kalua constructor');
@@ -63,6 +65,8 @@ function (dojo, declare) {
 
             // Declare hexadecimal color maping for player tokens (default red/green/blue/orange/brown)
             
+
+            
             // Create player areas
             Object.values(gamedatas.players).forEach(player => {
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
@@ -78,14 +82,15 @@ function (dojo, declare) {
             // Set up players' side panels
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
-                    <div> Prayer: <span id="panel_p_${player.id}"></span><div id="icon_p"></div><br>
-                     Happiness:<span id="panel_h_${player.id}"></span><div id="icon_h"></div><br>
-                     Leader:<span id="panel_l_${player.id}"></span><div id="icon_l"></div><br>
-                     Cards:<span id="panel_c_${player.id}"></span><br>
-                     Temples:<span id="panel_t_${player.id}"></span><br>
-                     Amulets:<span id="panel_a_${player.id}"></span><br>
-                     Families:<span id="panel_f_${player.id}"></span><div id="icon_f"></div>
-                     </div>
+                    <div>
+                        <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Leader: <span id="panel_l_${player.id}"></span> <span id="icon_l" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
+                        <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
+                        <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
+                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
+                    </div>
                 `);
 
                 // Create prayer counter in player panel
@@ -182,42 +187,20 @@ function (dojo, declare) {
                 this['atheists'].addToStock(8); // 8 = atheist meeple
             }
 
-            // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
-            const hkboard = document.getElementById('hkboard');
-            for (let i = 0; i < 11; i++) {
-                const childDiv = document.createElement('div');
-                childDiv.id = `hkboard_child_${i}`;
-                childDiv.style.width = `${i % 2 === 0 ? 33.3 : 30}px`;
-                childDiv.style.height = '100%';
-                childDiv.style.display = 'inline-block';
-                hkboard.appendChild(childDiv);
-
-                // Initialize and create hk token stock for each childDiv
-                this[`hkToken_${i}`] = new ebg.stock();
-                this[`hkToken_${i}`].create(this, childDiv, 30, 30);
+                // Initialize and create hk token stock for hkboard
+                this[`hkToken`] = new ebg.stock();
+                this[`hkToken`].create(this, document.getElementById('hkboard'), 30, 30);
+                this[`hkToken`].image_items_per_row = 10;
                 for (let j = 0; j < 10; j++) {
-                    this[`hkToken_${i}`].addItemType(j, j, g_gamethemeurl + 'img/30_30_hktoken.png', j);
+                    this[`hkToken`].addItemType(j, j, g_gamethemeurl + 'img/30_30_hktoken.png', j);
                 }
-                            
-                this[`hkToken_${i}`].setSelectionMode(0);
-                // this[`hkToken_${i}`].image_items_per_row = 1;
-                this[`hkToken_${i}`].container_div.width = "30px";
-                this[`hkToken_${i}`].autowidth = false; // this is required so it obeys the width set above
-                this[`hkToken_${i}`].use_vertical_overlap_as_offset = false; // this is to use normal vertical_overlap
-                this[`hkToken_${i}`].vertical_overlap = 80; // overlap is 20%
-                this[`hkToken_${i}`].horizontal_overlap = 0; // current bug in stock - needs "-1" to for Safari z-index to work
-                this[`hkToken_${i}`].item_margin = 0; // has to be 0 if using overlap
-                this[`hkToken_${i}`].updateDisplay(); // re-layout
+
+            for (let i = 0; i < 3; i++) {
+                const hk_id = `happy_${i}`;
+                this.hkToken.addToStockWithId(i, hk_id);
             }
 
-            // Get current HK token count for players - index for player color
-            let hkTokenCount = 0;
-            Object.values(gamedatas.players).forEach(() => {
-                this[`hkToken_${5}`].addToStock(hkTokenCount);
-                hkTokenCount++;
-            });
 
-            
             // Create stock for played cards
             this['playedCards'] = new ebg.stock();  
             this['playedCards'].create(this, document.getElementById('playedCards'), 120, 177.4);
@@ -456,6 +439,8 @@ function (dojo, declare) {
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
             console.log(`Card ${card_id} added to player ${this.player}'s hand`);            
         },
+
+
 
 
         giveSpeech: function(player_id) {
