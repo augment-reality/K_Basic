@@ -13,7 +13,8 @@ Stock elements (and side bar) for game pieces are in place, but not being genera
 
 ----------------------------    To do   -------------------------------------------
 
--sidebars counters lose track of updates; "has leader" field is kinda wonky; introduce the icons used on cards?
+-sidebars counters lose track of updates; "has leader" field should be checkbox image instead of html?
+-implement "movetokens" for happiness cubes on board
 -"play a card" phase needs confirm button (option to disable?)
 -card backs for other players
 -option to hide other players divs?

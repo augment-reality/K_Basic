@@ -217,10 +217,16 @@ function (dojo, declare,) {
 
             // Get current HK token count for players - index for player color
             let hkTokenCount = 0;
-            Object.values(gamedatas.players).forEach(() => {
-                this[`hkToken_${5}`].addToStock(hkTokenCount);
+            Object.values(gamedatas.players).forEach(player => {
+                this[`hkToken_${5}`].addToStock(hkTokenCount); // type
                 hkTokenCount++;
+
             });
+
+            // // test moving tokens
+            // this.movetokens(2, -2); // move token (type 3) one space to the right
+            // this.movetokens(1, -5); // move token (type 3) one space to the right
+            // this.movetokens(0, 3); // move token (type 3) one space to the right
 
 
             // Create stock for played cards
@@ -229,7 +235,7 @@ function (dojo, declare,) {
             this['playedCards'].image_items_per_row = 5;
             this['playedCards'].setSelectionMode(0);
 
-            // Initialize card stock for each player card div
+            // Initialize card stock for each player card div   
             Object.values(gamedatas.players).forEach(player => {
                 this[`${player.id}_cards`] = new ebg.stock();
                 this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 177.4);
@@ -290,11 +296,11 @@ function (dojo, declare,) {
                 element = $(`panel_l_${player.id}`);
                 if (player.chief == 1)
                 {
-                    element.innerHTML = "true";
+                    element.innerHTML = `<input type="checkbox" checked onclick="return false">`;
                 }
                 else
                 {
-                    element.innerHTML = "false";
+                    element.innerHTML = `<input type="checkbox" unchecked onclick="return false">`;
                 }
             });
 
@@ -396,6 +402,8 @@ function (dojo, declare,) {
                         {
                             this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
                                 this.bgaPerformAction("actGiveSpeech");
+                                this.movetokens(0, 1); // move token (type 0) one space to the right
+                                //need to used player's "sprite" field to determine which token to move
                             });
                             this.addActionButton('convertAtheist-btn', _('Convert Atheists'), () => {
                                 this.bgaPerformAction("actConvertAtheists");
@@ -462,12 +470,40 @@ function (dojo, declare,) {
             console.log(`Card ${card_id} added to player ${this.player}'s hand`);            
         },
 
-
-
+        movetokens: function(tokenTypeToMove, desiredShift) {
+            flag = false;
+            for (let x = 0; x <= 10; x++) {
+                    const tokens = this[`hkToken_${x}`].items;
+                    Object.values(tokens).forEach(token => {
+                        if (token.type == tokenTypeToMove && flag == false) {
+                            // Remove from current stock
+                            this[`hkToken_${x}`].removeFromStock(tokenTypeToMove);
+                            // Add to adjacent stock
+                            let newdiv = x + desiredShift;
+                            if (newdiv < 0) newdiv = 0;
+                            if (newdiv > 10) newdiv = 10;
+                            this[`hkToken_${newdiv}`].addToStock(token.type);
+                            flag = true; // only move one token
+                        }
+                    });
+                }
+        },
 
         giveSpeech: function(player_id) {
             console.log("Giving a speech");
             this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
+                //pick which token to move
+                const tokenToMove = Object.values(this.hkToken_0.items).find(token => token.type == 3);
+                if (tokenToMove) {
+                    // Remove from current stock
+                    this.hkToken_0.removeFromStockById(tokenToMove.id);
+                
+                    // Add to adjacent stock
+                    this.hkToken_1.addToStockWithId(tokenToMove.type, tokenToMove.id);
+                
+                    // Optionally animate the move
+                    this.slideToObject(tokenToMove.div, document.getElementById('hkboard_child_1')).play();
+                }
         },
 
         convertAtheists: function(player_id, num_atheists) {
@@ -518,7 +554,7 @@ function (dojo, declare,) {
             playerFamilies.removeFromStock(1);
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
-            element.innerHTML = "false";
+            element.innerHTML = `<input type="checkbox" disabled>`;
         },
 
         onBtnPlayCard: function () {

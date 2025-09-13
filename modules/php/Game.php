@@ -469,7 +469,7 @@ class Game extends \Table
         $current_player_id = (int) $this->getCurrentPlayerId();
         $result["players"] = self::getCollectionFromDb(
             "SELECT player_id id, 
-                player_score score, 
+                player_token_sprite sprite, 
                 player_family family, 
                 player_chief chief, 
                 player_happiness happiness,

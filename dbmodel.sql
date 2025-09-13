@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS `bonus_card` (
 
 ALTER TABLE `player` 
 ADD `player_first` BOOLEAN NOT NULL DEFAULT '0',
+ADD `player_token_sprite` BOOLEAN NOT NULL DEFAULT '0',
 ADD `player_happiness` INT(11) NOT NULL DEFAULT '5',
 ADD `player_prayer` INT(11) NOT NULL DEFAULT '5',
 ADD `player_family` INT(11) NOT NULL DEFAULT '0',
