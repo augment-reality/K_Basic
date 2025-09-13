@@ -149,6 +149,20 @@ border-radius: 5px; */
     background-size: contain;
     background-repeat: no-repeat;
 }
+#icon_cb_f {
+    background-image: url('img/check-false.png');
+    width: 5em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_cb_t {
+    background-image: url('img/check-true.png');
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
 
 .player_area {
     border: 1px solid #ccc;

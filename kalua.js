@@ -85,7 +85,7 @@ function (dojo, declare,) {
                     <div>
                         <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
-                        <span>Leader: <span id="panel_l_${player.id}"></span> <span id="icon_l" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
                         <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
@@ -296,11 +296,11 @@ function (dojo, declare,) {
                 element = $(`panel_l_${player.id}`);
                 if (player.chief == 1)
                 {
-                    element.innerHTML = `<input type="checkbox" checked onclick="return false">`;
+                    element.innerHTML = `<span id="icon_cb_t" style="display:inline-block;vertical-align:middle;"></span>`;
                 }
                 else
                 {
-                    element.innerHTML = `<input type="checkbox" unchecked onclick="return false">`;
+                    element.innerHTML = `<span id="icon_cb_f" style="display:inline-block;vertical-align:middle;"></span>`;
                 }
             });
 
@@ -402,8 +402,6 @@ function (dojo, declare,) {
                         {
                             this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
                                 this.bgaPerformAction("actGiveSpeech");
-                                this.movetokens(0, 1); // move token (type 0) one space to the right
-                                //need to used player's "sprite" field to determine which token to move
                             });
                             this.addActionButton('convertAtheist-btn', _('Convert Atheists'), () => {
                                 this.bgaPerformAction("actConvertAtheists");
@@ -424,7 +422,7 @@ function (dojo, declare,) {
                             });
                         }
                         break;
-                                            case 'phaseThreePlayCard':
+                                        case 'phaseThreePlayCard':
                         if (this.isCurrentPlayerActive()) 
                         {
                             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
@@ -492,18 +490,7 @@ function (dojo, declare,) {
         giveSpeech: function(player_id) {
             console.log("Giving a speech");
             this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
-                //pick which token to move
-                const tokenToMove = Object.values(this.hkToken_0.items).find(token => token.type == 3);
-                if (tokenToMove) {
-                    // Remove from current stock
-                    this.hkToken_0.removeFromStockById(tokenToMove.id);
-                
-                    // Add to adjacent stock
-                    this.hkToken_1.addToStockWithId(tokenToMove.type, tokenToMove.id);
-                
-                    // Optionally animate the move
-                    this.slideToObject(tokenToMove.div, document.getElementById('hkboard_child_1')).play();
-                }
+            this.movetokens(0, 1);
         },
 
         convertAtheists: function(player_id, num_atheists) {
@@ -563,10 +550,11 @@ function (dojo, declare,) {
 
         // Check the number of selected items
         const selectedCards = this.playerHand.getSelectedItems();
-        if (selectedCards.length !== 1) {
-            this.showMessage(_('Please select a card'), "error");
+        if (selectedCards.length === 0) {
+            this.showMessage(_('Please select a card'), 'error');
             return;
         }
+        const card = selectedCards[0].id;
 
         // Play the card
         this.playerHand.unselectAll();
