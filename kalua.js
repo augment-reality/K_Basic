@@ -167,8 +167,8 @@ function (dojo, declare,) {
             }
 
             Object.values(gamedatas.players).forEach((player, idx) => {
-                // generate a number 1-6 and multiply by the iteration number (idx + 1)
-                const dieValue = (Math.floor(Math.random() * 6) + 1) * (idx + 1);
+                // Generate a random d6 value (1-6), then increment by 6 * player number (idx)
+                const dieValue = Math.floor(Math.random() * 6) + (6 * idx);
                 this['dice'].addToStock(dieValue);
             });
 
@@ -619,6 +619,7 @@ function (dojo, declare,) {
             }
             /* Update counter */
             this.cardCounters[player_id].incValue(1);
+            //this.gamedatas.players[player_id].addToStockWithId(); // card back visible to all players
         },
 
         notif_giveSpeech: async function( args )
