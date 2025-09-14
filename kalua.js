@@ -20,9 +20,11 @@ define([
     "ebg/core/gamegui",
     "ebg/counter",
     "ebg/stock",
-    "ebg/zone"
+    "ebg/zone",
+
 ],
-function (dojo, declare) {
+
+function (dojo, declare,) {
     return declare("bgagame.kalua", ebg.core.gamegui, {
         constructor: function(){
             console.log('kalua constructor');
@@ -63,6 +65,8 @@ function (dojo, declare) {
 
             // Declare hexadecimal color maping for player tokens (default red/green/blue/orange/brown)
             
+
+            
             // Create player areas
             Object.values(gamedatas.players).forEach(player => {
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
@@ -78,14 +82,15 @@ function (dojo, declare) {
             // Set up players' side panels
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
-                    <div> Prayer count: <span id="panel_p_${player.id}"></span> <br>
-                     Happiness:<span id="panel_h_${player.id}"></span><br>
-                     Has leader:<span id="panel_l_${player.id}"></span><br>
-                     Cards:<span id="panel_c_${player.id}"></span><br>
-                     Temples:<span id="panel_t_${player.id}"></span><br>
-                     Amulets:<span id="panel_a_${player.id}"></span><br>
-                     Families:<span id="panel_f_${player.id}"></span>
-                     </div>
+                    <div>
+                        <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
+                        <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
+                        <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
+                        <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
+                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
+                    </div>
                 `);
 
                 // Create prayer counter in player panel
@@ -131,11 +136,11 @@ function (dojo, declare) {
             Object.values(gamedatas.players).forEach(player => {
                 this[`fams_${player.id}`] = new ebg.stock();
                 this[`fams_${player.id}`].create(this, $(`${player.id}_families`), 30, 30);
-                this[`fams_${player.id}`].image_items_per_row = 10;
+                this[`fams_${player.id}`].image_items_per_row = 6;
                 this[`fams_${player.id}`].setSelectionMode(0); // no selection
 
                 // Make types for each color of meeple
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < 7; i++) {
                     this[`fams_${player.id}`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png', i)
                     // addItemType(type: number, weight: number, image: string, image_position: number )
                 }
@@ -143,46 +148,43 @@ function (dojo, declare) {
                 //Generate meeples based on family and chief count
 
                 for (let i = 0; i < player.family; i++) {
-                    this[`fams_${player.id}`].addToStock(8); // 9 = atheist meeple
+                    this[`fams_${player.id}`].addToStock(6); // 6 = atheist meeple
                 }
                 if (player.chief > 0) {
-                    this[`fams_${player.id}`].addToStock(1); // 1 = chief meeple
+                    this[`fams_${player.id}`].addToStock(player.sprite); // 1 = chief meeple
                 }    
                 
             });
 
 
-            // //Add dice faces (each row is a different color)
-            // this['dice'] = new ebg.stock();
-            // this['dice'].create(this, document.getElementById('dice'), 50, 48.1);
-            // this['dice'].setSelectionMode(0);
-            // this['dice'].image_items_per_row = 6;
-            // for (let i = 1; i <= 20; i++) {
-            //     this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_481.png');
-            // }
-
             //Add dice faces (each row is a different color)
             this['dice'] = new ebg.stock();
-            this['dice'].create(this, document.getElementById('dice'), 50, 50);
+            this['dice'].create(this, document.getElementById('dice'), 50, 49.2);
             this['dice'].setSelectionMode(0);
             this['dice'].image_items_per_row = 6;
-            for (let i = 1; i <= 6; i++) {
-                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_50.png');
+            for (let i = 1; i <= 30; i++) {
+                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i);
             }
+
+            Object.values(gamedatas.players).forEach((player, idx) => {
+                // Generate a random d6 value (1-6), then increment by 6 * player number (idx)
+                const dieValue = Math.floor(Math.random() * 6) + (6 * idx);
+                this['dice'].addToStock(dieValue);
+            });
 
 
             // Initialize and create atheist families stock
             this['atheists'] = new ebg.stock();
             this['atheists'].create(this, document.getElementById('atheistFamilies'), 30, 30);
             this['atheists'].setSelectionMode(0);
-            this['atheists'].image_items_per_row = 10;
-            for (let i = 0; i < 10; i++) {
+            this['atheists'].image_items_per_row = 6;
+            for (let i = 0; i < 7; i++) {
                  this[`atheists`].addItemType(i, i, g_gamethemeurl + 'img/30_30_meeple.png', i);
             }
 
             // Populate atheist families based on db value
             for (let i = 0; i < gamedatas.atheist_families; i++) {
-                this['atheists'].addToStock(8); // 8 = atheist meeple
+                this['atheists'].addToStock(6); // 5 = atheist meeple
             }
 
             // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
@@ -198,10 +200,10 @@ function (dojo, declare) {
                 // Initialize and create hk token stock for each childDiv
                 this[`hkToken_${i}`] = new ebg.stock();
                 this[`hkToken_${i}`].create(this, childDiv, 30, 30);
-                for (let j = 0; j < 10; j++) {
+                for (let j = 0; j < 5; j++) {
                     this[`hkToken_${i}`].addItemType(j, j, g_gamethemeurl + 'img/30_30_hktoken.png', j);
                 }
-                            
+
                 this[`hkToken_${i}`].setSelectionMode(0);
                 // this[`hkToken_${i}`].image_items_per_row = 1;
                 this[`hkToken_${i}`].container_div.width = "30px";
@@ -215,24 +217,31 @@ function (dojo, declare) {
 
             // Get current HK token count for players - index for player color
             let hkTokenCount = 0;
-            Object.values(gamedatas.players).forEach(() => {
-                this[`hkToken_${5}`].addToStock(hkTokenCount);
+            Object.values(gamedatas.players).forEach(player => {
+                this[`hkToken_${5}`].addToStock(hkTokenCount); // type
                 hkTokenCount++;
+
             });
 
-            
+            // // test moving tokens
+            // this.movetokens(2, -2); // move token (type 3) one space to the right
+            // this.movetokens(1, -5); // move token (type 3) one space to the right
+            // this.movetokens(0, 3); // move token (type 3) one space to the right
+
+
             // Create stock for played cards
             this['playedCards'] = new ebg.stock();  
             this['playedCards'].create(this, document.getElementById('playedCards'), 120, 177.4);
             this['playedCards'].image_items_per_row = 5;
             this['playedCards'].setSelectionMode(0);
 
-            // Initialize card stock for each player card div
+            // Initialize card stock for each player card div   
             Object.values(gamedatas.players).forEach(player => {
                 this[`${player.id}_cards`] = new ebg.stock();
                 this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 177.4);
                 this[`${player.id}_cards`].image_items_per_row = 5;
-                this[`${player.id}_cards`].setSelectionMode(1);
+                this[`${player.id}_cards`].setSelectionMode(1); // single selection
+                dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
 
             });
 
@@ -275,21 +284,6 @@ function (dojo, declare) {
                 });
             } 
 
-            // DEBUG Add all cards to each player's hand
-            // Object.values(gamedatas.players).forEach(player => {
-            //     for (let i = 1; i <= 22; i++) {
-            //         this[`${player.id}_cards`].addToStock(i);
-            //     }
-            // });
-
-
-            // Add a die to each player's hand
-            Object.values(gamedatas.players).forEach(player => {
-                    // add a random die face
-                    const rando = Math.floor(Math.random() * 6) + 1;
-                    this[`dice`].addToStock(rando);
-            });
-
             /*** Update the UI with gamedata ***/
 
             /* Update counters */
@@ -303,11 +297,11 @@ function (dojo, declare) {
                 element = $(`panel_l_${player.id}`);
                 if (player.chief == 1)
                 {
-                    element.innerHTML = "true";
+                    element.innerHTML = `<span id="icon_cb_t" style="display:inline-block;vertical-align:middle;"></span>`;
                 }
                 else
                 {
-                    element.innerHTML = "false";
+                    element.innerHTML = `<span id="icon_cb_f" style="display:inline-block;vertical-align:middle;"></span>`;
                 }
             });
 
@@ -321,6 +315,16 @@ function (dojo, declare) {
                 console.log("id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
                 this.drawCard(this.player_id, card.id, card.type, card.type_arg);
             })
+
+            // Update sidebar counters based on gamedata
+            Object.values(gamedatas.players).forEach(player => {
+                this.prayerCounters[player.id].setValue(player.prayer);
+                this.happinessCounters[player.id].setValue(player.happiness);
+                this.cardCounters[player.id].setValue(player.cards);
+                this.templeCounters[player.id].setValue(player.temple);
+                this.amuletCounters[player.id].setValue(player.amulet);
+                this.familyCounters[player.id].setValue(player.family);
+            });
 
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
@@ -429,6 +433,14 @@ function (dojo, declare) {
                             });
                         }
                         break;
+                                        case 'phaseThreePlayCard':
+                        if (this.isCurrentPlayerActive()) 
+                        {
+                            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                            const card = selectedCards[0];
+                            this.onBtnPlayCard();
+                        }
+                        break;
                 }
             }
         },
@@ -457,6 +469,20 @@ function (dojo, declare) {
             return 0;
         },
 
+        playCardOnTable : function(player_id, color, value, card_id) {
+                // You played a card. If it exists in your hand, move card from there and remove
+                // corresponding item
+                    this[`${player_id}_cards`].removeFromStockById(card_id);
+                    this.cardCounters[player_id].incValue(-1);
+
+            // Add card to played cards area
+            const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
+            console.log("playing unique ID " + uniqueId)
+            this['playedCards'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
+
+            console.log(`Card ${card_id} played by player ${player_id}`);
+        },
+
         drawCard: function(player, card_id, card_type, card_type_arg) {
             console.log("Drawing a card");
 
@@ -467,10 +493,29 @@ function (dojo, declare) {
             console.log(`Card ${card_id} added to player ${this.player}'s hand`);            
         },
 
+        movetokens: function(tokenTypeToMove, desiredShift) {
+            flag = false;
+            for (let x = 0; x <= 10; x++) {
+                    const tokens = this[`hkToken_${x}`].items;
+                    Object.values(tokens).forEach(token => {
+                        if (token.type == tokenTypeToMove && flag == false) {
+                            // Remove from current stock
+                            this[`hkToken_${x}`].removeFromStock(tokenTypeToMove);
+                            // Add to adjacent stock
+                            let newdiv = x + desiredShift;
+                            if (newdiv < 0) newdiv = 0;
+                            if (newdiv > 10) newdiv = 10;
+                            this[`hkToken_${newdiv}`].addToStock(token.type);
+                            flag = true; // only move one token
+                        }
+                    });
+                }
+        },
 
         giveSpeech: function(player_id) {
             console.log("Giving a speech");
             this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
+            this.movetokens(0, 1);
         },
 
         convertAtheists: function(player_id, num_atheists) {
@@ -521,8 +566,21 @@ function (dojo, declare) {
             playerFamilies.removeFromStock(1);
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
-            element.innerHTML = "false";
+            element.innerHTML = `<input type="checkbox" disabled>`;
         },
+
+        onBtnPlayCard: function () {
+        const action = "actPlayCard";
+        if (!this.checkAction(action)) return;
+
+        // Check the number of selected items
+        const selectedCards = this.playerHand.getSelectedItems();
+        if (selectedCards.length === 0) {
+            this.showMessage(_('Please select a card'), 'error');
+            return;
+        }
+        const card = selectedCards[0].id;
+    },
 
 
         
@@ -534,6 +592,15 @@ function (dojo, declare) {
 
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
+        },
+
+        onPlayerHandSelectionChanged: function () {
+            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+            if (selectedCards.length === 1 && this.checkAction('actPlayCard', true)) {
+                const card_id = selectedCards[0].id;
+                this[`${this.player_id}_cards`].unselectAll();
+                this.bgaPerformAction('actPlayCard', { card_id: card_id });
+            }
         },
 
         notif_playerDrewCard: async function( args )
@@ -552,6 +619,7 @@ function (dojo, declare) {
             }
             /* Update counter */
             this.cardCounters[player_id].incValue(1);
+            //this.gamedatas.players[player_id].addToStockWithId(); // card back visible to all players
         },
 
         notif_giveSpeech: async function( args )

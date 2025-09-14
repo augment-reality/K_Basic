@@ -121,6 +121,49 @@ border-radius: 5px; */
     margin-left: 0;
 }
 
+#icon_h {
+    background-image: url('img/SidebarIcon_Happy_30_30.png');
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_p {
+    background-image: url('img/SidebarIcon_Pray_30_30.png');  
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_f {
+    background-image: url('img/SidebarIcon_Fam1_30_30.png');
+    width: 5em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_l {
+    background-image: url('img/SidebarIcon_Lead_30_30.png');
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_cb_f {
+    background-image: url('img/check-false.png');
+    width: 5em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_cb_t {
+    background-image: url('img/check-true.png');
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
 .player_area {
     border: 1px solid #ccc;
     padding: 10px;

@@ -21,7 +21,7 @@
 -- Create a "card" table to be used with the "Deck" tools:
 -- card_type (global/local/bonus) 21 Bonus, 19 Local Disaster, 10 Global Disaster
 -- card_type_arg(1,2,3)
--- card_location (deck, hand)
+-- card_location (deck, hand, discard, played, resolved)
 -- card_location_arg (player id)
 
 CREATE TABLE IF NOT EXISTS `disaster_card` (
@@ -44,20 +44,14 @@ CREATE TABLE IF NOT EXISTS `bonus_card` (
 
 ALTER TABLE `player` 
 ADD `player_first` BOOLEAN NOT NULL DEFAULT '0',
+ADD `player_token_sprite` BOOLEAN NOT NULL DEFAULT '0',
 ADD `player_happiness` INT(11) NOT NULL DEFAULT '5',
 ADD `player_prayer` INT(11) NOT NULL DEFAULT '5',
 ADD `player_family` INT(11) NOT NULL DEFAULT '0',
 ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1',
 ADD `player_die` smallint(5) NOT NULL DEFAULT '0',
 ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
-ADD `player_amulet` INT(11) NOT NULL DEFAULT '0';
+ADD `player_amulet` INT(11) NOT NULL DEFAULT '0',
+ADD `player_card_count` INT(11) NOT NULL DEFAULT '0';
 
-
--- Use table from Cant Stop as example for hk token zones
--- CREATE TABLE IF NOT EXISTS `col` (
---   `col_id` int(10) unsigned NOT NULL,
---   `col_player_id` int(10) unsigned NOT NULL DEFAULT '0',
---   PRIMARY KEY (`col_id`,`col_player_id`),
---   KEY `col_player_id` (`col_player_id`)
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
