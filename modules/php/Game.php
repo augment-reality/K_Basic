@@ -469,13 +469,14 @@ class Game extends \Table
         $current_player_id = (int) $this->getCurrentPlayerId();
         $result["players"] = self::getCollectionFromDb(
             "SELECT player_id id, 
-                player_token_sprite sprite, 
+                player_no sprite, 
                 player_family family, 
                 player_chief chief, 
                 player_happiness happiness,
                 player_prayer prayer,
                 player_temple temple,
-                player_amulet amulet
+                player_amulet amulet,
+                player_card_count cards
                 FROM player"
         );
         /* add name */
@@ -517,10 +518,13 @@ class Game extends \Table
      */
     protected function setupNewGame($players, $options = [])
     {
-        // Set the colors of the players with HTML color code. The default below is red/green/blue/orange/brown. The
-        // number of colors defined here must correspond to the maximum number of players allowed for the game.
+ 
         $gameinfos = $this->getGameinfos();
-        $default_colors = $gameinfos['player_colors'];
+
+        // Set the colors of the players - should match player tokens
+        $player_color_list = ["#4685FF", "#2EA232", "#C22D2D", "#C8CA25","#913CB3"];
+        $default_colors = [...$player_color_list];
+
         foreach ($players as $player_id => $player) {
             // Now you can access both $player_id and $player array
             $query_values[] = vsprintf("('%s', '%s', '%s', '%s', '%s')", [
@@ -532,10 +536,6 @@ class Game extends \Table
             ]);
         }
 
-        // Create players based on generic information.
-        //
-        // NOTE: You can add extra field on player table in the database (see dbmodel.sql) and initialize
-        // additional fields directly here.
         static::DbQuery(
             sprintf(
                 "INSERT INTO player (player_id, player_color, player_canal, player_name, player_avatar) VALUES %s",
@@ -543,7 +543,6 @@ class Game extends \Table
             )
         );
 
-        $this->reattributeColorsBasedOnPreferences($players, $gameinfos["player_colors"]);
         $this->reloadPlayersBasicInfos();
 
         // Init global values with their initial values.

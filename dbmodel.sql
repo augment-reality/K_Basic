@@ -51,5 +51,7 @@ ADD `player_family` INT(11) NOT NULL DEFAULT '0',
 ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1',
 ADD `player_die` smallint(5) NOT NULL DEFAULT '0',
 ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
-ADD `player_amulet` INT(11) NOT NULL DEFAULT '0';
+ADD `player_amulet` INT(11) NOT NULL DEFAULT '0',
+ADD `player_card_count` INT(11) NOT NULL DEFAULT '0';
+
 
