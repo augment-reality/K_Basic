@@ -52,7 +52,7 @@ function (dojo, declare,) {
             this.ID_GLOBAL_DISASTER = 1;
             this.ID_LOCAL_DISASTER = 2;
             this.ID_BONUS = 3;
-            this.ID_AHTHIEST_STOCK = 6;
+            this.ID_AHTHIEST_STOCK = 5;
             this.prayerCounters = {};
             this.happinessCounters = {};
             this.cardCounters = {};
@@ -185,7 +185,7 @@ function (dojo, declare,) {
 
             // Populate atheist families based on db value
             for (let i = 0; i < gamedatas.atheist_families; i++) {
-                this['atheists'].addToStock(6); // 5 = atheist meeple
+                this['atheists'].addToStock(this.ID_AHTHIEST_STOCK); // 5 = atheist meeple
             }
 
             // Add ten children divs to hkboard with alternating widths of 33.3 and 30px
