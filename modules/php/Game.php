@@ -109,113 +109,105 @@ class Game extends \Table
         /* Active player must select the player to target with their disaster */
     }
 
-    // public function stConvertPray(): void
-    // {
+    public function stConvertPray(): void
+    {
 
-    // // Update happiness, prayer, families based on end of round rules
-    // // Check for end game condition
-    // // Update trick leader to next player 
-    // // Check that they haven’t been completely eliminated - cycle until we found someone who hasn’t 
-    // // Set active player to selected trick leader
-    // $this->trace("KALUA families are converting and praying!");
+    // Update happiness, prayer, families based on end of round rules
+    // Check for end game condition
+    // Update trick leader to next player 
+    // Check that they haven’t been completely eliminated - cycle until we found someone who hasn’t 
+    // Set active player to selected trick leader
+    $this->trace("KALUA families are converting and praying!");
 
-    //     // Initialize constants
-    //     $happinessScores = [];
-    //     $converted_pool = 0;
+        // Initialize constants
+        $happinessScores = [];
+        $converted_pool = 0;
 
-    //     // Collect happiness scores
-    //     foreach ($players as $player_id => $player) {
-    //         $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
-    //     }
+        // Collect happiness scores
+        foreach ($players as $player_id => $player) {
+            $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
+        }
 
-    //     // Find lowest and highest happiness scores
-    //     $happy_value_low = min($happinessScores);
-    //     $happy_value_high = max($happinessScores);
+        // Find lowest and highest happiness scores
+        $happy_value_low = min($happinessScores);
+        $happy_value_high = max($happinessScores);
 
+        // Get player IDs with highest happiness score
+        $high_happiness_players = array_keys(array_filter($happinessScores, function($happiness) use ($happy_value_high) {
+            return $happiness == $happy_value_high;
+        }));
         
-    //     // Get player IDs with highest happiness score
-    //     $high_happiness_players = array_keys(array_filter($happinessScores, function($happiness) use ($happy_value_high) {
-    //         return $happiness == $happy_value_high;
-    //     }));
-        
-    //     $high_players = count($high_happiness_players);
-
-    //     // Skip family redistribution if everyone has same happiness
-    //     if ($happy_value_low != $happy_value_high) {
-    //         // Collect families to convert from low and middle happiness players
-    //         foreach ($players as $player_id => $happiness) {
-    //             if ($happiness == $happy_value_low) {
-    //                 $player_family = $this->getFamilyCount($player_id);
-    //                 $to_convert = min(2, $player_family);
-    //                 if ($to_convert > 0) {
-    //                     $this->setFamilyCount($player_id, $player_family - $to_convert);
-    //                     $converted_pool += $to_convert;
-    //                 }
-    //             } elseif ($happiness != $happy_value_high) {
-    //                 $player_family = $this->getFamilyCount($player_id);
-    //                 if ($player_family > 0) {
-    //                     $this->setFamilyCount($player_id, $player_family - 1);
-    //                     $converted_pool += 1;
-    //                 }
-    //             }
-    //         }
-    //         // Divide converted_pool among high happiness players, remainder to atheist families
-    //         $fams_to_happy = intdiv($converted_pool, $high_players);
-    //         $remainder = $converted_pool % $high_players;
-    //         foreach ($high_happiness_players as $player_id) {
-    //             $this->receiveFamiliesFromPool($player_id, $fams_to_happy);
-    //         }
-    //         // Move remainder to atheist families (global_id = 101)
-    //         if ($remainder > 0) {
-    //             $this->DbQuery("UPDATE global SET global_value = global_value + $remainder WHERE global_id = 101");
-    //         }
-
-    //         // Redistribute families
-    //         if (count($converted_pool) >= 3 * $high_players) {
-    //             foreach ($high_happiness_players as $player_id => $happiness) {
-    //                 $this->receiveFamiliesFromPool($player_id, 3);
-    //             }
-    //             $this->sendFamiliesToKalua(count($converted_pool) - 3 * $high_players);
-    //         } else {
-    //             $families_per_player = intdiv(count($converted_pool), $high_players);
-    //             foreach ($high_happiness_players as $player_id => $happiness) {
-    //                 $this->receiveFamiliesFromPool($player_id, $families_per_player);
-    //             }
-    //             $this->sendFamiliesToKalua(count($converted_pool) % $high_players);
-    //         }
-    //     }
-
-    //     // Players receive prayers (1 per 5 family, and extra if not highest)
-    //     foreach ($players as $player_id => $happiness) {
-    //         $family_count = $this->getFamilyCount($player_id);
-    //         $prayers = intdiv($family_count, 5);
-    //         if ($happiness == $happy_value_low) {
-    //             $prayers += 4;
-    //         } elseif ($happiness != $happy_value_high) {
-    //             $prayers += 2;
-    //         }
-    //         // add $prayers to player prayer total
-    //     }
-
-    //     // Check for player elimination (no chief/families)
-    //     foreach ($players as $player_id => $player) {
-    //         if ($this->getFamilyCount($player_id) == 0 && $this->getChiefCount($player_id) == 0) {
-    //             //$this->eliminatePlayer($player_id);
-    //         }
-    //     }
-
-    //     // Check religions remaining
-    //     if (count($this->getRemainingReligions()) == 1) {
-    //         $this->gamestate->nextState('gameEnd');
-    //         return;
-    //     }
-
-    //     // Change active player
-    //     $this->activeNextPlayer();
-    //     $this->gamestate->nextState('nextPlayer');
+        // Count of players with highest happiness
+        $high_players = count($high_happiness_players);
 
 
-    // }
+
+        // Redistribute families, unless everyone has same happiness
+        if ($happy_value_low != $happy_value_high) {
+
+            // Collect 2 families from low and 1 from middle happiness players
+            foreach ($players as $player_id => $happiness) {
+                if ($happiness == $happy_value_low) {
+                    $player_family = $this->getFamilyCount($player_id);
+                    $to_convert = min(2, $player_family);
+                    if ($to_convert > 0) {
+                        $this->setFamilyCount($player_id, $player_family - $to_convert);
+                        $converted_pool += $to_convert;
+                    }
+                } elseif ($happiness != $happy_value_high) {
+                    $player_family = $this->getFamilyCount($player_id);
+                    if ($player_family > 0) {
+                        $this->setFamilyCount($player_id, $player_family - 1);
+                        $converted_pool += 1;
+                    }
+                }
+            }
+
+            // Divide converted_pool among high happiness players, remainder to atheist families
+            $fams_to_happy = intdiv($converted_pool, $high_players);
+            $remainder = $converted_pool % $high_players;
+            foreach ($high_players as $player_id) {
+                $this->getFromPool($player_id, $fams_to_happy);
+            }
+
+            // Move remainder to atheist families (global_id = 101)
+            if ($remainder > 0) {
+                $this->DbQuery("UPDATE global SET global_value = global_value + $remainder WHERE global_id = 101");
+            }
+        }
+
+        // Players receive prayers (1 per 5 family, and extra if not highest)
+        foreach ($players as $player_id => $prayers) {
+            $family_count = $this->getFamilyCount($player_id);
+            $prayers += intdiv($family_count, 5);
+            if ($fams == $happy_value_low) {
+                $prayers += 4;
+            } elseif ($fams != $happy_value_high) {
+                $prayers += 2;
+            }
+            self::DbQuery("UPDATE player SET player_prayer = $prayers + player_prayer WHERE player_id = $player_id");
+        }
+
+        // Check for player elimination (no chief/families)
+        foreach ($players as $player_id => $player) {
+            if ($this->getFamilyCount($player_id) == 0 && $this->getChiefCount($player_id) == 0) {
+                self::DbQuery("UPDATE player SET player_eliminated = 1 WHERE player_id = $player_id");
+            }
+        }
+
+        // Check religions remaining and proceed to end game if only one or zero remain
+        $eliminated_count = (int)$this->getUniqueValueFromDb("SELECT SUM(player_eliminated) FROM player");
+        $player_count = count($players);
+        if ($eliminated_count > $player_count - 1) {
+            $this->gamestate->nextState('gameEnd');
+            return;
+        }
+
+        // Change active player
+        $this->activeNextPlayer();
+        $this->gamestate->nextState('nextRound');
+
+    }
 
 
 ///////////Player Actions /////////////////////
@@ -407,6 +399,18 @@ class Game extends \Table
     /******************************/
 
     /***** helpers ******/
+
+    // Aux function to move families from pool to player in convert/pray phase
+    public function getFromPool($player_id, $num_families) {
+        // Move families from global pool (atheists) to player
+        self::DbQuery("UPDATE player SET player_family = player_family + $num_families WHERE player_id = $player_id");
+    }
+
+    // Aux function to count families in convert/pray phase
+    public function getFamilyCount($player_id) {
+        return (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = {$player_id}");
+    }
+
     public function check_playerHasLeader() : bool
     {
         $leader_int = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$this->getActivePlayerId()}");
