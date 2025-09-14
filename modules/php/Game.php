@@ -108,21 +108,19 @@ class Game extends \Table
         /* Active player must select the player to target with their disaster */
     }
 
-    public function stConvertPray(): void
-    {
-        /* Based on rules, update family counts */
+    // public function stConvertPray(): void
+    // {
 
-               /* Based on rules, update praying points
-    Check for end game condition
-    Update trick leader to next player 
-    Check that they haven’t been completely eliminated - cycle until we found someone who hasn’t 
-    Set active player to selected trick leader */
+    // // Update happiness, prayer, families based on end of round rules
+    // // Check for end game condition
+    // // Update trick leader to next player 
+    // // Check that they haven’t been completely eliminated - cycle until we found someone who hasn’t 
+    // // Set active player to selected trick leader
+    // $this->trace("KALUA families are converting and praying!");
 
-        // {
     //     // Initialize constants
-    //     $players = $this->loadPlayersBasicInfos();
     //     $happinessScores = [];
-    //     $converted_pool = [];
+    //     $converted_pool = 0;
 
     //     // Collect happiness scores
     //     foreach ($players as $player_id => $player) {
@@ -133,37 +131,56 @@ class Game extends \Table
     //     $happy_value_low = min($happinessScores);
     //     $happy_value_high = max($happinessScores);
 
+        
+    //     // Get player IDs with highest happiness score
+    //     $high_happiness_players = array_keys(array_filter($happinessScores, function($happiness) use ($happy_value_high) {
+    //         return $happiness == $happy_value_high;
+    //     }));
+        
+    //     $high_players = count($high_happiness_players);
+
     //     // Skip family redistribution if everyone has same happiness
     //     if ($happy_value_low != $happy_value_high) {
-    //         // Send families to temporary group for redistribution
+    //         // Collect families to convert from low and middle happiness players
     //         foreach ($players as $player_id => $happiness) {
     //             if ($happiness == $happy_value_low) {
-    //                 $converted_pool[] = 0;
-    //                 // add logic to lose 2 families
+    //                 $player_family = $this->getFamilyCount($player_id);
+    //                 $to_convert = min(2, $player_family);
+    //                 if ($to_convert > 0) {
+    //                     $this->setFamilyCount($player_id, $player_family - $to_convert);
+    //                     $converted_pool += $to_convert;
+    //                 }
     //             } elseif ($happiness != $happy_value_high) {
-    //                 $converted_pool[] = 0;
-    //                 // add logic to lose 1 family
+    //                 $player_family = $this->getFamilyCount($player_id);
+    //                 if ($player_family > 0) {
+    //                     $this->setFamilyCount($player_id, $player_family - 1);
+    //                     $converted_pool += 1;
+    //                 }
     //             }
     //         }
-
-    //         // Count number of players with highest happiness score
-    //         $high_happiness_players = array_filter($happinessScores, function($happiness) use ($happy_value_high) {
-    //             return $happiness == $happy_value_high;
-    //         });
-    //         $count_high_happiness_players = count($high_happiness_players);
+    //         // Divide converted_pool among high happiness players, remainder to atheist families
+    //         $fams_to_happy = intdiv($converted_pool, $high_players);
+    //         $remainder = $converted_pool % $high_players;
+    //         foreach ($high_happiness_players as $player_id) {
+    //             $this->receiveFamiliesFromPool($player_id, $fams_to_happy);
+    //         }
+    //         // Move remainder to atheist families (global_id = 101)
+    //         if ($remainder > 0) {
+    //             $this->DbQuery("UPDATE global SET global_value = global_value + $remainder WHERE global_id = 101");
+    //         }
 
     //         // Redistribute families
-    //         if (count($converted_pool) >= 3 * $count_high_happiness_players) {
+    //         if (count($converted_pool) >= 3 * $high_players) {
     //             foreach ($high_happiness_players as $player_id => $happiness) {
     //                 $this->receiveFamiliesFromPool($player_id, 3);
     //             }
-    //             $this->sendFamiliesToKalua(count($converted_pool) - 3 * $count_high_happiness_players);
+    //             $this->sendFamiliesToKalua(count($converted_pool) - 3 * $high_players);
     //         } else {
-    //             $families_per_player = intdiv(count($converted_pool), $count_high_happiness_players);
+    //             $families_per_player = intdiv(count($converted_pool), $high_players);
     //             foreach ($high_happiness_players as $player_id => $happiness) {
     //                 $this->receiveFamiliesFromPool($player_id, $families_per_player);
     //             }
-    //             $this->sendFamiliesToKalua(count($converted_pool) % $count_high_happiness_players);
+    //             $this->sendFamiliesToKalua(count($converted_pool) % $high_players);
     //         }
     //     }
 
@@ -195,22 +212,9 @@ class Game extends \Table
     //     // Change active player
     //     $this->activeNextPlayer();
     //     $this->gamestate->nextState('nextPlayer');
-    // }
 
-    // public function actPass(): void
-    // {
-    //     // Retrieve the active player ID.
-    //     $player_id = (int)$this->getActivePlayerId();
-    //     // Notify all players about the choice to pass.
-    //     $this->notifyAllPlayers("cardPlayed", clienttranslate('${player_name} passes'), [
-    //         "player_id" => $player_id,
-    //         "player_name" => $this->getActivePlayerName(),
-    //     ]);
-    //     // at the end of the action, move to the next state
-    //     $this->gamestate->nextState("pass");
-    // }
 
-    }
+    // }
 
 
 ///////////Player Actions /////////////////////
