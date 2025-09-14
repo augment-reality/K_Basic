@@ -52,6 +52,7 @@ function (dojo, declare,) {
             this.ID_GLOBAL_DISASTER = 1;
             this.ID_LOCAL_DISASTER = 2;
             this.ID_BONUS = 3;
+            this.ID_AHTHIEST_STOCK = 6;
             this.prayerCounters = {};
             this.happinessCounters = {};
             this.cardCounters = {};
@@ -148,7 +149,7 @@ function (dojo, declare,) {
                 //Generate meeples based on family and chief count
 
                 for (let i = 0; i < player.family; i++) {
-                    this[`fams_${player.id}`].addToStock(6); // 6 = atheist meeple
+                    this[`fams_${player.id}`].addToStock(this.ID_AHTHIEST_STOCK);
                 }
                 if (player.chief > 0) {
                     this[`fams_${player.id}`].addToStock(player.sprite); // 1 = chief meeple
@@ -166,11 +167,11 @@ function (dojo, declare,) {
                 this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i);
             }
 
-            Object.values(gamedatas.players).forEach((player, idx) => {
-                // Generate a random d6 value (1-6), then increment by 6 * player number (idx)
-                const dieValue = Math.floor(Math.random() * 6) + (6 * idx);
-                this['dice'].addToStock(dieValue);
-            });
+            // Object.values(gamedatas.players).forEach((player, idx) => {
+            //     // Generate a random d6 value (1-6), then increment by 6 * player number (idx)
+            //     const dieValue = Math.floor(Math.random() * 6) + (6 * idx);
+            //     this['dice'].addToStock(dieValue);
+            // });
 
 
             // Initialize and create atheist families stock
@@ -523,8 +524,8 @@ function (dojo, declare,) {
             const atheistFamilies = this['atheists'];
             const playerFamilies = this[`fams_${player_id}`];
             for (let i = 0; i < num_atheists; i++) {
-                atheistFamilies.removeFromStock(8); // Remove from atheist families
-                playerFamilies.addToStock(8); // Add to player's families
+                atheistFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from atheist families
+                playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to player's families
             }
             this.familyCounters[player_id].incValue(num_atheists);
         },
@@ -547,23 +548,23 @@ function (dojo, declare,) {
         convertBelievers : function(player_id, target_player_id) {
             const targetFamilies = this[`fams_${target_player_id}`];
             const playerFamilies = this[`fams_${player_id}`];
-            targetFamilies.removeFromStock(8); // Remove from target player's families
-            playerFamilies.addToStock(8); // Add to current player's families
+            targetFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from target player's families
+            playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to current player's families
 
             this.familyCounters[player_id].incValue(1);
             this.familyCounters[target_player_id].incValue(-1);
         },
 
-        sacrificeLeader: function(player_id, num_atheists) {
+        sacrificeLeader: function(player_id, player_no, num_atheists) {
             console.log("Sacrificing leader and gaining " + num_atheists + " atheists");
             const playerFamilies = this[`fams_${this.player_id}`];
             const atheistFamilies = this['atheists'];
             for (let i = 0; i < num_atheists; i++) 
             {
-                atheistFamilies.removeFromStock(8); // Remove from atheist families
-                playerFamilies.addToStock(8); // Add to player's families
+                atheistFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from atheist families
+                playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to player's families
             }
-            playerFamilies.removeFromStock(1);
+            playerFamilies.removeFromStock(player_no);
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
             element.innerHTML = `<input type="checkbox" disabled>`;
@@ -646,11 +647,12 @@ function (dojo, declare,) {
             const player_id = args.player_id;
             const player_name = args.player_name;
             const num_atheists = args.num_atheists;
+            const player_no = args.player_no;
 
             console.log(player_name + '\'s leader gave a massive speech and sacrificed themselves - ' 
                             + num_atheists + ' were converted');
 
-            this.sacrificeLeader(player_id, num_atheists);
+            this.sacrificeLeader(player_id, player_no, num_atheists);
         },
 
         notif_convertBelievers: async function(args)

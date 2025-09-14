@@ -348,6 +348,7 @@ class Game extends \Table
         $this->notifyAllPlayers('sacrificeLeader', clienttranslate('${player_name}\'s leader gave a massive speeach
                                     and sacrificed themself, converting ${num_atheists} atheists'), [
                 'player_id' => $player_id,
+                'player_no' => $this->getPlayerNoById($player_id),
                 'player_name' => $this->getActivePlayerName(),
                 'num_atheists' => $toConvert
             ]);
