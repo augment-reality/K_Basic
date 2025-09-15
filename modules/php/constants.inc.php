@@ -27,6 +27,7 @@ const ST_PHASE_THREE_DISCARD = 46;
 
 /* Phase four - convert */
 const ST_PHASE_FOUR_CONVERT_PRAY = 50;
+const ST_PHASE_FOUR_NEXT_PLAYER = 51;
 
 /* End game */
 const ST_END_GAME = 99;

@@ -92,7 +92,8 @@ class Game extends \Table
 
     public function stPlayCard(): void
     {
-        /* skip handling for play card (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
+        /* skip handling when none to play (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
+        $this->gamestate->nextState("convert"); // for now, just skip
     }
 
     public function stResolveCard(): void
@@ -124,7 +125,8 @@ class Game extends \Table
         $converted_pool = 0;
 
         // Collect happiness scores
-        foreach ($players as $player_id => $player) {
+        $players = $this->loadPlayersBasicInfos();
+        foreach ($players as $player_id => $_) {
             $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
         }
 
@@ -166,7 +168,7 @@ class Game extends \Table
             // Divide converted_pool among high happiness players, remainder to atheist families
             $fams_to_happy = intdiv($converted_pool, $high_players);
             $remainder = $converted_pool % $high_players;
-            foreach ($high_players as $player_id) {
+            foreach ($high_happiness_players as $player_id) {
                 $this->getFromPool($player_id, $fams_to_happy);
             }
 
@@ -177,15 +179,16 @@ class Game extends \Table
         }
 
         // Players receive prayers (1 per 5 family, and extra if not highest)
-        foreach ($players as $player_id => $prayers) {
+        foreach ($players as $player_id => $_) {
             $family_count = $this->getFamilyCount($player_id);
-            $prayers += intdiv($family_count, 5);
-            if ($fams == $happy_value_low) {
+            $prayers = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+            $prayers += floor($family_count / 5);
+            if ($happinessScores[$player_id] == $happy_value_low) {
                 $prayers += 4;
-            } elseif ($fams != $happy_value_high) {
+            } elseif ($happinessScores[$player_id] != $happy_value_high) {
                 $prayers += 2;
             }
-            self::DbQuery("UPDATE player SET player_prayer = $prayers + player_prayer WHERE player_id = $player_id");
+            self::DbQuery("UPDATE player SET player_prayer = $prayers WHERE player_id = $player_id");
         }
 
         // Check for player elimination (no chief/families)
@@ -203,10 +206,19 @@ class Game extends \Table
             return;
         }
 
-        // Change active player
-        $this->activeNextPlayer();
-        $this->gamestate->nextState('nextRound');
+        // Update round leader to next non-eliminated player
+        $this->gamestate->nextState('phaseFourNextPlayer');
 
+    }
+
+    public function stNextPlayerRound(): void
+    {
+        /* Update the active player to next. 
+        If the active player is now the trick leader (everyone has had a chance), 
+        go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
+        $this->activeNextPlayer();
+        
+        $this->gamestate->nextState("phaseOneDraw");
     }
 
 
@@ -399,6 +411,11 @@ class Game extends \Table
     /******************************/
 
     /***** helpers ******/
+
+    public function setFamilyCount($player_id, $player_family): void
+    {
+        self::DbQuery("UPDATE player SET player_family = $player_family WHERE player_id = $player_id");
+    }
 
     // Aux function to move families from pool to player in convert/pray phase
     public function getFromPool($player_id, $num_families) {

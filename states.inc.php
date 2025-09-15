@@ -207,8 +207,16 @@ $machinestates = [
         ->type(StateType::GAME)
         ->action('stConvertPray')
         ->transitions([
-            'nextRound' => ST_PHASE_ONE_DRAW,
-            'gameOver'  => ST_END_GAME
+            'phaseFourNextPlayer' => ST_PHASE_FOUR_NEXT_PLAYER,
+        ])
+        ->build(),
+
+    ST_PHASE_FOUR_NEXT_PLAYER => GameStateBuilder::create()
+        ->name('phaseFourNextPlayer')
+        ->type(StateType::GAME)
+        ->action('stNextPlayerRound') /* Note - same as phase three next player */
+        ->transitions([
+            'phaseOneDraw' => ST_PHASE_ONE_DRAW,
         ])
         ->build(),
 ];
