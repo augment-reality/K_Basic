@@ -13,8 +13,11 @@ HTML for desktop is largely finished. Should re-scan cards for improved quality.
 
 ----------------------------    To do   -------------------------------------------
 
+-in JS, player_no need to be -1 for correct meeple indexing
+-Players can always draw a card by paying 5 prayer; need to implement this option
 -sidebars names not color coded?
--implement "movetokens" for happiness cubes on board
+-player color preferences: https://en.doc.boardgamearena.com/Main_game_logic:_Game.php#Player_color_preferences
+-implement code to update db value of happiness
 -"play a card" phase needs confirm button (option to disable?)
 -card backs for other players (Add image for face-down cards to other player divs in notif_playerDrewCard)
 -option to hide other players divs?

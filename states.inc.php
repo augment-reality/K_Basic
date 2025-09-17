@@ -19,9 +19,7 @@
 use Bga\GameFramework\GameStateBuilder;
 use Bga\GameFramework\StateType;
 
-if (!defined('ST_PHASE_THREE_RESOLVE_AMULET')) {
-   require_once("modules/php/constants.inc.php");
-}
+require_once("modules/php/constants.inc.php");
 
 
 $machinestates = [
@@ -85,7 +83,8 @@ $machinestates = [
             'actGiveSpeech'
         ])
         ->transitions([
-            'nextPlayer' => ST_PHASE_TWO_NEXT_PLAYER
+            'nextPlayer' => ST_PHASE_TWO_NEXT_PLAYER,
+            'phaseFourConvertPray' => ST_PHASE_FOUR_CONVERT_PRAY,
         ])
         ->build(),
 
@@ -207,16 +206,8 @@ $machinestates = [
         ->type(StateType::GAME)
         ->action('stConvertPray')
         ->transitions([
-            'phaseFourNextPlayer' => ST_PHASE_FOUR_NEXT_PLAYER,
-        ])
-        ->build(),
-
-    ST_PHASE_FOUR_NEXT_PLAYER => GameStateBuilder::create()
-        ->name('phaseFourNextPlayer')
-        ->type(StateType::GAME)
-        ->action('stNextPlayerRound') /* Note - same as phase three next player */
-        ->transitions([
             'phaseOneDraw' => ST_PHASE_ONE_DRAW,
+            'gameOver'  => ST_END_GAME
         ])
         ->build(),
 ];

@@ -152,7 +152,7 @@ function (dojo, declare,) {
                     this[`fams_${player.id}`].addToStock(this.ID_AHTHIEST_STOCK);
                 }
                 if (player.chief > 0) {
-                    this[`fams_${player.id}`].addToStock(player.sprite); // 1 = chief meeple
+                    this[`fams_${player.id}`].addToStock(player.sprite - 1); // 1 = chief meeple
                 }    
                 
             });
@@ -340,11 +340,19 @@ function (dojo, declare,) {
         onEnteringState: function(stateName, args) {
             console.log('Entering state: ' + stateName);
             switch (stateName) {
+                case 'phaseOneDraw':
+                    console.log("Entering phaseOneDraw state");
+                    if (this.isCurrentPlayerActive()) {
+
+                    }
+                    break;
+
                 default:
                     console.log("Entering unknown state: " + stateName);
                     // Perform actions for unknown state
                     break;
             }
+
         },
 
         onLeavingState: function(stateName) {
@@ -352,21 +360,23 @@ function (dojo, declare,) {
                         switch (stateName) {
                 case 'Initial_Draw':
                     if (this.isCurrentPlayerActive()) {
-            if (this.gamedatas.hand) {
-                for (var i in this.gamedatas.hand) {
-                    var card = this.gamedatas.hand[i];
-                    var color = card.type;
-                    var value = card.type_arg;
-                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
-                }
-            }
+                        if (this.gamedatas.hand) {
+                            for (var i in this.gamedatas.hand) {
+                                var card = this.gamedatas.hand[i];
+                                var color = card.type;
+                                var value = card.type_arg;
+                                this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                            }
+                        }
                     }
                     break;
-                case 'Free_Action':
-                    console.log("Leaving Free_Action state");
-                    if (this.isCurrentPlayerActive()) {
-
-                    }
+                case 'phaseOneDraw':
+                    this.addActionButton('drawCardButton', _('Draw a Disaster card'), () => {
+                        this.bgaPerformAction('actDrawCard', {
+                            type: "disaster"
+                        })
+                        }
+                    )
                     break;
 
                 default:
@@ -564,7 +574,7 @@ function (dojo, declare,) {
                 atheistFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from atheist families
                 playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to player's families
             }
-            playerFamilies.removeFromStock(player_no);
+            playerFamilies.removeFromStock(player_no-1); // Remove chief meeple
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
             element.innerHTML = `<input type="checkbox" disabled>`;

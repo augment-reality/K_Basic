@@ -72,7 +72,7 @@ class Game extends \Table
         {
             $this->trace("KALUA skipping to next player!");
             /* Notify all players that the player is being skipped? */
-            $this->gamestate->nextState();
+            $this->gamestate->nextState("phaseFourConvertPray");
         }
     }
 
@@ -113,12 +113,15 @@ class Game extends \Table
     public function stConvertPray(): void
     {
 
+        $this->notifyAllPlayers(
+            'roundEnded',
+            clienttranslate('Round has ended. Unhappy religions lose families and all religions pray.'),
+            []
+        );
+
     // Update happiness, prayer, families based on end of round rules
     // Check for end game condition
-    // Update trick leader to next player 
     // Check that they haven’t been completely eliminated - cycle until we found someone who hasn’t 
-    // Set active player to selected trick leader
-    $this->trace("KALUA families are converting and praying!");
 
         // Initialize constants
         $happinessScores = [];
@@ -207,20 +210,72 @@ class Game extends \Table
         }
 
         // Update round leader to next non-eliminated player
-        $this->gamestate->nextState('phaseFourNextPlayer');
+        $next_leader = $this->getGameStateValue("roundLeader");
+        while ((int)$this->getUniqueValueFromDb("SELECT player_eliminated FROM player WHERE player_id = $next_leader") == 1) {
+            $next_leader = $this->activeNextPlayer();
+        }
 
-    }
 
-    public function stNextPlayerRound(): void
-    {
-        /* Update the active player to next. 
-        If the active player is now the trick leader (everyone has had a chance), 
-        go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
-        $this->activeNextPlayer();
+        // Notify who was the happiest and most unhappy
+        $happiest_names = array_map(function($pid) { return $this->getPlayerNameById($pid); }, $high_happiness_players);
+        $unhappy_players = array_keys(array_filter($happinessScores, function($happiness) use ($happy_value_low) {
+            return $happiness == $happy_value_low;
+        }));
+        $unhappy_names = array_map(function($pid) { return $this->getPlayerNameById($pid); }, $unhappy_players);
+
+        $this->notifyAllPlayers('happinessReport', clienttranslate('Happiest: ${happiest}, Most unhappy: ${unhappy}'), [
+            'happiest' => implode(', ', $happiest_names),
+            'unhappy' => implode(', ', $unhappy_names)
+        ]);
         
-        $this->gamestate->nextState("phaseOneDraw");
-    }
+        // Notify all players of family changes for each player
+        foreach ($players as $player_id => $_) {
 
+            $family_count = $this->getFamilyCount($player_id);
+            $eliminated = (int)$this->getUniqueValueFromDb("SELECT player_eliminated FROM player WHERE player_id = $player_id");
+            $happiness = $happinessScores[$player_id];
+            $prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+
+            // Calculate changes in family and prayer counts
+            $previous_family = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
+            $previous_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+
+            // Compute deltas (difference from previous round)
+            $family_delta = $family_count - $previous_family;
+            $prayer_delta = $prayer - $previous_prayer;
+
+            $family_change = $family_delta >= 0 ? "increased" : "decreased";
+            $prayer_change = $prayer_delta >= 0 ? "increased" : "decreased";
+
+            $this->notifyAllPlayers(
+                'playerCountsChanged',
+                clienttranslate('${player_name}: Families ${family_count} (${family_change} by ${family_delta}), Prayers ${prayer} (${prayer_change} by ${prayer_delta})'),
+                [
+                    'player_id' => $player_id,
+                    'player_name' => $this->getPlayerNameById($player_id),
+                    'family_count' => $family_count,
+                    'family_change' => $family_change,
+                    'family_delta' => abs($family_delta),
+                    'prayer' => $prayer,
+                    'prayer_change' => $prayer_change,
+                    'prayer_delta' => abs($prayer_delta),
+                    'eliminated' => $eliminated,
+                    'happiness' => $happiness
+                ]
+            );
+
+            if ($eliminated == 1) {
+            $this->notifyAllPlayers('playerEliminated', clienttranslate('${player_name} has been eliminated!'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getPlayerNameById($player_id)
+            ]);
+            }
+        }
+
+
+        $this->setGameStateValue("roundLeader", $next_leader);
+        $this->gamestate->nextState('phaseOneDraw');
+    }
 
 ///////////Player Actions /////////////////////
     public function actDrawCardInit(string $type /* either "disaster" or "bonus" */): void
@@ -298,7 +353,7 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
 
-        $this->gamestate->nextState();
+        $this->gamestate->nextState("phaseFourConvertPray");
     }
 
     public function actConvertBelievers(int $target_player_id): void
@@ -559,6 +614,7 @@ class Game extends \Table
         // Set the colors of the players - should match player tokens
         $player_color_list = ["#4685FF", "#2EA232", "#C22D2D", "#C8CA25","#913CB3"];
         $default_colors = [...$player_color_list];
+        
 
         foreach ($players as $player_id => $player) {
             // Now you can access both $player_id and $player array
