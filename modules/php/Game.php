@@ -19,6 +19,7 @@ use GlobalDisasterCard;
 use LocalDisasterCard;
 
 require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
+require_once("constants.inc.php");
 
 class Game extends \Table
 {
@@ -32,7 +33,9 @@ class Game extends \Table
 
         /* Global variables */
         $this->initGameStateLabels([
-            "roundLeader" => 10 /* Player who leads the current round */
+            "roundLeader" => 10, /* Player who leads the current round */
+            "saved_state" => 11, /* Saved state for reflexive actions */
+            "saved_active_player" => 12 /* Saved active player for reflexive actions */
         ]);          
 
         //Make two decks: bonus and disaster
@@ -97,6 +100,17 @@ class Game extends \Table
 
     public function stNextPlayerCards(): void
     {
+
+        /*check to see if played card was global disaster - if so go to global disaster handling state before
+        continuing to check if next player is round leader*/
+
+        //card on top might just be by item weight, not most recently played
+        $last_card = $this->disasterCards->getCardOnTop('played');
+        if ($last_card && (int)$last_card['type'] === CardType::GlobalDisaster->value) {
+            $this->gamestate->nextState('phaseThreeCheckGlobal');
+            return;
+        }
+
         /* Update the active player to next. 
         If the active player is now the trick leader (everyone has had a chance), 
         go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
@@ -114,7 +128,13 @@ class Game extends \Table
 
     public function stPlayCard(): void
     {
+
         /* skip handling for play card (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
+    }
+
+    public function stGlobalOption(): void
+    {
+
     }
 
     public function stResolveCard(): void
@@ -465,13 +485,26 @@ class Game extends \Table
             throw new \BgaUserException("This card is not in your hand");
         }
 
-        // 4. Apply game rules validation here
-        // (check if this card can be played according to Kalua rules)
+        // 4. Get prayer cost before checking if card can be played
+        $prayer_cost = $this->getCardPrayerCost($card);
 
-        // 5. Move card to played location
+        // 5. Apply game rules validation here
+        // Check if this card can be played according to Kalua rules (prayer cost)
+        if (!$this->canPlayCard($player_id, $card)) {
+            $card_name = $this->getCardName($card);
+            throw new \BgaUserException("You don't have enough prayer points to play $card_name");
+        }
+
+        // 6. Move card to played location
         $this->moveCard($card_id, 'played', $player_id);
 
-        // 6. Send notification to all players (include card_type and card_type_arg for frontend)
+        // 7. Get updated player stats for notifications
+        $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+        $disaster_cards_in_hand = $this->disasterCards->countCardInLocation("hand", $player_id);
+        $bonus_cards_in_hand = $this->bonusCards->countCardInLocation("hand", $player_id);
+        $total_cards_in_hand = $disaster_cards_in_hand + $bonus_cards_in_hand;
+
+        // 8. Send notification to all players (include card_type and card_type_arg for frontend)
         $this->notifyAllPlayers('cardPlayed',
             clienttranslate('${player_name} plays ${card_name}'), [
                 'player_id' => $player_id,
@@ -482,80 +515,71 @@ class Game extends \Table
                 'card_type_arg' => $card['type_arg']
             ]);
 
-        // 7. Transition to next state
-        $this->gamestate->nextState('nextPlayerThree');
+        // 9. If prayer was spent, notify about prayer cost and updated sidebar counters
+        if ($prayer_cost > 0) {
+            $this->notifyAllPlayers('prayerSpent', 
+                clienttranslate('${player_name} spends ${prayer_cost} prayer points to play ${card_name}'), [
+                    'player_id' => $player_id,
+                    'player_name' => $this->getActivePlayerName(),
+                    'prayer_cost' => $prayer_cost,
+                    'new_prayer_total' => $player_prayer,
+                    'card_name' => $this->getCardName($card)
+                ]);
+        }
+
+        // 10. Notify about updated card count in sidebar
+        $this->notifyAllPlayers('playerStatsUpdated',
+            clienttranslate('${player_name} now has ${card_count} cards'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getActivePlayerName(),
+                'card_count' => $total_cards_in_hand,
+                'prayer_points' => $player_prayer
+            ]);
+
+        if ((int)$card['type'] === CardType::GlobalDisaster->value) {
+            $this->gamestate->nextState('phaseThreeCheckGlobal');
+            return;
+        } else {
+            $this->gamestate->nextState('nextPlayerThree');
+            return;
+        }
     }
 
-    public function actBuyCard(int $card_id = null): void
+    public function actBuyCard(): void
     {
-        // 1. Check action is valid (following Hearts pattern)
-        $this->checkAction('actBuyCard');
-        
+        // 1. Check action is valid 5 prayer points?
+        // TODO: Add prayer point check if needed
+
         // 2. Get current player
         $player_id = $this->getActivePlayerId();
-        
-        // 3. If no card_id provided, draw from deck (buy action)
-        if ($card_id === null) {
-            // For now, draw a disaster card (adapt based on game rules)
-            $card = $this->disasterCards->pickCard('deck', $player_id);
-            
-            if ($card === null) {
-                throw new \BgaUserException($this->_("No cards available in deck"));
-            }
-            
-            // 4. Notify about card drawn (following Hearts notification pattern)
-            $this->notifyAllPlayers('cardBought', 
-                clienttranslate('${player_name} buys a card'), 
-                array(
-                    'player_id' => $player_id,
-                    'player_name' => $this->getActivePlayerName(),
-                    'card_id' => $card['id'],
-                    'card_type' => $card['type'],
-                    'card_type_arg' => $card['type_arg']
-                )
-            );
-            
-            // 5. Private notification to player about their card details
-            $this->notifyPlayer($player_id, 'cardDrawn', '', array(
-                'card' => $card
-            ));
-            
-        } else {
-            // 3. Validate card exists and belongs to player (if playing from hand)
-            $card = $this->getCard($card_id);
-            if ($card === null) {
-                throw new \BgaUserException($this->_("Invalid card"));
-            }
-            
-            if ($card['location'] !== 'hand' || (int)$card['location_arg'] !== (int)$player_id) {
-                throw new \BgaUserException($this->_("This card is not in your hand"));
-            }
-            
-            // 4. Move card to play area (following Hearts pattern)
-            if ($card['type'] == CardType::GlobalDisaster->value || $card['type'] == CardType::LocalDisaster->value) {
-                $this->disasterCards->moveCard($card_id, 'play_area', $player_id);
-            } else {
-                $this->bonusCards->moveCard($card_id, 'play_area', $player_id);
-            }
-            
-            // 5. Comprehensive notification (following Hearts pattern)
-            $this->notifyAllPlayers('cardPlayed', 
-                clienttranslate('${player_name} plays ${card_name}'), 
-                array(
-                    'i18n' => array('card_name'),
-                    'player_id' => $player_id,
-                    'player_name' => $this->getActivePlayerName(),
-                    'card_id' => $card_id,
-                    'card_type' => $card['type'],
-                    'card_type_arg' => $card['type_arg'],
-                    'card_name' => $this->getCardName($card)
-                )
-            );
+
+        // For now, draw a disaster card (adapt based on game rules)
+        $card = $this->disasterCards->pickCard('deck', $player_id);
+
+        if ($card === null) {
+            throw new \BgaUserException($this->_("No cards available in deck"));
         }
-        
+
+        // 4. Notify about card drawn (following Hearts notification pattern)
+        $this->notifyAllPlayers('cardBought', 
+            clienttranslate('${player_name} buys a card'), 
+            array(
+                'player_id' => $player_id,
+                'player_name' => $this->getActivePlayerName(),
+                'card_id' => $card['id'],
+                'card_type' => $card['type'],
+                'card_type_arg' => $card['type_arg']
+            )
+        );
+
+        // 5. Private notification to player about their card details
+        $this->notifyPlayer($player_id, 'cardDrawn', '', array(
+            'card' => $card
+        ));
+
         // 6. Log action for debugging
         $this->trace("Player $player_id performed actBuyCard");
-        
+
         // 7. Transition to next state
         $this->gamestate->nextState('nextPlayerThree');
     }
@@ -570,6 +594,113 @@ class Game extends \Table
     {
         $this->gamestate->nextState("resolveCards");
     }
+
+    /***** Reflexive actions - can be taken anytime *****/
+    
+    /**
+     * Action to enter the reflexive buy card state
+     */
+    public function actGoToBuyCardReflex(): void
+    {
+        $this->checkAction('actGoToBuyCardReflex');
+        
+        // Check if player has enough prayer points
+        $player_id = $this->getCurrentPlayerId();
+        $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+        
+        if ($player_prayer < 5) {
+            throw new \BgaUserException("You need at least 5 prayer points to buy a card");
+        }
+        
+        // Save the current state to return to later
+        $this->setGameStateValue('saved_state', $this->gamestate->state_id());
+        $this->setGameStateValue('saved_active_player', $player_id);
+        
+        $this->gamestate->nextState('buyCardReflex');
+    }
+
+    /**
+     * Draw a card anytime by spending 5 prayer points
+     */
+    public function actDrawCardAnytime(string $type): void
+    {
+        $this->checkAction('actDrawCardAnytime');
+        
+        // Validate card type
+        if ($type !== STR_CARD_TYPE_DISASTER && $type !== STR_CARD_TYPE_BONUS) {
+            throw new \BgaUserException("Invalid card type: $type");
+        }
+        
+        $player_id = $this->getCurrentPlayerId();
+        
+        // Check if player has enough prayer points
+        $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+        if ($player_prayer < 5) {
+            throw new \BgaUserException("You need 5 prayer points to buy a card");
+        }
+        
+        // Deduct 5 prayer points
+        $this->DbQuery("UPDATE player SET player_prayer = player_prayer - 5 WHERE player_id = $player_id");
+        
+        // Draw the card using the existing private function
+        $this->drawCard_private($type);
+        
+        // Notify about prayer point cost
+        $this->notifyAllPlayers('prayerSpent', 
+            clienttranslate('${player_name} spends 5 prayer points to buy a card'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getCurrentPlayerName(),
+                'prayer_spent' => 5,
+                'new_prayer_total' => $player_prayer - 5
+            ]);
+        
+        // Return to previous state
+        $this->returnFromReflexiveState();
+    }
+
+    /**
+     * Cancel buying a card and return to previous state
+     */
+    public function actCancelBuyCard(): void
+    {
+        $this->checkAction('actCancelBuyCard');
+        $this->returnFromReflexiveState();
+    }
+
+    /**
+     * Helper function to return from reflexive state to the saved state
+     */
+    private function returnFromReflexiveState(): void
+    {
+        $saved_state = $this->getGameStateValue('saved_state');
+        $saved_player = $this->getGameStateValue('saved_active_player');
+        
+        // Clear saved values
+        $this->setGameStateValue('saved_state', 0);
+        $this->setGameStateValue('saved_active_player', 0);
+        
+        // Return to the saved state
+        $this->gamestate->jumpToState($saved_state);
+        $this->gamestate->changeActivePlayer($saved_player);
+    }
+
+    public function actAvoidGlobal(): void
+    {
+        //implement logic to flag player as avoiding global disaster or something
+
+        // Transition to next state
+        $this->gamestate->nextState();
+    }
+
+    public function actDoubleGlobal(): void
+    {
+//implement logic to flag double global disaster (play card twice?)
+//don't check for elimnination until end of global disaster resolution
+
+// Transition to next state
+$this->gamestate->nextState();
+    }
+    
     /***************************************/
 
     /******** Resolve card actions ********/
@@ -699,6 +830,8 @@ class Game extends \Table
         }
     }
 
+
+
     /**
      * Get card type name (category) based on card data
      * @param array $card Card data array with 'type' field
@@ -742,6 +875,113 @@ class Game extends \Table
         $leader_int = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$this->getActivePlayerId()}");
         $this->trace(sprintf("KALUA leader int: %d", $leader_int));
         return $leader_int == 1;
+    }
+
+    /**
+     * Check if a card can be played by a player based on their prayer points
+     * @param int $player_id The player attempting to play the card
+     * @param array|null $card The card data array with 'type' and 'type_arg' fields
+     * @return bool True if the card can be played, false otherwise
+     */
+    /**
+     * Get the prayer cost for a specific card
+     * @param array $card Card data array with 'type' and 'type_arg' fields
+     * @return int The prayer cost for this card
+     */
+    public function getCardPrayerCost(array $card): int
+    {
+        $card_type = (int)$card['type'];
+        $card_type_arg = (int)$card['type_arg'];
+        
+        // Define card effects (same as in canPlayCard)
+        $CARD_EFFECTS = [
+            CardType::GlobalDisaster->value => [
+                GlobalDisasterCard::Tsunami->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Famine->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Floods->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::MassiveFire->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Drought->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Death->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Thunderstorm->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Revenge->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Epidemic->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Riots->value => ['prayer_cost' => 0],
+            ],
+            CardType::LocalDisaster->value => [
+                LocalDisasterCard::Tornado->value => ['prayer_cost' => 4],
+                LocalDisasterCard::Earthquake->value => ['prayer_cost' => 5],
+                LocalDisasterCard::BadWeather->value => ['prayer_cost' => 1],
+                LocalDisasterCard::Locust->value => ['prayer_cost' => 3],
+                LocalDisasterCard::TempleDestroyed->value => ['prayer_cost' => 5],
+            ],
+            CardType::Bonus->value => [
+                BonusCard::GoodWeather->value => ['prayer_cost' => 2],
+                BonusCard::DoubleHarvest->value => ['prayer_cost' => 5],
+                BonusCard::Fertility->value => ['prayer_cost' => 6],
+                BonusCard::Festivities->value => ['prayer_cost' => 5],
+                BonusCard::NewLeader->value => ['prayer_cost' => 5],
+                BonusCard::Temple->value => ['prayer_cost' => 5],
+                BonusCard::Amulets->value => ['prayer_cost' => 4],
+            ]
+        ];
+        
+        if (isset($CARD_EFFECTS[$card_type][$card_type_arg]['prayer_cost'])) {
+            return (int)$CARD_EFFECTS[$card_type][$card_type_arg]['prayer_cost'];
+        }
+        
+        return 0; // Default to 0 if not found
+    }
+
+    public function canPlayCard(int $player_id, ?array $card): bool
+    {
+        
+        $card_type = (int)$card['type'];
+        $card_type_arg = (int)$card['type_arg'];
+        $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+
+        // Define card effects directly in the function to avoid global variable issues
+        $CARD_EFFECTS = [
+            CardType::GlobalDisaster->value => [
+                GlobalDisasterCard::Tsunami->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Famine->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Floods->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::MassiveFire->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Drought->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Death->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Thunderstorm->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Revenge->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Epidemic->value => ['prayer_cost' => 0],
+                GlobalDisasterCard::Riots->value => ['prayer_cost' => 0],
+            ],
+            CardType::LocalDisaster->value => [
+                LocalDisasterCard::Tornado->value => ['prayer_cost' => 1],
+                LocalDisasterCard::Earthquake->value => ['prayer_cost' => 2],
+                LocalDisasterCard::BadWeather->value => ['prayer_cost' => 1],
+                LocalDisasterCard::Locust->value => ['prayer_cost' => 1],
+                LocalDisasterCard::TempleDestroyed->value => ['prayer_cost' => 5],
+            ],
+            CardType::Bonus->value => [
+                BonusCard::GoodWeather->value => ['prayer_cost' => 2],
+                BonusCard::DoubleHarvest->value => ['prayer_cost' => 3],
+                BonusCard::Fertility->value => ['prayer_cost' => 4],
+                BonusCard::Festivities->value => ['prayer_cost' => 1],
+                BonusCard::NewLeader->value => ['prayer_cost' => 5],
+                BonusCard::Temple->value => ['prayer_cost' => 4],
+                BonusCard::Amulets->value => ['prayer_cost' => 3],
+            ]
+        ];
+        
+        $prayer_cost = (int)$CARD_EFFECTS[$card_type][$card_type_arg]['prayer_cost'];
+        
+        // Check if player has enough prayer points
+        $can_play = $player_prayer >= $prayer_cost;
+
+        if ($can_play && $prayer_cost > 0) {
+            $new_prayer = $player_prayer - $prayer_cost;
+            $this->DbQuery("UPDATE player SET player_prayer = $new_prayer WHERE player_id = $player_id");
+        }      
+
+        return $can_play;
     }
 
 

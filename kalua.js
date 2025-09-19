@@ -39,9 +39,9 @@ function (dojo, declare,) {
 
                 <div id="card_areas">
                 
-                    <div id="playedCards">Played Cards:
+                    <div id="playedCards"><div class="played_resolved">Played Cards:</div>
                     </div>
-                    <div id="resolvedCards">Resolved Cards:
+                    <div id="resolvedCards"><div class="played_resolved">Resolved Cards:</div>
                     </div>
                 </div>
 
@@ -479,6 +479,10 @@ function (dojo, declare,) {
                             this.bgaPerformAction('actBuyCard', {});
                         });
 
+                        this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => {
+                            this.bgaPerformAction('actGoToBuyCardReflex', {});
+                        });
+
                         this.addActionButton('pass-btn', _('Pass'), () => {
                             this.bgaPerformAction('actPlayCardPass', {});
                         });
@@ -488,6 +492,23 @@ function (dojo, declare,) {
                         if (selectedCards.length === 0) {
                             dojo.addClass('playCard-btn', 'disabled');
                         }
+                        break;
+                    case 'reflexiveBuyCard':
+                        this.addActionButton('buyDisaster-btn', _('Buy Disaster Card (5 Prayer)'), () => {
+                            this.bgaPerformAction('actDrawCardAnytime', {
+                                type: 'disaster'
+                            });
+                        });
+
+                        this.addActionButton('buyBonus-btn', _('Buy Bonus Card (5 Prayer)'), () => {
+                            this.bgaPerformAction('actDrawCardAnytime', {
+                                type: 'bonus'
+                            });
+                        });
+
+                        this.addActionButton('cancel-btn', _('Cancel'), () => {
+                            this.bgaPerformAction('actCancelBuyCard', {});
+                        });
                         break;
                 }
             }
@@ -756,6 +777,14 @@ function (dojo, declare,) {
                     playerCardsStock.addToStockWithId(uniqueId, card.id);
                 }
             }
+        },
+
+        notif_prayerSpent: function(args) {
+            // Update prayer counter for the player who spent prayer points
+            if (this.prayerCounters[args.player_id]) {
+                this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
+            }
+            console.log(`Player ${args.player_id} spent ${args.prayer_spent} prayer points`);
         },
 
         ///////////////////////////////////////////////////

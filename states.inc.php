@@ -80,7 +80,8 @@ $machinestates = [
             'actSacrificeLeader',
             'actConvertAtheists',
             'actConvertBelievers',
-            'actGiveSpeech'
+            'actGiveSpeech',
+            'reflexiveBuyCard'
         ])
         ->transitions([
             'nextPlayerTwo' => ST_PHASE_TWO_NEXT_PLAYER
@@ -108,15 +109,31 @@ $machinestates = [
             'actPlayCard',
             'actBuyCard',
             'actPlayCardPass',
-            'actSayConvert'
+            'actSayConvert',
+            'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
+            'phaseThreeCheckGlobal' => ST_PHASE_THREE_CHECK_GLOBAL,
             'nextPlayerThree' => ST_PHASE_THREE_NEXT_PLAYER,
             'resolveCards' => ST_PHASE_THREE_RESOLVE_CARD,
+            'buyCardReflex' => ST_REFLEXIVE_BUY_CARD, // Transition to reflexive state
         ])
         ->build(),
 
-    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //41
+    ST_PHASE_THREE_CHECK_GLOBAL => GameStateBuilder::create() //41
+        ->name('phaseThreeCheckGlobal')
+        ->type(StateType::ACTIVE_PLAYER)
+        ->action('stGlobalOption')
+        ->possibleactions([
+            'actAvoidGlobal',
+            'actDoubleGlobal'
+        ])
+        ->transitions([
+            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //42
         ->name('phaseThreeNextPlayer')
         ->type(StateType::GAME)
         ->action('stNextPlayerCards')
@@ -126,7 +143,7 @@ $machinestates = [
         ])
         ->build(),
 
-    ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create() //42
+    ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create() //43
         ->name('phaseThreeResolveCard')
         ->type(StateType::GAME)
         ->action('stResolveCard')
@@ -207,6 +224,22 @@ $machinestates = [
         ->transitions([
             'phaseOneDraw' => ST_PHASE_ONE_DRAW,
             'gameOver'  => ST_END_GAME
+        ])
+        ->build(),
+
+    /* Reflexive state - Buy card anytime by spending 5 prayer points
+        Currently not allowed to pick which deck type*/
+    ST_REFLEXIVE_BUY_CARD => GameStateBuilder::create()
+        ->name('reflexiveBuyCard')
+        ->description(clienttranslate('${actplayer} may spend 5 prayer points to buy a card'))
+        ->descriptionmyturn(clienttranslate('${you} may spend 5 prayer points to buy a card'))
+        ->type(StateType::ACTIVE_PLAYER)
+        ->possibleactions([
+            'actDrawCardAnytime',
+            'actCancelBuyCard'
+        ])
+        ->transitions([
+            'returnToPrevious' => 'returnState' // This returns to the previous state
         ])
         ->build(),
 ];

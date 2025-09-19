@@ -13,7 +13,8 @@ HTML for desktop is largely finished. Should re-scan cards for improved quality.
 
 ----------------------------    To do   -------------------------------------------
 
--Players can always draw a card by paying 5 prayer; need to implement this asynchronus option
+-need to add played/resolved cards on refresh
+-Players can always draw a card by paying 5 prayer; need to test the proposed state 80
 -sidebars names not color coded?
 -player color preferences: https://en.doc.boardgamearena.com/Main_game_logic:_Game.php#Player_color_preferences
 -implement code to update db value of happiness

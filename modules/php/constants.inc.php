@@ -18,15 +18,19 @@ const ST_PHASE_TWO_NEXT_PLAYER = 31;
 
 /* Phase three - play cards */
 const ST_PHASE_THREE_PLAY_CARD = 40;
-const ST_PHASE_THREE_NEXT_PLAYER = 41;
-const ST_PHASE_THREE_RESOLVE_CARD = 42;
-const ST_PHASE_THREE_SELECT_TARGETS = 43;
-const ST_PHASE_THREE_RESOLVE_AMULETS = 44;
-const ST_PHASE_THREE_ROLL_DICE = 45;
-const ST_PHASE_THREE_DISCARD = 46;
+const ST_PHASE_THREE_CHECK_GLOBAL = 41;
+const ST_PHASE_THREE_NEXT_PLAYER = 42;
+const ST_PHASE_THREE_RESOLVE_CARD = 43;
+const ST_PHASE_THREE_SELECT_TARGETS = 44;
+const ST_PHASE_THREE_RESOLVE_AMULETS = 45;
+const ST_PHASE_THREE_ROLL_DICE = 46;
+const ST_PHASE_THREE_DISCARD = 47;
 
 /* Phase four - convert */
 const ST_PHASE_FOUR_CONVERT_PRAY = 50;
+
+/* Reflexive states - can be entered from multiple states */
+const ST_REFLEXIVE_BUY_CARD = 80;
 
 /* End game */
 const ST_END_GAME = 99;

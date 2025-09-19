@@ -164,6 +164,12 @@ border-radius: 5px; */
     background-repeat: no-repeat;
 }
 
+
+.played_resolved {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
 .player_area {
     border: 1px solid #ccc;
     padding: 10px;
