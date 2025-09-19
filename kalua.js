@@ -215,20 +215,11 @@ function (dojo, declare,) {
                 this[`hkToken_${i}`].item_margin = 0; // has to be 0 if using overlap
                 this[`hkToken_${i}`].updateDisplay(); // re-layout
             }
-
-            // Get current HK token count for players - index for player color
-            let hkTokenCount = 0;
+            // Place HK tokens for each player based on their sprite value from gamedatas
             Object.values(gamedatas.players).forEach(player => {
-                this[`hkToken_${5}`].addToStock(hkTokenCount); // type
-                hkTokenCount++;
-
+                // Add the correct token type for this player color
+                this[`hkToken_${player.happiness}`].addToStock(player.sprite - 1);
             });
-
-            // // test moving tokens
-            // this.movetokens(2, -2); // move token (type 3) one space to the right
-            // this.movetokens(1, -5); // move token (type 3) one space to the right
-            // this.movetokens(0, 3); // move token (type 3) one space to the right
-
 
             // Create stock for played cards
             this['playedCards'] = new ebg.stock();  
@@ -445,24 +436,20 @@ function (dojo, declare,) {
                         }
                         break;
                     case 'phaseThreePlayCard':
-                        if (this.isCurrentPlayerActive()) 
-                        {
-                            this.addActionButton('playCard-btn', _('Play Card'), () => {
-                                const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-                                if (selectedCards.length > 0) {
-                                    const card = selectedCards[0];
-                                    this.bgaPerformAction('actPlayCard', {
-                                        type: card.type,
-                                        card_id: card.id
-                                    });
-                                }
-                            });                          
-                            
-                            // Disable play card button if no card is selected
+                        // Enable card selection and show Play Card button
+                        this.addActionButton('playCard-btn', _('Play Card'), () => {
                             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-                            if (selectedCards.length === 0) {
-                                dojo.addClass('playCard-btn', 'disabled');
+                            if (selectedCards.length > 0) {
+                                const card = selectedCards[0];
+                                this.bgaPerformAction('actPlayCard', {
+                                    card_id: card.id
+                                });
                             }
+                        });
+                        // Disable play card button if no card is selected
+                        const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                        if (selectedCards.length === 0) {
+                            dojo.addClass('playCard-btn', 'disabled');
                         }
                         break;
                 }
@@ -539,7 +526,9 @@ function (dojo, declare,) {
         giveSpeech: function(player_id) {
             console.log("Giving a speech");
             this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
-            this.movetokens(0, 1);
+            // Use the player's sprite value from gamedatas to move the correct token
+            const sprite = this.gamedatas.players[player_id].sprite;
+            this.movetokens(sprite, 1);
         },
 
         convertAtheists: function(player_id, num_atheists) {
@@ -620,8 +609,6 @@ function (dojo, declare,) {
 
         onPlayerHandSelectionChanged: function () {
             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-            
-            // Update button states based on selection
             if (this.gamedatas.gamestate.name === 'phaseThreePlayCard') {
                 if (selectedCards.length > 0) {
                     if ($('playCard-btn')) {
@@ -695,7 +682,24 @@ function (dojo, declare,) {
 
             console.log(player_name + ' converted a believer from ' + target_name);
             this.convertBelievers(player_id, target_id);
-        }
+        },
+
+        notif_cardPlayed: function(args) {
+            // Remove the card from the correct player's hand if the stock exists
+            const playerCardsStock = this[`${args.player_id}_cards`];
+            if (playerCardsStock) {
+                playerCardsStock.removeFromStockById(args.card_id);
+            }
+            if (this.cardCounters[args.player_id]) {
+                this.cardCounters[args.player_id].incValue(-1);
+            }
+            // Add the card to the playedCards stock
+            const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
+            if (this['playedCards']) {
+                this['playedCards'].addToStock(uniqueId);
+            }
+            console.log(`Card ${args.card_id} played by player ${args.player_id}`);
+        },
 
         ///////////////////////////////////////////////////
         //// Reaction to cometD notifications

@@ -268,13 +268,9 @@ class Game extends \Table
             $happiness = $happinessScores[$player_id];
             $prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
 
-            // Calculate changes in family and prayer counts
-            $previous_family = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
-            $previous_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
-
             // Compute deltas (difference from previous round)
-            $family_delta = $family_count - $previous_family;
-            $prayer_delta = $prayer - $previous_prayer;
+            $family_delta = $family_count - $previous_family[$player_id];
+            $prayer_delta = $prayer - $previous_prayer[$player_id];
 
             $family_change = $family_delta >= 0 ? "increased" : "decreased";
             $prayer_change = $prayer_delta >= 0 ? "increased" : "decreased";
@@ -452,14 +448,14 @@ class Game extends \Table
     /***************************************/
 
     /***** Play card actions ******/
-    public function actPlayCard(string $type, int $card_id): void
+    public function actPlayCard(int $card_id): void
     {
         // 1. Check if action is allowed
         $this->checkAction('actPlayCard');
-        
+
         // 2. Get current player (cast to int since moveCard expects int)
         $player_id = (int)$this->getActivePlayerId();
-        
+
         // 3. Validate the card belongs to the player
         $card = $this->getCard($card_id);
         if ($card === null) {
@@ -468,23 +464,24 @@ class Game extends \Table
         if ($card['location'] !== 'hand' || $card['location_arg'] != $player_id) {
             throw new \BgaUserException("This card is not in your hand");
         }
-        
+
         // 4. Apply game rules validation here
         // (check if this card can be played according to Kalua rules)
-        
+
         // 5. Move card to played location
         $this->moveCard($card_id, 'played', $player_id);
-        
-        // 6. Send notification to all players
-        $this->notifyAllPlayers('cardPlayed', 
+
+        // 6. Send notification to all players (include card_type and card_type_arg for frontend)
+        $this->notifyAllPlayers('cardPlayed',
             clienttranslate('${player_name} plays ${card_name}'), [
                 'player_id' => $player_id,
                 'player_name' => $this->getActivePlayerName(),
                 'card_id' => $card_id,
                 'card_name' => $this->getCardName($card),
-                'type' => $type
+                'card_type' => $card['type'],
+                'card_type_arg' => $card['type_arg']
             ]);
-        
+
         // 7. Transition to next state
         $this->gamestate->nextState('nextPlayerThree');
     }
@@ -666,6 +663,11 @@ class Game extends \Table
     // Aux function to set families for a player
     public function setFamilyCount($player_id, $count) {
         self::DbQuery("UPDATE player SET player_family = $count WHERE player_id = $player_id");
+    }
+
+    // Aux function to count chiefs for a player
+    public function getChiefCount($player_id) {
+        return (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$player_id}");
     }
 
     public function check_playerHasLeader() : bool
