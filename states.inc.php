@@ -19,7 +19,7 @@
 use Bga\GameFramework\GameStateBuilder;
 use Bga\GameFramework\StateType;
 
-require_once("modules/php/constants.inc.php");
+   require_once("modules/php/constants.inc.php");
 
 
 $machinestates = [
@@ -69,7 +69,7 @@ $machinestates = [
         ->build(),
 
     /* Activate leader phase */
-    ST_PHASE_TWO_ACTIVATE_LEADER => GameStateBuilder::create()
+    ST_PHASE_TWO_ACTIVATE_LEADER => GameStateBuilder::create() //30
         ->name('phaseTwoActivateLeader')
         ->description(clienttranslate('${actplayer} must choose a leader action'))
 		->descriptionmyturn(clienttranslate('${you} must choose a leader action'))
@@ -83,23 +83,22 @@ $machinestates = [
             'actGiveSpeech'
         ])
         ->transitions([
-            'nextPlayer' => ST_PHASE_TWO_NEXT_PLAYER,
-            'phaseFourConvertPray' => ST_PHASE_FOUR_CONVERT_PRAY,
+            'nextPlayerTwo' => ST_PHASE_TWO_NEXT_PLAYER
         ])
         ->build(),
 
-    ST_PHASE_TWO_NEXT_PLAYER => GameStateBuilder::create()
+    ST_PHASE_TWO_NEXT_PLAYER => GameStateBuilder::create() //31
         ->name('phaseTwoNextPlayer')
         ->type(StateType::GAME)
-        ->action('stNextPlayer') /* Note - same as phase three next player */
+        ->action('stNextPlayerLeader')
         ->transitions([
-            'nextPlayer' => ST_PHASE_TWO_ACTIVATE_LEADER,
-            'phaseDone'  => ST_PHASE_THREE_PLAY_CARD
+            'checkRoundTwo' => ST_PHASE_TWO_ACTIVATE_LEADER,
+            'phaseTwoDone'  => ST_PHASE_THREE_PLAY_CARD
         ])
         ->build(),
 
     /* Play cards phase */
-    ST_PHASE_THREE_PLAY_CARD => GameStateBuilder::create()
+    ST_PHASE_THREE_PLAY_CARD => GameStateBuilder::create() //40
         ->name('phaseThreePlayCard')
         ->description(clienttranslate('${actplayer} must play a card'))
 		->descriptionmyturn(clienttranslate('${you} must play a card'))
@@ -112,27 +111,27 @@ $machinestates = [
             'actSayConvert'
         ])
         ->transitions([
-            'nextPlayer' => ST_PHASE_THREE_NEXT_PLAYER,
-            'convert' => ST_PHASE_FOUR_CONVERT_PRAY,
+            'nextPlayerThree' => ST_PHASE_THREE_NEXT_PLAYER,
+            'resolveCards' => ST_PHASE_THREE_RESOLVE_CARD,
         ])
         ->build(),
 
-    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create()
+    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //41
         ->name('phaseThreeNextPlayer')
         ->type(StateType::GAME)
-        ->action('stNextPlayer') /* Note - same as phase two next player */
+        ->action('stNextPlayerCards')
         ->transitions([
-            'nextPlayer' => ST_PHASE_THREE_PLAY_CARD,
-            'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD
+            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD,
+            'resolveCards'  => ST_PHASE_THREE_RESOLVE_CARD
         ])
         ->build(),
 
-    ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create()
+    ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create() //42
         ->name('phaseThreeResolveCard')
         ->type(StateType::GAME)
         ->action('stResolveCard')
         ->transitions([
-            'noCards' => ST_PHASE_THREE_PLAY_CARD,
+            'noCards' => ST_PHASE_FOUR_CONVERT_PRAY,
             'selectTargets' => ST_PHASE_THREE_SELECT_TARGETS,
             'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
             'rollDice' => ST_PHASE_THREE_ROLL_DICE,

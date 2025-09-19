@@ -153,7 +153,7 @@ function (dojo, declare,) {
                 }
                 if (player.chief > 0) {
                     this[`fams_${player.id}`].addToStock(player.sprite - 1); // 1 = chief meeple
-                }    
+                }     
                 
             });
 
@@ -360,14 +360,14 @@ function (dojo, declare,) {
                         switch (stateName) {
                 case 'Initial_Draw':
                     if (this.isCurrentPlayerActive()) {
-                        if (this.gamedatas.hand) {
-                            for (var i in this.gamedatas.hand) {
-                                var card = this.gamedatas.hand[i];
-                                var color = card.type;
-                                var value = card.type_arg;
-                                this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
-                            }
-                        }
+            if (this.gamedatas.hand) {
+                for (var i in this.gamedatas.hand) {
+                    var card = this.gamedatas.hand[i];
+                    var color = card.type;
+                    var value = card.type_arg;
+                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                }
+            }
                     }
                     break;
                 case 'phaseOneDraw':
@@ -444,12 +444,25 @@ function (dojo, declare,) {
                             });
                         }
                         break;
-                                        case 'phaseThreePlayCard':
+                    case 'phaseThreePlayCard':
                         if (this.isCurrentPlayerActive()) 
                         {
+                            this.addActionButton('playCard-btn', _('Play Card'), () => {
+                                const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                                if (selectedCards.length > 0) {
+                                    const card = selectedCards[0];
+                                    this.bgaPerformAction('actPlayCard', {
+                                        type: card.type,
+                                        card_id: card.id
+                                    });
+                                }
+                            });                          
+                            
+                            // Disable play card button if no card is selected
                             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-                            const card = selectedCards[0];
-                            this.onBtnPlayCard();
+                            if (selectedCards.length === 0) {
+                                dojo.addClass('playCard-btn', 'disabled');
+                            }
                         }
                         break;
                 }
@@ -607,10 +620,18 @@ function (dojo, declare,) {
 
         onPlayerHandSelectionChanged: function () {
             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-            if (selectedCards.length === 1 && this.checkAction('actPlayCard', true)) {
-                const card_id = selectedCards[0].id;
-                this[`${this.player_id}_cards`].unselectAll();
-                this.bgaPerformAction('actPlayCard', { card_id: card_id });
+            
+            // Update button states based on selection
+            if (this.gamedatas.gamestate.name === 'phaseThreePlayCard') {
+                if (selectedCards.length > 0) {
+                    if ($('playCard-btn')) {
+                        dojo.removeClass('playCard-btn', 'disabled');
+                    }
+                } else {
+                    if ($('playCard-btn')) {
+                        dojo.addClass('playCard-btn', 'disabled');
+                    }
+                }
             }
         },
 

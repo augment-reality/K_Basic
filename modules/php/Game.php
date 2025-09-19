@@ -23,6 +23,8 @@ require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
 class Game extends \Table
 {
     private static array $CARD_TYPES;
+    private $disasterCards;
+    private $bonusCards;
 
     public function __construct()
     {
@@ -72,11 +74,11 @@ class Game extends \Table
         {
             $this->trace("KALUA skipping to next player!");
             /* Notify all players that the player is being skipped? */
-            $this->gamestate->nextState("phaseFourConvertPray");
+            $this->gamestate->nextState();
         }
     }
 
-    public function stNextPlayer(): void
+    public function stNextPlayerLeader(): void
     {
         /* Update the active player to next. 
         If the active player is now the trick leader (everyone has had a chance), 
@@ -85,15 +87,34 @@ class Game extends \Table
     
         if ($this->getActivePlayerId() == $this->getGameStateValue("roundLeader"))
         {
-            $this->gamestate->nextState("phaseDone");
+            $this->gamestate->nextState("phaseTwoDone");
         }
-        $this->gamestate->nextState("nextPlayer");
+        else
+        {
+            $this->gamestate->nextState("checkRoundTwo");
+        }
+    }
+
+    public function stNextPlayerCards(): void
+    {
+        /* Update the active player to next. 
+        If the active player is now the trick leader (everyone has had a chance), 
+        go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
+        $this->activeNextPlayer();
+    
+        if ($this->getActivePlayerId() == $this->getGameStateValue("roundLeader"))
+        {
+            $this->gamestate->nextState("resolveCards");
+        }
+        else
+        {
+            $this->gamestate->nextState("checkRoundThree");
+        }
     }
 
     public function stPlayCard(): void
     {
-        /* skip handling when none to play (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
-        $this->gamestate->nextState("convert"); // for now, just skip
+        /* skip handling for play card (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
     }
 
     public function stResolveCard(): void
@@ -102,6 +123,8 @@ class Game extends \Table
             Else if there are cards remaining move the next available card to resolving
             Else we’re done resolving cards - set the active player to the trick leader and go to PHASE THREE PLAY ACTION CARD
             Resolve (or continue resolving) the resolving card */
+
+        $this->gamestate->nextState('noCards');
 
     }
     
@@ -127,8 +150,17 @@ class Game extends \Table
         $happinessScores = [];
         $converted_pool = 0;
 
-        // Collect happiness scores
+        // Get existing family and prayer counts for all players
+        $previous_family = [];
+        $previous_prayer = [];
+        
         $players = $this->loadPlayersBasicInfos();
+        foreach ($players as $player_id => $_) {
+            $previous_family[$player_id] = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
+            $previous_prayer[$player_id] = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+        }
+
+        // Collect happiness scores
         foreach ($players as $player_id => $_) {
             $happinessScores[$player_id] = (int)$this->getUniqueValueFromDB("SELECT player_happiness FROM player WHERE player_id = $player_id");
         }
@@ -277,6 +309,7 @@ class Game extends \Table
         $this->gamestate->nextState('phaseOneDraw');
     }
 
+
 ///////////Player Actions /////////////////////
     public function actDrawCardInit(string $type /* either "disaster" or "bonus" */): void
     {
@@ -353,7 +386,7 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
 
-        $this->gamestate->nextState("phaseFourConvertPray");
+        $this->gamestate->nextState();
     }
 
     public function actConvertBelievers(int $target_player_id): void
@@ -421,25 +454,57 @@ class Game extends \Table
     /***** Play card actions ******/
     public function actPlayCard(string $type, int $card_id): void
     {
-        // Handle deck type?
-        $this->cards->moveCard($card_id, 'played', $player_id);
-        $this->trace("KALUA plays a card.");
+        // 1. Check if action is allowed
+        $this->checkAction('actPlayCard');
+        
+        // 2. Get current player (cast to int since moveCard expects int)
+        $player_id = (int)$this->getActivePlayerId();
+        
+        // 3. Validate the card belongs to the player
+        $card = $this->getCard($card_id);
+        if ($card === null) {
+            throw new \BgaUserException("Card not found");
+        }
+        if ($card['location'] !== 'hand' || $card['location_arg'] != $player_id) {
+            throw new \BgaUserException("This card is not in your hand");
+        }
+        
+        // 4. Apply game rules validation here
+        // (check if this card can be played according to Kalua rules)
+        
+        // 5. Move card to played location
+        $this->moveCard($card_id, 'played', $player_id);
+        
+        // 6. Send notification to all players
+        $this->notifyAllPlayers('cardPlayed', 
+            clienttranslate('${player_name} plays ${card_name}'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getActivePlayerName(),
+                'card_id' => $card_id,
+                'card_name' => $this->getCardName($card),
+                'type' => $type
+            ]);
+        
+        // 7. Transition to next state
+        $this->gamestate->nextState('nextPlayerThree');
     }
 
     public function actBuyCard(): void
     {
         // Handle deck type?
         $this->trace("KALUA buys a card.");
+        $this->gamestate->nextState('nextPlayerThree');
     }
 
     public function actPlayCardPass(): void
     {
-        
+        $this->trace("KALUA passes their turn.");
+        $this->gamestate->nextState('nextPlayerThree');
     }
 
     public function actSayConvert(): void
     {
-
+        $this->gamestate->nextState("resolveCards");
     }
     /***************************************/
 
@@ -467,9 +532,124 @@ class Game extends \Table
 
     /***** helpers ******/
 
-    public function setFamilyCount($player_id, $player_family): void
+    /**
+     * Get a card from the appropriate deck based on card ID
+     * @param int $card_id The card ID to retrieve
+     * @return array|null The card data or null if not found
+     */
+    public function getCard(int $card_id): ?array
     {
-        self::DbQuery("UPDATE player SET player_family = $player_family WHERE player_id = $player_id");
+        // Try to get the card from disaster deck first
+        $card = $this->disasterCards->getCard($card_id);
+        if ($card !== null) {
+            return $card;
+        }
+        
+        // If not found in disaster deck, try bonus deck
+        $card = $this->bonusCards->getCard($card_id);
+        if ($card !== null) {
+            return $card;
+        }
+        
+        // Card not found in either deck
+        return null;
+    }
+
+    /**
+     * Move a card from the appropriate deck to a new location
+     * @param int $card_id The card ID to move
+     * @param string $location The target location
+     * @param int $location_arg The location argument (usually player ID)
+     * @return bool Success of the operation
+     */
+    public function moveCard(int $card_id, string $location, int $location_arg = 0): bool
+    {
+        // Try to move from disaster deck first
+        $card = $this->disasterCards->getCard($card_id);
+        if ($card !== null) {
+            $this->disasterCards->moveCard($card_id, $location, $location_arg);
+            return true;
+        }
+        
+        // If not found in disaster deck, try bonus deck
+        $card = $this->bonusCards->getCard($card_id);
+        if ($card !== null) {
+            $this->bonusCards->moveCard($card_id, $location, $location_arg);
+            return true;
+        }
+        
+        // Card not found in either deck
+        return false;
+    }
+
+    /**
+     * Get card name based on card data
+     * @param array $card Card data array with 'type' and 'type_arg' fields
+     * @return string The human-readable card name
+     */
+    public function getCardName(array $card): string
+    {
+        $card_type = (int)$card['type'];
+        $card_type_arg = (int)$card['type_arg'];
+
+        switch ($card_type) {
+            case CardType::GlobalDisaster->value:
+                return match ($card_type_arg) {
+                    GlobalDisasterCard::Tsunami->value => clienttranslate('Tsunami'),
+                    GlobalDisasterCard::Famine->value => clienttranslate('Famine'),
+                    GlobalDisasterCard::Floods->value => clienttranslate('Floods'),
+                    GlobalDisasterCard::MassiveFire->value => clienttranslate('Massive Fire'),
+                    GlobalDisasterCard::Drought->value => clienttranslate('Drought'),
+                    GlobalDisasterCard::Death->value => clienttranslate('Death'),
+                    GlobalDisasterCard::Thunderstorm->value => clienttranslate('Thunderstorm'),
+                    GlobalDisasterCard::Revenge->value => clienttranslate('Revenge'),
+                    GlobalDisasterCard::Epidemic->value => clienttranslate('Epidemic'),
+                    GlobalDisasterCard::Riots->value => clienttranslate('Riots'),
+                    default => clienttranslate('Unknown Global Disaster'),
+                };
+
+            case CardType::LocalDisaster->value:
+                return match ($card_type_arg) {
+                    LocalDisasterCard::Tornado->value => clienttranslate('Tornado'),
+                    LocalDisasterCard::Earthquake->value => clienttranslate('Earthquake'),
+                    LocalDisasterCard::BadWeather->value => clienttranslate('Bad Weather'),
+                    LocalDisasterCard::Locust->value => clienttranslate('Locust'),
+                    LocalDisasterCard::TempleDestroyed->value => clienttranslate('Temple Destroyed'),
+                    default => clienttranslate('Unknown Local Disaster'),
+                };
+
+            case CardType::Bonus->value:
+                return match ($card_type_arg) {
+                    BonusCard::GoodWeather->value => clienttranslate('Good Weather'),
+                    BonusCard::DoubleHarvest->value => clienttranslate('Double Harvest'),
+                    BonusCard::Fertility->value => clienttranslate('Fertility'),
+                    BonusCard::Festivities->value => clienttranslate('Festivities'),
+                    BonusCard::NewLeader->value => clienttranslate('New Leader'),
+                    BonusCard::Temple->value => clienttranslate('Temple'),
+                    BonusCard::Amulets->value => clienttranslate('Amulets'),
+                    default => clienttranslate('Unknown Bonus'),
+                };
+
+            default:
+                return clienttranslate('Unknown Card');
+        }
+    }
+
+    /**
+     * Get card type name (category) based on card data
+     * @param array $card Card data array with 'type' field
+     * @return string The card type name
+     */
+    public function getCardTypeName(array $card): string
+    {
+        $card_type = (int)$card['type'];
+
+        return match ($card_type) {
+            CardType::GlobalDisaster->value => clienttranslate('Global Disaster'),
+            CardType::LocalDisaster->value => clienttranslate('Local Disaster'),
+            CardType::Bonus->value => clienttranslate('Bonus'),
+            default => clienttranslate('Unknown Type'),
+        };
     }
 
     // Aux function to move families from pool to player in convert/pray phase
@@ -481,6 +661,11 @@ class Game extends \Table
     // Aux function to count families in convert/pray phase
     public function getFamilyCount($player_id) {
         return (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = {$player_id}");
+    }
+
+    // Aux function to set families for a player
+    public function setFamilyCount($player_id, $count) {
+        self::DbQuery("UPDATE player SET player_family = $count WHERE player_id = $player_id");
     }
 
     public function check_playerHasLeader() : bool
@@ -614,7 +799,6 @@ class Game extends \Table
         // Set the colors of the players - should match player tokens
         $player_color_list = ["#4685FF", "#2EA232", "#C22D2D", "#C8CA25","#913CB3"];
         $default_colors = [...$player_color_list];
-        
 
         foreach ($players as $player_id => $player) {
             // Now you can access both $player_id and $player array
