@@ -486,10 +486,77 @@ class Game extends \Table
         $this->gamestate->nextState('nextPlayerThree');
     }
 
-    public function actBuyCard(): void
+    public function actBuyCard(int $card_id = null): void
     {
-        // Handle deck type?
-        $this->trace("KALUA buys a card.");
+        // 1. Check action is valid (following Hearts pattern)
+        $this->checkAction('actBuyCard');
+        
+        // 2. Get current player
+        $player_id = $this->getActivePlayerId();
+        
+        // 3. If no card_id provided, draw from deck (buy action)
+        if ($card_id === null) {
+            // For now, draw a disaster card (adapt based on game rules)
+            $card = $this->disasterCards->pickCard('deck', $player_id);
+            
+            if ($card === null) {
+                throw new \BgaUserException($this->_("No cards available in deck"));
+            }
+            
+            // 4. Notify about card drawn (following Hearts notification pattern)
+            $this->notifyAllPlayers('cardBought', 
+                clienttranslate('${player_name} buys a card'), 
+                array(
+                    'player_id' => $player_id,
+                    'player_name' => $this->getActivePlayerName(),
+                    'card_id' => $card['id'],
+                    'card_type' => $card['type'],
+                    'card_type_arg' => $card['type_arg']
+                )
+            );
+            
+            // 5. Private notification to player about their card details
+            $this->notifyPlayer($player_id, 'cardDrawn', '', array(
+                'card' => $card
+            ));
+            
+        } else {
+            // 3. Validate card exists and belongs to player (if playing from hand)
+            $card = $this->getCard($card_id);
+            if ($card === null) {
+                throw new \BgaUserException($this->_("Invalid card"));
+            }
+            
+            if ($card['location'] !== 'hand' || (int)$card['location_arg'] !== (int)$player_id) {
+                throw new \BgaUserException($this->_("This card is not in your hand"));
+            }
+            
+            // 4. Move card to play area (following Hearts pattern)
+            if ($card['type'] == CardType::GlobalDisaster->value || $card['type'] == CardType::LocalDisaster->value) {
+                $this->disasterCards->moveCard($card_id, 'play_area', $player_id);
+            } else {
+                $this->bonusCards->moveCard($card_id, 'play_area', $player_id);
+            }
+            
+            // 5. Comprehensive notification (following Hearts pattern)
+            $this->notifyAllPlayers('cardPlayed', 
+                clienttranslate('${player_name} plays ${card_name}'), 
+                array(
+                    'i18n' => array('card_name'),
+                    'player_id' => $player_id,
+                    'player_name' => $this->getActivePlayerName(),
+                    'card_id' => $card_id,
+                    'card_type' => $card['type'],
+                    'card_type_arg' => $card['type_arg'],
+                    'card_name' => $this->getCardName($card)
+                )
+            );
+        }
+        
+        // 6. Log action for debugging
+        $this->trace("Player $player_id performed actBuyCard");
+        
+        // 7. Transition to next state
         $this->gamestate->nextState('nextPlayerThree');
     }
 

@@ -222,10 +222,16 @@ function (dojo, declare,) {
             });
 
             // Create stock for played cards
-            this['playedCards'] = new ebg.stock();  
-            this['playedCards'].create(this, document.getElementById('playedCards'), 120, 177.4);
-            this['playedCards'].image_items_per_row = 5;
-            this['playedCards'].setSelectionMode(0);
+            this['played'] = new ebg.stock();  
+            this['played'].create(this, document.getElementById('playedCards'), 120, 177.4);
+            this['played'].image_items_per_row = 5;
+            this['played'].setSelectionMode(0);
+
+            // Create stock for resolved cards
+            this['resolved'] = new ebg.stock();
+            this['resolved'].create(this, document.getElementById('resolvedCards'), 120, 177.4);
+            this['resolved'].image_items_per_row = 5;
+            this['resolved'].setSelectionMode(0);
 
             // Initialize card stock for each player card div   
             Object.values(gamedatas.players).forEach(player => {
@@ -244,6 +250,13 @@ function (dojo, declare,) {
             {
                 const uniqueId = this.getCardUniqueId(card_type_local_disaster, card_id);
                 console.log("uniqueID: " + uniqueId);
+                
+                // Add to played cards stock
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id - 1);
+                
+                // Add to resolved cards stock
+                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id - 1);
+                
                 Object.values(gamedatas.players).forEach(player => {
                     /* Note: image ID 0 - 4 for local disaster cards */
                     this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id - 1);
@@ -257,6 +270,13 @@ function (dojo, declare,) {
             {
                 const uniqueId = this.getCardUniqueId(card_type_global_disaster, card_id);
                 console.log("uniqueID: " + uniqueId);
+                
+                // Add to played cards stock
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 4);
+                
+                // Add to resolved cards stock
+                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 4);
+                
                 Object.values(gamedatas.players).forEach(player => {
                     /* Note: image ID 5 - 14 for global disaster cards */
                     this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 4);
@@ -270,6 +290,13 @@ function (dojo, declare,) {
             {
                 const uniqueId = this.getCardUniqueId(card_type_bonus, card_id);
                 console.log("uniqueID: " + uniqueId);
+                
+                // Add to played cards stock
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 14);
+                
+                // Add to resolved cards stock
+                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 14);
+                
                 Object.values(gamedatas.players).forEach(player => {
                     /* Note: image ID 15-21 for bonus cards */
                     this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id + 14);
@@ -436,7 +463,6 @@ function (dojo, declare,) {
                         }
                         break;
                     case 'phaseThreePlayCard':
-                        // Enable card selection and show Play Card button
                         this.addActionButton('playCard-btn', _('Play Card'), () => {
                             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
                             if (selectedCards.length > 0) {
@@ -444,9 +470,20 @@ function (dojo, declare,) {
                                 this.bgaPerformAction('actPlayCard', {
                                     card_id: card.id
                                 });
+                            } else {
+                                this.showMessage(_('Please select a card first'), 'error');
                             }
                         });
-                        // Disable play card button if no card is selected
+
+                        this.addActionButton('buyCard-btn', _('Buy Card'), () => {
+                            this.bgaPerformAction('actBuyCard', {});
+                        });
+
+                        this.addActionButton('pass-btn', _('Pass'), () => {
+                            this.bgaPerformAction('actPlayCardPass', {});
+                        });
+
+                        // Initially disable the play card button
                         const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
                         if (selectedCards.length === 0) {
                             dojo.addClass('playCard-btn', 'disabled');
@@ -489,7 +526,7 @@ function (dojo, declare,) {
             // Add card to played cards area
             const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
             console.log("playing unique ID " + uniqueId)
-            this['playedCards'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
+            this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
 
             console.log(`Card ${card_id} played by player ${player_id}`);
         },
@@ -609,15 +646,15 @@ function (dojo, declare,) {
 
         onPlayerHandSelectionChanged: function () {
             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-            if (this.gamedatas.gamestate.name === 'phaseThreePlayCard') {
-                if (selectedCards.length > 0) {
-                    if ($('playCard-btn')) {
-                        dojo.removeClass('playCard-btn', 'disabled');
-                    }
-                } else {
-                    if ($('playCard-btn')) {
-                        dojo.addClass('playCard-btn', 'disabled');
-                    }
+            
+            // Enable/disable the Play Card button based on selection
+            if (selectedCards.length > 0) {
+                if ($('playCard-btn')) {
+                    dojo.removeClass('playCard-btn', 'disabled');
+                }
+            } else {
+                if ($('playCard-btn')) {
+                    dojo.addClass('playCard-btn', 'disabled');
                 }
             }
         },
@@ -693,12 +730,32 @@ function (dojo, declare,) {
             if (this.cardCounters[args.player_id]) {
                 this.cardCounters[args.player_id].incValue(-1);
             }
-            // Add the card to the playedCards stock
+            // Add the card to the played stock
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
-            if (this['playedCards']) {
-                this['playedCards'].addToStock(uniqueId);
+            if (this['played']) {
+                this['played'].addToStock(uniqueId);
             }
             console.log(`Card ${args.card_id} played by player ${args.player_id}`);
+        },
+
+        notif_cardBought: function(args) {
+            // Update card counter for the player who bought a card
+            if (this.cardCounters[args.player_id]) {
+                this.cardCounters[args.player_id].incValue(1);
+            }
+            console.log(`Player ${args.player_id} bought a card`);
+        },
+
+        notif_cardDrawn: function(args) {
+            // Private notification - add the card to the player's hand if it's the current player
+            if (args.player_id == this.player_id && args.card) {
+                const card = args.card;
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                const playerCardsStock = this[`${this.player_id}_cards`];
+                if (playerCardsStock) {
+                    playerCardsStock.addToStockWithId(uniqueId, card.id);
+                }
+            }
         },
 
         ///////////////////////////////////////////////////
