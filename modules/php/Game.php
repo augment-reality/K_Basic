@@ -391,7 +391,7 @@ class Game extends \Table
             'player_name' => $this->getActivePlayerName()
         ]);
 
-        $this->gamestate->nextState('nextPlayer');
+        $this->gamestate->nextState('nextPlayerTwo');
     }
 
     public function actConvertAtheists(): void
@@ -414,7 +414,7 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
 
-        $this->gamestate->nextState('nextPlayer');
+        $this->gamestate->nextState('nextPlayerTwo');
     }
 
     public function actConvertBelievers(int $target_player_id): void
@@ -444,7 +444,7 @@ class Game extends \Table
             $this->trace("KALUA not converting any families!");
         }
 
-        $this->gamestate->nextState('nextPlayer');
+        $this->gamestate->nextState('nextPlayerTwo');
     }
 
     public function actSacrificeLeader(): void
@@ -473,7 +473,7 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
         
-        $this->gamestate->nextState('nextPlayer');
+        $this->gamestate->nextState('nextPlayerTwo');
     }
 
 
