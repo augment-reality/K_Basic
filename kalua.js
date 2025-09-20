@@ -647,7 +647,7 @@ function (dojo, declare,) {
             this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
             // Use the player's sprite value from gamedatas to move the correct token
             const sprite = this.gamedatas.players[player_id].sprite;
-            this.movetokens(sprite, 1);
+            this.movetokens(sprite-1, 1);
         },
 
         convertAtheists: function(player_id, num_atheists) {

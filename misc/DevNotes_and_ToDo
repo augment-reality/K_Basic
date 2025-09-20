@@ -13,6 +13,8 @@ HTML for desktop is largely finished. Should re-scan cards for improved quality.
 
 ----------------------------    To do   -------------------------------------------
 
+-cards bought with 5 prayer are not playable? (not in hand?)
+-massive speech not removing chief visible to other players
 -Active player cycle always lets them draw a new card at beginning of round; just an artifact of skipping to pray/convert?
 -need to add played/resolved cards on refresh
 -Players can always draw a card by paying 5 prayer; need to test the proposed state 80

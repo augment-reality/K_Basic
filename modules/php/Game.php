@@ -609,8 +609,11 @@ class Game extends \Table
         // Deduct 5 prayer points
         $this->DbQuery("UPDATE player SET player_prayer = player_prayer - 5 WHERE player_id = $player_id");
         
-        // Draw the card using the existing private function
-        $this->drawCard_private($type);
+        // Draw the card using the existing private function, passing player_id explicitly
+        $this->drawCard_private($type, $player_id);
+        
+        // Update player card count in the database
+        $this->DbQuery("UPDATE player SET player_card_count = player_card_count + 1 WHERE player_id = $player_id");
         
         // Notify about prayer point cost
         $this->notifyAllPlayers('prayerSpent', 
@@ -1213,30 +1216,57 @@ class Game extends \Table
     }
 
     /* Helpers */
-    private function drawCard_private(string $type) : void
+    private function drawCard_private(string $type, int $player_id = null) : void
     {
         $card = null;
-        $player_id = $this->getCurrentPlayerId();
+        if ($player_id === null) {
+            $player_id = $this->getCurrentPlayerId();
+        }
+        
         if ($type != STR_CARD_TYPE_DISASTER && $type != STR_CARD_TYPE_BONUS)
         {
             throw new \BgaVisibleSystemException($this->_("Unknown card type " + $type));
         }
-        $this->trace( "KALUA draw a card!!" );
+        $this->trace( "KALUA draw a card!! Player: $player_id, Type: $type" );
+        
+        // Check deck size before drawing
         if (STR_CARD_TYPE_DISASTER == $type)
         {
-            $card = $this->disasterCards->pickCard( "deck", $player_id);
+            $deck_count = $this->disasterCards->countCardInLocation("deck");
+            $this->trace("Disaster deck has $deck_count cards");
+            if ($deck_count == 0) {
+                throw new \BgaUserException("No more disaster cards available");
+            }
+            $card = $this->disasterCards->pickCardForLocation("deck", "hand", $player_id);
         }
         else if (STR_CARD_TYPE_BONUS == $type)
         {           
-            $card = $this->bonusCards->pickCard( "deck", $player_id);
+            $deck_count = $this->bonusCards->countCardInLocation("deck");
+            $this->trace("Bonus deck has $deck_count cards");
+            if ($deck_count == 0) {
+                throw new \BgaUserException("No more bonus cards available");
+            }
+            $card = $this->bonusCards->pickCardForLocation("deck", "hand", $player_id);
         }
 
+        if ($card === null) {
+            throw new \BgaUserException("No more cards available in the $type deck");
+        }
+
+        $this->trace("Card drawn: " . json_encode($card));
+
+        // Public notification that a card was drawn
         $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
                 'player_id' => $player_id,
-                'player_name' => $this->getCurrentPlayerName(),
+                'player_name' => $this->getPlayerNameById($player_id),
                 'card_id' => $card['id'],
                 'card_type' => $card['type'],
                 'card_type_arg' => $card['type_arg']
             ]);
+
+        // Private notification to the player with card details
+        $this->notifyPlayer($player_id, 'cardDrawn', '', [
+            'card' => $card
+        ]);
     }
 }
