@@ -235,13 +235,28 @@ function (dojo, declare,) {
 
             // Initialize card stock for each player card div   
             Object.values(gamedatas.players).forEach(player => {
+                // Create cardbacks stock using the cardbacks div
+                this[`${player.id}_cardbacks`] = new ebg.stock();
+                this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 174);
+                this[`${player.id}_cardbacks`].image_items_per_row = 2;
+                this[`${player.id}_cardbacks`].setSelectionMode(0);
+
+                // Create cards stock using the cards div
                 this[`${player.id}_cards`] = new ebg.stock();
                 this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 177.4);
                 this[`${player.id}_cards`].image_items_per_row = 5;
                 this[`${player.id}_cards`].setSelectionMode(1); // single selection
                 dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
 
+                for (let card_id = 80; card_id <= 81; card_id++)
+                {              
+                    // Add card backs to stock
+                    this[`${player.id}_cardbacks`].addItemType(card_id, card_id, g_gamethemeurl + 'img/Cards_Backs_240_174.png', card_id);
+                }
+
             });
+
+
 
             /* Add local disaster cards */
             const card_type_local_disaster = this.ID_LOCAL_DISASTER;
@@ -335,6 +350,28 @@ function (dojo, declare,) {
                 this.drawCard(this.player_id, card.id, card.type, card.type_arg);
             })
 
+            /* Add cardbacks for other players' cards */
+            Object.values(gamedatas.players).forEach(player => {
+                if (player.id != this.player_id && player.cards > 0) {
+                    const cardbackStock = this[`${player.id}_cardbacks`];
+                    if (cardbackStock) {
+                        let cardback_id_counter = 0;
+                        
+                        // Add disaster cardbacks based on actual disaster card count
+                        for (let i = 0; i < player.disaster_cards; i++) {
+                            const unique_cardback_id = player.id * 1000 + cardback_id_counter++;
+                            cardbackStock.addToStockWithId(80, unique_cardback_id); // 80 = disaster cardback
+                        }
+                        
+                        // Add bonus cardbacks based on actual bonus card count
+                        for (let i = 0; i < player.bonus_cards; i++) {
+                            const unique_cardback_id = player.id * 1000 + cardback_id_counter++;
+                            cardbackStock.addToStockWithId(81, unique_cardback_id); // 81 = bonus cardback
+                        }
+                    }
+                }
+            });
+
             // Update sidebar counters based on gamedata
             Object.values(gamedatas.players).forEach(player => {
                 this.prayerCounters[player.id].setValue(player.prayer);
@@ -362,6 +399,24 @@ function (dojo, declare,) {
                     console.log("Entering phaseOneDraw state");
                     if (this.isCurrentPlayerActive()) {
 
+                    }
+                    break;
+
+                case 'phaseTwoActivateLeader':
+                    // Existing code for phaseTwoActivateLeader
+                    break;
+
+                case 'phaseThreeCheckGlobal':
+                    if (this.isCurrentPlayerActive()) {
+                        this.addActionButton('pass-btn', _('Pass'), () => {
+                            this.bgaPerformAction('actCheckGlobalPass', {});
+                        });
+                        this.addActionButton('avoid-btn', _('Avoid'), () => {
+                            this.bgaPerformAction('actCheckGlobalAvoid', {});
+                        });
+                        this.addActionButton('double-btn', _('Double'), () => {
+                            this.bgaPerformAction('actCheckGlobalDouble', {});
+                        });
                     }
                     break;
 
@@ -475,17 +530,23 @@ function (dojo, declare,) {
                             }
                         });
 
-                        this.addActionButton('buyCard-btn', _('Buy Card'), () => {
-                            this.bgaPerformAction('actBuyCard', {});
-                        });
-
                         this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => {
                             this.bgaPerformAction('actGoToBuyCardReflex', {});
                         });
 
-                        this.addActionButton('pass-btn', _('Pass'), () => {
-                            this.bgaPerformAction('actPlayCardPass', {});
-                        });
+                        // Only show pass button for players who are not the round leader
+                        if (this.player_id != this.gamedatas.round_leader) {
+                            this.addActionButton('pass-btn', _('Pass'), () => {
+                                this.bgaPerformAction('actPlayCardPass', {});
+                            });
+                        }
+
+                        // Only show pass button for the round leader
+                        if (this.player_id == this.gamedatas.round_leader) {
+                            this.addActionButton('pass-btn', _('Pass'), () => {
+                                this.bgaPerformAction('actPlayCardPass', {});
+                            });
+                        }
 
                         // Initially disable the play card button
                         const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
@@ -694,9 +755,25 @@ function (dojo, declare,) {
                 this.drawCard(player_id, args.card_id, args.card_type, args.card_type_arg);
                 console.log('It\'s me!');
             }
+            else
+            {
+                // Show cardback to other players
+                const cardbackStock = this[`${player_id}_cardbacks`];
+                if (cardbackStock) {
+                    // Determine cardback type based on card type
+                    let cardback_id;
+                    if (type == 1 || type == 2) { // GlobalDisaster or LocalDisaster
+                        cardback_id = 80; // disaster cardback
+                    } else { // Bonus or any other type
+                        cardback_id = 81; // bonus cardback (fallback for unknown types)
+                    }
+                    
+                    cardbackStock.addToStockWithId(cardback_id, card_id);
+                }
+            }
+            
             /* Update counter */
             this.cardCounters[player_id].incValue(1);
-            //this.gamedatas.players[player_id].addToStockWithId(); // card back visible to all players
         },
 
         notif_giveSpeech: async function( args )
@@ -748,6 +825,13 @@ function (dojo, declare,) {
             if (playerCardsStock) {
                 playerCardsStock.removeFromStockById(args.card_id);
             }
+            
+            // Remove the cardback from other players' view
+            const cardbackStock = this[`${args.player_id}_cardbacks`];
+            if (cardbackStock) {
+                cardbackStock.removeFromStockById(args.card_id);
+            }
+            
             if (this.cardCounters[args.player_id]) {
                 this.cardCounters[args.player_id].incValue(-1);
             }
@@ -765,6 +849,7 @@ function (dojo, declare,) {
                 this.cardCounters[args.player_id].incValue(1);
             }
             console.log(`Player ${args.player_id} bought a card`);
+
         },
 
         notif_cardDrawn: function(args) {

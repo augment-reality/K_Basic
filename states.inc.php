@@ -62,6 +62,7 @@ $machinestates = [
         ->type(StateType::ACTIVE_PLAYER)
         ->possibleactions([
             'actDrawCard',
+            'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
             'FreeAction' => ST_PHASE_TWO_ACTIVATE_LEADER
@@ -81,7 +82,7 @@ $machinestates = [
             'actConvertAtheists',
             'actConvertBelievers',
             'actGiveSpeech',
-            'reflexiveBuyCard'
+            'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
             'nextPlayerTwo' => ST_PHASE_TWO_NEXT_PLAYER
@@ -107,16 +108,26 @@ $machinestates = [
         ->action('stPlayCard')
         ->possibleactions([
             'actPlayCard',
-            'actBuyCard',
-            'actPlayCardPass',
-            'actSayConvert',
+            'actPlayCardPass', //only for non-round leader
+            'actSayConvert', //only for round leader
             'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
-            'phaseThreeCheckGlobal' => ST_PHASE_THREE_CHECK_GLOBAL,
+            'playAgain' => ST_PHASE_THREE_PLAY_CARD, // Allow playing multiple cards for round leader
             'nextPlayerThree' => ST_PHASE_THREE_NEXT_PLAYER,
             'resolveCards' => ST_PHASE_THREE_RESOLVE_CARD,
             'buyCardReflex' => ST_REFLEXIVE_BUY_CARD, // Transition to reflexive state
+        ])
+        ->build(),
+
+    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //42
+        ->name('phaseThreeNextPlayer')
+        ->type(StateType::GAME)
+        ->action('stNextPlayerCards')
+        ->transitions([
+            'phaseThreeCheckGlobal' => ST_PHASE_THREE_CHECK_GLOBAL,
+            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD,
+            'resolveCards'  => ST_PHASE_THREE_RESOLVE_CARD
         ])
         ->build(),
 
@@ -126,22 +137,15 @@ $machinestates = [
         ->action('stGlobalOption')
         ->possibleactions([
             'actAvoidGlobal',
-            'actDoubleGlobal'
+            'actDoubleGlobal',
+            'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
-            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD
+            'playAgain' => ST_PHASE_THREE_PLAY_CARD,
+            'nextPlayerThree' => ST_PHASE_THREE_NEXT_PLAYER
         ])
         ->build(),
 
-    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //42
-        ->name('phaseThreeNextPlayer')
-        ->type(StateType::GAME)
-        ->action('stNextPlayerCards')
-        ->transitions([
-            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD,
-            'resolveCards'  => ST_PHASE_THREE_RESOLVE_CARD
-        ])
-        ->build(),
 
     ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create() //43
         ->name('phaseThreeResolveCard')
@@ -164,7 +168,8 @@ $machinestates = [
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stSelectTarget')
         ->possibleactions([
-            'actSelectPlayer'
+            'actSelectPlayer',
+            'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
             'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
@@ -181,6 +186,7 @@ $machinestates = [
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
         ->possibleactions([
             'actAmuletChoose',
+            'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([
             'rollDice' => ST_PHASE_THREE_ROLL_DICE,
@@ -239,7 +245,7 @@ $machinestates = [
             'actCancelBuyCard'
         ])
         ->transitions([
-            'returnToPrevious' => 'returnState' // This returns to the previous state
+            // No transitions - uses jumpToState to return to saved state
         ])
         ->build(),
 ];

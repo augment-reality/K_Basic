@@ -134,6 +134,12 @@ class Game extends \Table
 
     public function stGlobalOption(): void
     {
+        //actions for global disaster card options will send to play again
+
+        if ($this->getActivePlayerId() != $this->getGameStateValue("roundLeader")) {
+            $this->gamestate->nextState("checkRoundThree");
+        }
+            
 
     }
 
@@ -545,45 +551,6 @@ class Game extends \Table
         }
     }
 
-    public function actBuyCard(): void
-    {
-        // 1. Check action is valid 5 prayer points?
-        // TODO: Add prayer point check if needed
-
-        // 2. Get current player
-        $player_id = $this->getActivePlayerId();
-
-        // For now, draw a disaster card (adapt based on game rules)
-        $card = $this->disasterCards->pickCard('deck', $player_id);
-
-        if ($card === null) {
-            throw new \BgaUserException($this->_("No cards available in deck"));
-        }
-
-        // 4. Notify about card drawn (following Hearts notification pattern)
-        $this->notifyAllPlayers('cardBought', 
-            clienttranslate('${player_name} buys a card'), 
-            array(
-                'player_id' => $player_id,
-                'player_name' => $this->getActivePlayerName(),
-                'card_id' => $card['id'],
-                'card_type' => $card['type'],
-                'card_type_arg' => $card['type_arg']
-            )
-        );
-
-        // 5. Private notification to player about their card details
-        $this->notifyPlayer($player_id, 'cardDrawn', '', array(
-            'card' => $card
-        ));
-
-        // 6. Log action for debugging
-        $this->trace("Player $player_id performed actBuyCard");
-
-        // 7. Transition to next state
-        $this->gamestate->nextState('nextPlayerThree');
-    }
-
     public function actPlayCardPass(): void
     {
         $this->trace("KALUA passes their turn.");
@@ -679,9 +646,11 @@ class Game extends \Table
         $this->setGameStateValue('saved_state', 0);
         $this->setGameStateValue('saved_active_player', 0);
         
-        // Return to the saved state
+        // Return to the saved state - jumpToState should restore the context properly
         $this->gamestate->jumpToState($saved_state);
-        $this->gamestate->changeActivePlayer($saved_player);
+        
+        // Log the restoration for debugging
+        $this->trace("Returned from reflexive state to state $saved_state for player $saved_player");
     }
 
     public function actAvoidGlobal(): void
@@ -689,16 +658,15 @@ class Game extends \Table
         //implement logic to flag player as avoiding global disaster or something
 
         // Transition to next state
-        $this->gamestate->nextState();
+        $this->gamestate->nextState("playAgain");
     }
 
     public function actDoubleGlobal(): void
     {
-//implement logic to flag double global disaster (play card twice?)
-//don't check for elimnination until end of global disaster resolution
+        //implement logic to flag double global disaster (play card twice?)
+        //don't check for elimnination until end of global disaster resolution
 
-// Transition to next state
-$this->gamestate->nextState();
+        $this->gamestate->nextState("playAgain");
     }
     
     /***************************************/
@@ -1047,7 +1015,7 @@ $this->gamestate->nextState();
      * - when the game starts
      * - when a player refreshes the game page (F5)
      */
-    protected function getAllDatas()
+    protected function getAllDatas(): array
     {
         $result = [];
         $current_player_id = (int) $this->getCurrentPlayerId();
@@ -1063,15 +1031,22 @@ $this->gamestate->nextState();
                 player_card_count cards
                 FROM player"
         );
-        /* add name */
-        foreach ($result["players"] as $player)
+        /* add name and card type counts */
+        foreach ($result["players"] as &$player)
         {
             $player["name"] = $this->getPlayerNameById($player["id"]);
+            
+            // Add disaster and bonus card counts for all players (visible information)
+            $player["disaster_cards"] = $this->disasterCards->countCardInLocation("hand", $player["id"]);
+            $player["bonus_cards"] = $this->bonusCards->countCardInLocation("hand", $player["id"]);
         }
 
         // Fetch the number of atheist families from the database
         $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
         $result["atheist_families"] = $atheistCount;
+
+        // Add round leader information
+        $result["round_leader"] = $this->getGameStateValue("roundLeader");
 
         // // Fetch the dice information from the database
         // $result["dices"] = $this->getCollectionFromDb(
