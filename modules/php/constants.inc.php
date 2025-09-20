@@ -75,17 +75,17 @@ enum LocalDisasterCard: int
 enum BonusCard: int
 {
     case GoodWeather = 1;
-    case DoubleHarvest = 2;
-    case Fertility = 3;
+    case Fertility = 2;
+    case Amulets = 3;
     case Festivities = 4;
     case NewLeader = 5;
-    case Temple = 6;
-    case Amulets = 7;
+    case DoubleHarvest = 6;
+    case Temple = 7;
 }
 
+//const CARD_EFFECTS = 10;
 
-
-$CARD_EFFECTS = [
+const CARD_EFFECTS = [
     CardType::GlobalDisaster->value => [
         GlobalDisasterCard::Tsunami->value => [
             'prayer_cost' => 0,
