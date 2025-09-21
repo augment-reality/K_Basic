@@ -106,7 +106,6 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must play a card'))
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stPlayCard')
-        ->args('argPlayCard')
         ->possibleactions([
             'actPlayCard',
             'actPlayCardPass', //only for non-round leader
@@ -115,23 +114,13 @@ $machinestates = [
         ])
         ->transitions([
             'playAgain' => ST_PHASE_THREE_PLAY_CARD, // Allow playing multiple cards for round leader
+            'phaseThreeCheckGlobal' => ST_PHASE_THREE_CHECK_GLOBAL, // Allow avoid/double option after playing a global disaster card
             'nextPlayerThree' => ST_PHASE_THREE_NEXT_PLAYER,
             'resolveCards' => ST_PHASE_THREE_RESOLVE_CARD,
             'buyCardReflex' => ST_REFLEXIVE_BUY_CARD, // Transition to reflexive state
         ])
         ->build(),
-
-    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //42
-        ->name('phaseThreeNextPlayer')
-        ->type(StateType::GAME)
-        ->action('stNextPlayerCards')
-        ->transitions([
-            'phaseThreeCheckGlobal' => ST_PHASE_THREE_CHECK_GLOBAL,
-            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD,
-            'resolveCards'  => ST_PHASE_THREE_RESOLVE_CARD
-        ])
-        ->build(),
-
+        
     ST_PHASE_THREE_CHECK_GLOBAL => GameStateBuilder::create() //41
         ->name('phaseThreeCheckGlobal')
         ->type(StateType::ACTIVE_PLAYER)
@@ -147,6 +136,16 @@ $machinestates = [
         ])
         ->build(),
 
+    ST_PHASE_THREE_NEXT_PLAYER => GameStateBuilder::create() //42
+        ->name('phaseThreeNextPlayer')
+        ->type(StateType::GAME)
+        ->action('stNextPlayerCards')
+        ->transitions([
+
+            'checkRoundThree' => ST_PHASE_THREE_PLAY_CARD,
+            'resolveCards'  => ST_PHASE_THREE_RESOLVE_CARD
+        ])
+        ->build(),
 
     ST_PHASE_THREE_RESOLVE_CARD => GameStateBuilder::create() //43
         ->name('phaseThreeResolveCard')

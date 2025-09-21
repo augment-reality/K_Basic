@@ -246,7 +246,7 @@ function (dojo, declare,) {
                 this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 177.4);
                 this[`${player.id}_cards`].image_items_per_row = 5;
                 this[`${player.id}_cards`].setSelectionMode(1); // single selection
-                //dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
+                dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
 
                 for (let card_id = 80; card_id <= 81; card_id++)
                 {              
@@ -263,7 +263,7 @@ function (dojo, declare,) {
             const num_local_disaster_cards = 5;
             for (let card_id = 1; card_id <= num_local_disaster_cards; card_id++)
             {
-                const uniqueId = this.getCardTypeId(card_type_local_disaster, card_id);
+                const uniqueId = this.getCardUniqueId(card_type_local_disaster, card_id);
                 console.log("uniqueID: " + uniqueId);
                 
                 // Add to played cards stock
@@ -283,7 +283,7 @@ function (dojo, declare,) {
             const num_global_disaster_cards = 10;
             for (let card_id = 1; card_id <= num_global_disaster_cards; card_id++)
             {
-                const uniqueId = this.getCardTypeId(card_type_global_disaster, card_id);
+                const uniqueId = this.getCardUniqueId(card_type_global_disaster, card_id);
                 console.log("uniqueID: " + uniqueId);
                 
                 // Add to played cards stock
@@ -303,7 +303,7 @@ function (dojo, declare,) {
             const num_bonus_cards = 7;
             for (let card_id = 1; card_id <= num_bonus_cards; card_id++)
             {
-                const uniqueId = this.getCardTypeId(card_type_bonus, card_id);
+                const uniqueId = this.getCardUniqueId(card_type_bonus, card_id);
                 console.log("uniqueID: " + uniqueId);
                 
                 // Add to played cards stock
@@ -352,19 +352,21 @@ function (dojo, declare,) {
 
             /* Add cardbacks for other players' cards */
             Object.values(gamedatas.players).forEach(player => {
-                if (player.id != this.player_id && player.cards > 0) {
+                if (player.id != this.player_id) {
                     const cardbackStock = this[`${player.id}_cardbacks`];
                     if (cardbackStock) {
                         let cardback_id_counter = 0;
                         
                         // Add disaster cardbacks based on actual disaster card count
-                        for (let i = 0; i < player.disaster_cards; i++) {
+                        const disasterCount = parseInt(player.disaster_cards) || 0;
+                        for (let i = 0; i < disasterCount; i++) {
                             const unique_cardback_id = player.id * 1000 + cardback_id_counter++;
                             cardbackStock.addToStockWithId(80, unique_cardback_id); // 80 = disaster cardback
                         }
                         
                         // Add bonus cardbacks based on actual bonus card count
-                        for (let i = 0; i < player.bonus_cards; i++) {
+                        const bonusCount = parseInt(player.bonus_cards) || 0;
+                        for (let i = 0; i < bonusCount; i++) {
                             const unique_cardback_id = player.id * 1000 + cardback_id_counter++;
                             cardbackStock.addToStockWithId(81, unique_cardback_id); // 81 = bonus cardback
                         }
@@ -409,13 +411,13 @@ function (dojo, declare,) {
                 case 'phaseThreeCheckGlobal':
                     if (this.isCurrentPlayerActive()) {
                         this.addActionButton('pass-btn', _('Pass'), () => {
-                            this.bgaPerformAction('actCheckGlobalPass', {});
+                            this.bgaPerformAction('actPassGlobal', {});
                         });
                         this.addActionButton('avoid-btn', _('Avoid'), () => {
-                            this.bgaPerformAction('actCheckGlobalAvoid', {});
+                            this.bgaPerformAction('actAvoidGlobal', {});
                         });
                         this.addActionButton('double-btn', _('Double'), () => {
-                            this.bgaPerformAction('actCheckGlobalDouble', {});
+                            this.bgaPerformAction('actDoubleGlobal', {});
                         });
                     }
                     break;
@@ -433,14 +435,14 @@ function (dojo, declare,) {
                         switch (stateName) {
                 case 'Initial_Draw':
                     if (this.isCurrentPlayerActive()) {
-                        if (this.gamedatas.hand) {
-                            for (var i in this.gamedatas.hand) {
-                                var card = this.gamedatas.hand[i];
-                                var color = card.type;
-                                var value = card.type_arg;
-                                this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardTypeId(color, value), this.getCardUniqueId(card.id, color));
-                            }
-                        }
+            if (this.gamedatas.hand) {
+                for (var i in this.gamedatas.hand) {
+                    var card = this.gamedatas.hand[i];
+                    var color = card.type;
+                    var value = card.type_arg;
+                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                }
+            }
                     }
                     break;
                 case 'phaseOneDraw':
@@ -578,27 +580,6 @@ function (dojo, declare,) {
         ///////////////////////////////////////////////////
         //// Utility methods
 
-        /* Maps card type (bonus, local disaster, global disaster) and type_id 
-         * (which of those type cards it is) to a unique number for the TYPE of card*/
-        getCardTypeId: function(type, type_id)
-        {
-            /* Unique ids will be based on the type and type_id */
-            if (type == this.ID_GLOBAL_DISASTER) /* global disaster */
-            {
-                return type_id;
-            }
-            else if (type == this.ID_LOCAL_DISASTER) /* local disaster - 10 globals + this type_id */
-            {
-                return 10 + type_id;
-            }
-            else if (type == this.ID_BONUS) /* bonus = globals + local + type_id */
-            {
-                return 10 + 5 + type_id;
-            }
-            console.log("INVALID CARD TYPE!!"); /* TODO exception? */
-            return 0;
-        },
-
         /* Maps an actual individual card to a unique number
          * The decks can contain multples of each type of card, and each
          * copy of each card needs it's own ID. 
@@ -624,10 +605,9 @@ function (dojo, declare,) {
                     this.cardCounters[player_id].incValue(-1);
 
             // Add card to played cards area
-            const uniqueId = this.getCardTypeId(parseInt(color), parseInt(value)); // Generate unique ID
-            const cardUniqueId = this.getCardUniqueId(card_id, card_type);
-            console.log("playing unique ID " + uniqueId + " with card id " + cardUniqueId);
-            this['played'].addToStockWithId(uniqueId, cardUniqueId); // Add card to played cards area  
+            const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
+            console.log("playing unique ID " + uniqueId)
+            this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
 
             console.log(`Card ${card_id} played by player ${player_id}`);
         },
@@ -635,11 +615,10 @@ function (dojo, declare,) {
         drawCard: function(player, card_id, card_type, card_type_arg) {
             console.log("Drawing a card");
 
-            const cardTypeId = this.getCardTypeId(parseInt(card_type), parseInt(card_type_arg)); 
-            const cardUniqueId = this.getCardUniqueId(card_id, card_type);
-            console.log("drawing card type " + cardTypeId + " with unique id " + cardUniqueId);
+            const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
+            console.log("drawing unique ID " + uniqueId)
 
-            this[`${player}_cards`].addToStockWithId(cardTypeId, cardUniqueId); // Add card to player's hand
+            this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
             console.log(`Card ${card_id} added to player ${this.player}'s hand`);            
         },
 
@@ -708,7 +687,7 @@ function (dojo, declare,) {
 
         sacrificeLeader: function(player_id, player_no, num_atheists) {
             console.log("Sacrificing leader and gaining " + num_atheists + " atheists");
-            const playerFamilies = this[`fams_${player_id}`];
+            const playerFamilies = this[`fams_${this.player_id}`];
             const atheistFamilies = this['atheists'];
             for (let i = 0; i < num_atheists; i++) 
             {
@@ -722,18 +701,17 @@ function (dojo, declare,) {
         },
 
         onBtnPlayCard: function () {
-            const action = "actPlayCard";
-            if (!this.checkAction(action)) return;
+        const action = "actPlayCard";
+        if (!this.checkAction(action)) return;
 
-            // Check the number of selected items
-            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
-            if (selectedCards.length === 0) 
-            {
-                this.showMessage(_('Please select a card'), 'error');
-                return;
-            }
-            const card = selectedCards[0].id;
-        },
+        // Check the number of selected items
+        const selectedCards = this.playerHand.getSelectedItems();
+        if (selectedCards.length === 0) {
+            this.showMessage(_('Please select a card'), 'error');
+            return;
+        }
+        const card = selectedCards[0].id;
+    },
 
 
         

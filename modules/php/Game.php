@@ -13,9 +13,6 @@ declare(strict_types=1);
 
 namespace Bga\Games\kalua;
 
-require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
-include_once("constants.inc.php");
-
 use BonusCard;
 use CardType;
 use GlobalDisasterCard;
@@ -23,7 +20,6 @@ use LocalDisasterCard;
 
 require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
 require_once("constants.inc.php");
-use CARD_EFFECTS;
 
 class Game extends \Table
 {
@@ -104,17 +100,6 @@ class Game extends \Table
 
     public function stNextPlayerCards(): void
     {
-
-        /*check to see if played card was global disaster - if so go to global disaster handling state before
-        continuing to check if next player is round leader*/
-
-        //card on top might just be by item weight, not most recently played
-        $last_card = $this->disasterCards->getCardOnTop('played');
-        if ($last_card && (int)$last_card['type'] === CardType::GlobalDisaster->value) {
-            $this->gamestate->nextState('phaseThreeCheckGlobal');
-            return;
-        }
-
         /* Update the active player to next. 
         If the active player is now the trick leader (everyone has had a chance), 
         go to PLAY ACTION CARD, otherwise ACTIVATE LEADER */
@@ -145,8 +130,6 @@ class Game extends \Table
         }
             
 
-        /* skip handling when none to play (https://en.doc.boardgamearena.com/Your_game_state_machine:_states.inc.php#Flag_to_indicate_a_skipped_state) */
-        //$this->gamestate->nextState("convert"); // for now, just skip
     }
 
     public function stResolveCard(): void
@@ -391,7 +374,7 @@ class Game extends \Table
             'player_name' => $this->getActivePlayerName()
         ]);
 
-        $this->gamestate->nextState('nextPlayerTwo');
+        $this->gamestate->nextState();
     }
 
     public function actConvertAtheists(): void
@@ -414,7 +397,7 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
 
-        $this->gamestate->nextState('nextPlayerTwo');
+        $this->gamestate->nextState();
     }
 
     public function actConvertBelievers(int $target_player_id): void
@@ -444,7 +427,7 @@ class Game extends \Table
             $this->trace("KALUA not converting any families!");
         }
 
-        $this->gamestate->nextState('nextPlayerTwo');
+        $this->gamestate->nextState();
     }
 
     public function actSacrificeLeader(): void
@@ -473,7 +456,7 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
         
-        $this->gamestate->nextState('nextPlayerTwo');
+        $this->gamestate->nextState();
     }
 
 
@@ -617,9 +600,6 @@ class Game extends \Table
         
         // Draw the card using the existing private function, passing player_id explicitly
         $this->drawCard_private($type, $player_id);
-        
-        // Update player card count in the database
-        $this->DbQuery("UPDATE player SET player_card_count = player_card_count + 1 WHERE player_id = $player_id");
         
         // Notify about prayer point cost
         $this->notifyAllPlayers('prayerSpent', 
@@ -968,16 +948,7 @@ class Game extends \Table
         return [
             '_no_notify' => !$this->check_playerHasLeader(),
         ];
-    }
-
-    public function argPlayCard() : array
-    {
-        $this->trace("KALUA getting play card args");
-        return ['_private' => ['active' => [
-            'playableCards' => $this->checkPlayableCards($this->getActivePlayerId()),
-            'isRoundLeader' => $this->checkIsRoundLeader($this->getActivePlayerId())
-        ]]];
-    }
+    }   
     
 
 
@@ -1055,8 +1026,8 @@ class Game extends \Table
             $player["name"] = $this->getPlayerNameById($player["id"]);
             
             // Add disaster and bonus card counts for all players (visible information)
-            $player["disaster_cards"] = $this->disasterCards->countCardInLocation("hand", $player["id"]);
-            $player["bonus_cards"] = $this->bonusCards->countCardInLocation("hand", $player["id"]);
+            $player["disaster_cards"] = (int)$this->disasterCards->countCardInLocation("hand", $player["id"]);
+            $player["bonus_cards"] = (int)$this->bonusCards->countCardInLocation("hand", $player["id"]);
         }
 
         // Fetch the number of atheist families from the database
@@ -1283,52 +1254,5 @@ class Game extends \Table
         $this->notifyPlayer($player_id, 'cardDrawn', '', [
             'card' => $card
         ]);
-    }
-
-    function checkPlayableCards($player_id): array {
-        /* A card is playable if the player has the prayer points to play it */
-        $available_points = (int)$this->getUniqueValueFromDB("SELECT player_prayer FROM player WHERE player_id = $player_id");
-        $cardsInHand_disaster = $this->disasterCards->getPlayerHand($player_id);
-        $cardsInHand_bonus = $this->bonusCards->getPlayerHand($player_id);
-
-        $this->trace(sprintf("KALUA points available: %d", $available_points));
-
-        $playableCardIds = [];
-
-        foreach ($cardsInHand_disaster as $card)
-        {
-            $type = $card['type'];
-            $type_arg = $card['type_arg'];
-            $cost = CARD_EFFECTS[$type][$type_arg]['prayer_cost'];
-
-            $this->trace(sprintf("KALUA card type %d arg %d cost disaster: %d", $type, $type_arg, $cost));
-            if ($cost <= $available_points)
-            {
-                $playableCardIds[] = ['id' => (int)$card['id'], 'type' => (int)$card['type'], 'type_arg' => (int)$card['type_arg']];
-                $insterted_card = end($playableCardIds);
-                $this->trace(sprintf("inserted id: %d, type: %d, type_arg: %d", $insterted_card["id"], $insterted_card["type"], $insterted_card["type_arg"]));
-            }
-        }
-
-        foreach ($cardsInHand_bonus as $card)
-        {
-            $type = $card['type'];
-            $type_arg = $card['type_arg'];
-            $cost = CARD_EFFECTS[$type][$type_arg]['prayer_cost'];
-            $this->trace(sprintf("KALUA card type %d arg %d cost disaster: %d", $type, $type_arg, $cost));
-            if ($cost <= $available_points)
-            {
-                $playableCardIds[] = ['id' => (int)$card['id'], 'type' => (int)$card['type'], 'type_arg' => (int)$card['type_arg']];
-                $insterted_card = end($playableCardIds);
-                $this->trace(sprintf("inserted id: %d, type: %d, type_arg: %d", $insterted_card["id"], $insterted_card["type"], $insterted_card["type_arg"]));
-            }
-        }
-
-        $this->trace(serialize($playableCardIds));
-        return $playableCardIds;
-    }
-
-    function checkIsRoundLeader($player_id): bool {
-        return $player_id == $this->getGameStateValue("roundLeader");
     }
 }

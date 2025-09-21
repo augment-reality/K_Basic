@@ -81,11 +81,12 @@ enum BonusCard: int
     case NewLeader = 5;
     case DoubleHarvest = 6;
     case Temple = 7;
+
 }
 
-//const CARD_EFFECTS = 10;
 
-const CARD_EFFECTS = [
+
+$CARD_EFFECTS = [
     CardType::GlobalDisaster->value => [
         GlobalDisasterCard::Tsunami->value => [
             'prayer_cost' => 0,
