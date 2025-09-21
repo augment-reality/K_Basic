@@ -587,7 +587,7 @@ class Game extends \Table
             throw new \BgaUserException("Invalid card type: $type");
         }
         
-        $player_id = $this->getCurrentPlayerId();
+        $player_id = (int)$this->getCurrentPlayerId();
         
         // Check if player has enough prayer points
         $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
@@ -1202,11 +1202,11 @@ class Game extends \Table
     }
 
     /* Helpers */
-    private function drawCard_private(string $type, int $player_id = null) : void
+    private function drawCard_private(string $type, ?int $player_id = null) : void
     {
         $card = null;
         if ($player_id === null) {
-            $player_id = $this->getCurrentPlayerId();
+            $player_id = (int)$this->getCurrentPlayerId();
         }
         
         if ($type != STR_CARD_TYPE_DISASTER && $type != STR_CARD_TYPE_BONUS)
