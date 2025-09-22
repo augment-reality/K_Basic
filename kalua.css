@@ -135,14 +135,35 @@ border-radius: 5px; */
     background-size: contain;
     background-repeat: no-repeat;
 }
-#icon_f {
+.icon_p {
+    background-image: url('img/SidebarIcon_Pray_30_30.png');  
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_pg {
+    background-image: url('img/SidebarIcon_Pray_30_30_g.png');  
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+.icon_pg {
+    background-image: url('img/SidebarIcon_Pray_30_30_g.png');  
+    width: 1em;
+    height: 1em;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+#icon_l {
     background-image: url('img/SidebarIcon_Fam1_30_30.png');
     width: 5em;
     height: 1em;
     background-size: contain;
     background-repeat: no-repeat;
 }
-#icon_l {
+#icon_f {
     background-image: url('img/SidebarIcon_Lead_30_30.png');
     width: 1em;
     height: 1em;

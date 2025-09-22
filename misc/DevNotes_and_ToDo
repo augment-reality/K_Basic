@@ -14,22 +14,20 @@ HTML for desktop is largely finished. Should re-scan cards for improved quality.
 
 Double Harvest
 Temple
+Fertility
 
 ----------------------------    To do   -------------------------------------------
 
+-grey out buy-for-5 when not enough prayer
+-test buy-for-5 in all states
 -cards bought with 5 prayer are not playable? (not in hand?)
--massive speech not removing chief visible to other players
--Active player cycle always lets them draw a new card at beginning of round; just an artifact of skipping to pray/convert?
--need to add played/resolved cards on refresh
--Players can always draw a card by paying 5 prayer; need to test the proposed state 80
 -sidebars names not color coded?
 -player color preferences: https://en.doc.boardgamearena.com/Main_game_logic:_Game.php#Player_color_preferences
--implement code to update db value of happiness
--"play a card" - option to disable? 
 -card backs for other players (Add image for face-down cards to other player divs in notif_playerDrewCard)
--option to hide other players divs?
 -what value to use as placeholder for die roll?
 -undo buttons
+-"play a card" - option to play w/onclick?
+-option to hide other players divs?
 -handle php case for "zombie" player: remove families from game and pass all options to play card
 -player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl
     and therefore into the stars location on the player board. This occurs sometime after the game setup() function.

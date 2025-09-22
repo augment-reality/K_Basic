@@ -125,9 +125,11 @@ $machinestates = [
         ->name('phaseThreeCheckGlobal')
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stGlobalOption')
+        ->args('argGlobalOption')
         ->possibleactions([
             'actAvoidGlobal',
             'actDoubleGlobal',
+            'actNormalGlobal',
             'actGoToBuyCardReflex' // Action to enter reflexive state
         ])
         ->transitions([

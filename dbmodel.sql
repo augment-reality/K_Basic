@@ -26,19 +26,25 @@
 
 CREATE TABLE IF NOT EXISTS `disaster_card` (
   `card_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `card_type` varchar(16) NOT NULL,
+  `card_type` int(11) NOT NULL,
   `card_type_arg` int(11) NOT NULL,
   `card_location` varchar(16) NOT NULL,
   `card_location_arg` int(11) NOT NULL,
+  `play_order` int(11) DEFAULT NULL,
+  `played_by` int(11) DEFAULT NULL,
+  `target_player` int(11) DEFAULT NULL,
   PRIMARY KEY (`card_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 CREATE TABLE IF NOT EXISTS `bonus_card` (
   `card_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `card_type` varchar(16) NOT NULL,
+  `card_type` int(11) NOT NULL,
   `card_type_arg` int(11) NOT NULL,
   `card_location` varchar(16) NOT NULL,
   `card_location_arg` int(11) NOT NULL,
+  `play_order` int(11) DEFAULT NULL,
+  `played_by` int(11) DEFAULT NULL,
+  `target_player` int(11) DEFAULT NULL,
   PRIMARY KEY (`card_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
@@ -53,5 +59,15 @@ ADD `player_die` smallint(5) NOT NULL DEFAULT '0',
 ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
 ADD `player_amulet` INT(11) NOT NULL DEFAULT '0',
 ADD `player_card_count` INT(11) NOT NULL DEFAULT '0';
+
+-- Table to track player choices for global disaster cards
+-- choice: 'normal' (default), 'avoid', 'double'
+CREATE TABLE IF NOT EXISTS `global_disaster_choice` (
+  `card_id` int(10) unsigned NOT NULL,
+  `player_id` int(11) NOT NULL,
+  `choice` varchar(16) NOT NULL DEFAULT 'normal',
+  `cost_paid` int(11) DEFAULT 0,
+  PRIMARY KEY (`card_id`, `player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 

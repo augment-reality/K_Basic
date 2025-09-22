@@ -84,7 +84,7 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
-                        <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
@@ -384,6 +384,11 @@ function (dojo, declare,) {
                 this.familyCounters[player.id].setValue(player.family);
             });
 
+            // Set initial round leader prayer icon to grayed version
+            if (gamedatas.round_leader) {
+                this.updateRoundLeaderIcons(null, gamedatas.round_leader);
+            }
+
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
 
@@ -410,13 +415,13 @@ function (dojo, declare,) {
 
                 case 'phaseThreeCheckGlobal':
                     if (this.isCurrentPlayerActive()) {
-                        this.addActionButton('pass-btn', _('Pass'), () => {
-                            this.bgaPerformAction('actPassGlobal', {});
+                        this.addActionButton('normal-btn', _('Normal Effect'), () => {
+                            this.bgaPerformAction('actNormalGlobal', {});
                         });
-                        this.addActionButton('avoid-btn', _('Avoid'), () => {
+                        this.addActionButton('avoid-btn', _('Avoid (Cost: Prayer)'), () => {
                             this.bgaPerformAction('actAvoidGlobal', {});
                         });
-                        this.addActionButton('double-btn', _('Double'), () => {
+                        this.addActionButton('double-btn', _('Double (Cost: Prayer)'), () => {
                             this.bgaPerformAction('actDoubleGlobal', {});
                         });
                     }
@@ -536,17 +541,26 @@ function (dojo, declare,) {
                             this.bgaPerformAction('actGoToBuyCardReflex', {});
                         });
 
-                        // Only show pass button for players who are not the round leader
-                        if (this.player_id != this.gamedatas.round_leader) {
-                            this.addActionButton('pass-btn', _('Pass'), () => {
-                                this.bgaPerformAction('actPlayCardPass', {});
-                            });
+                        // Show pass button for all players (including round leader)
+                        this.addActionButton('pass-btn', _('Pass'), () => {
+                            // Check if button is disabled (has disabled CSS class)
+                            const passBtn = document.getElementById('pass-btn');
+                            if (passBtn && dojo.hasClass(passBtn, 'disabled')) {
+                                this.showMessage(_('You must play at least one card before passing'), 'error');
+                                return;
+                            }
+                            this.bgaPerformAction('actPlayCardPass', {});
+                        });
+
+                        // Disable pass button for round leader if they haven't played a card yet
+                        if (this.player_id == this.gamedatas.round_leader && !this.gamedatas.round_leader_played_card) {
+                            dojo.addClass('pass-btn', 'disabled');
                         }
 
-                        // Only show pass button for the round leader
+                        // Only show convert button for the round leader
                         if (this.player_id == this.gamedatas.round_leader) {
-                            this.addActionButton('pass-btn', _('Pass'), () => {
-                                this.bgaPerformAction('actPlayCardPass', {});
+                            this.addActionButton('convert-btn', _('CONVERT! (End Card Phase)'), () => {
+                                this.bgaPerformAction('actSayConvert', {});
                             });
                         }
 
@@ -580,22 +594,25 @@ function (dojo, declare,) {
         ///////////////////////////////////////////////////
         //// Utility methods
 
-        /* Maps an actual individual card to a unique number
-         * The decks can contain multples of each type of card, and each
-         * copy of each card needs it's own ID. 
-         * The "cardID" in the PHP decks are not unique, because there are two decks,
-         * so the values overlap. Simple solution - just add 100 to the card_id of bonus cards */
-        getCardUniqueId: function(card_id, type)
+        /* Maps card type (bonus, local disaster, global disaster) and type_id 
+         * (which of those type cards it is) to a unique number*/
+        getCardUniqueId: function(type, type_id)
         {
-            /* For global disaster cards, just use their id */
-            if (type == this.ID_GLOBAL_DISASTER || type == this.ID_LOCAL_DISASTER)
+            /* Unique ids will be based on the type and type_id */
+            if (type == this.ID_GLOBAL_DISASTER) /* global disaster */
             {
-                return card_id;
+                return type_id;
             }
-            else
+            else if (type == this.ID_LOCAL_DISASTER) /* local disaster - 10 globals + this type_id */
             {
-                return card_id + 100;
+                return 10 + type_id;
             }
+            else if (type == this.ID_BONUS) /* bonus = globals + local + type_id */
+            {
+                return 10 + 5 + type_id;
+            }
+            console.log("INVALID CARD TYPE!!"); /* TODO exception? */
+            return 0;
         },
 
         playCardOnTable : function(player_id, color, value, card_id) {
@@ -869,6 +886,48 @@ function (dojo, declare,) {
                 this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
             }
             console.log(`Player ${args.player_id} spent ${args.prayer_spent} prayer points`);
+        },
+
+        notif_roundLeaderChanged: function(args) {
+            // Update prayer icons when round leader changes
+            this.updateRoundLeaderIcons(args.old_leader, args.player_id);
+            console.log(`Round leader changed from ${args.old_leader} to ${args.player_id}`);
+        },
+
+        notif_roundLeaderPlayedCard: function(args) {
+            // Enable the pass button for round leader after they play a card
+            this.gamedatas.round_leader_played_card = args.round_leader_played_card;
+            
+            // Enable pass button if it exists and is currently disabled
+            const passBtn = document.getElementById('pass-btn');
+            if (passBtn && dojo.hasClass(passBtn, 'disabled')) {
+                dojo.removeClass(passBtn, 'disabled');
+            }
+            console.log('Round leader has now played a card, pass button enabled');
+        },
+
+        notif_roundLeaderTurnStart: function(args) {
+            // Reset round leader state when their turn starts
+            this.gamedatas.round_leader_played_card = args.round_leader_played_card;
+            console.log('Round leader turn started, pass button will be disabled until they play a card');
+        },
+
+        updateRoundLeaderIcons: function(old_leader, new_leader) {
+            // Reset old leader's prayer icon to normal
+            if (old_leader) {
+                const oldIcon = document.getElementById(`icon_p_${old_leader}`);
+                if (oldIcon) {
+                    oldIcon.className = 'icon_p';
+                }
+            }
+            
+            // Set new leader's prayer icon to grayed version
+            if (new_leader) {
+                const newIcon = document.getElementById(`icon_p_${new_leader}`);
+                if (newIcon) {
+                    newIcon.className = 'icon_pg';
+                }
+            }
         },
 
         ///////////////////////////////////////////////////
