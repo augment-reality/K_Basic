@@ -216,6 +216,7 @@ $machinestates = [
         ->description(clienttranslate('Players must choose a discard'))
 		->descriptionmyturn(clienttranslate('${you} must choose a card to discard'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->action('stDiscard')
         ->possibleactions([
             'actDiscard',
         ])

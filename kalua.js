@@ -350,6 +350,36 @@ function (dojo, declare,) {
                 this.drawCard(this.player_id, card.id, card.type, card.type_arg);
             })
 
+            /* Populate played cards from database */
+            Object.values(gamedatas.playedDisaster).forEach(card => {
+                console.log("Adding played disaster card - id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                console.log("Calculated uniqueId: " + uniqueId);
+                this['played'].addToStockWithId(uniqueId, card.id);
+            });
+
+            Object.values(gamedatas.playedBonus).forEach(card => {
+                console.log("Adding played bonus card - id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                console.log("Calculated uniqueId: " + uniqueId);
+                this['played'].addToStockWithId(uniqueId, card.id);
+            });
+
+            /* Populate resolved cards from database */
+            Object.values(gamedatas.resolvedDisaster).forEach(card => {
+                console.log("Adding resolved disaster card - id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                console.log("Calculated uniqueId: " + uniqueId);
+                this['resolved'].addToStockWithId(uniqueId, card.id);
+            });
+
+            Object.values(gamedatas.resolvedBonus).forEach(card => {
+                console.log("Adding resolved bonus card - id:" + card.id + ", type:" + card.type + ", arg:" + card.type_arg);
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                console.log("Calculated uniqueId: " + uniqueId);
+                this['resolved'].addToStockWithId(uniqueId, card.id);
+            });
+
             /* Add cardbacks for other players' cards */
             Object.values(gamedatas.players).forEach(player => {
                 if (player.id != this.player_id) {
@@ -424,6 +454,30 @@ function (dojo, declare,) {
                         this.addActionButton('double-btn', _('Double (Cost: Prayer)'), () => {
                             this.bgaPerformAction('actDoubleGlobal', {});
                         });
+                    }
+                    break;
+
+                case 'phaseThreeSelectTargets':
+                    if (this.isCurrentPlayerActive()) {
+                        this.setupTargetSelection();
+                    }
+                    break;
+
+                case 'phaseThreeResolveAmulets':
+                    if (this.isCurrentPlayerActive()) {
+                        this.setupAmuletDecision();
+                    }
+                    break;
+
+                case 'phaseThreeRollDice':
+                    if (this.isCurrentPlayerActive()) {
+                        this.setupDiceRoll();
+                    }
+                    break;
+
+                case 'phaseThreeDiscard':
+                    if (this.isCurrentPlayerActive()) {
+                        this.setupDiscard();
                     }
                     break;
 
@@ -562,6 +616,11 @@ function (dojo, declare,) {
                             this.addActionButton('convert-btn', _('CONVERT! (End Card Phase)'), () => {
                                 this.bgaPerformAction('actSayConvert', {});
                             });
+                            
+                            // Disable convert button if round leader has already played a card
+                            if (this.gamedatas.round_leader_played_card) {
+                                dojo.addClass('convert-btn', 'disabled');
+                            }
                         }
 
                         // Initially disable the play card button
@@ -586,6 +645,25 @@ function (dojo, declare,) {
                         this.addActionButton('cancel-btn', _('Cancel'), () => {
                             this.bgaPerformAction('actCancelBuyCard', {});
                         });
+                        break;
+                    case 'phaseThreeDiscard':
+                        this.addActionButton('discard-btn', _('Discard Card'), () => {
+                            const selectedCardsForDiscard = this[`${this.player_id}_cards`].getSelectedItems();
+                            if (selectedCardsForDiscard.length > 0) {
+                                const card = selectedCardsForDiscard[0];
+                                this.bgaPerformAction('actDiscard', {
+                                    card_id: card.id
+                                });
+                            } else {
+                                this.showMessage(_('Please select a card to discard first'), 'error');
+                            }
+                        });
+
+                        // Initially disable the discard button until a card is selected
+                        const selectedCardsForDiscard = this[`${this.player_id}_cards`].getSelectedItems();
+                        if (selectedCardsForDiscard.length === 0) {
+                            dojo.addClass('discard-btn', 'disabled');
+                        }
                         break;
                 }
             }
@@ -677,6 +755,23 @@ function (dojo, declare,) {
             this.familyCounters[player_id].incValue(num_atheists);
         },
 
+        setupTargetSelection: function() {
+            console.log("Setting up target selection for local disaster");
+            /* Present other players as target options */
+            this.gamedatas.gamestate.descriptionmyturn = _('Choose a player to target with your disaster: ');
+            this.updatePageTitle();
+            this.statusBar.removeActionButtons();
+            
+            // Get all players except the current player
+            const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id != this.player_id);
+            
+            otherPlayers.forEach(player => {
+                this.addActionButton(`target-player-${player.id}`, _(player.name), () => {
+                    this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
+                });
+            });
+        },
+
         chooseConvertTarget: function() {
             console.log("Choosing convert target");
             /* Present the option of the other players to the user as buttons */
@@ -700,6 +795,63 @@ function (dojo, declare,) {
 
             this.familyCounters[player_id].incValue(1);
             this.familyCounters[target_player_id].incValue(-1);
+        },
+
+        setupAmuletDecision: function() {
+            console.log("Setting up amulet decision for player");
+            /* Present amulet usage choice to the player */
+            this.gamedatas.gamestate.descriptionmyturn = _('Do you want to use an amulet to avoid the disaster effects?');
+            this.updatePageTitle();
+            this.statusBar.removeActionButtons();
+            
+            this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
+                this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
+            });
+            
+            this.addActionButton('no-amulet-btn', _('Do Not Use Amulet'), () => {
+                this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
+            });
+        },
+
+        setupDiceRoll: function() {
+            console.log("Setting up dice roll for player");
+            /* Present dice rolling options to the player */
+            this.gamedatas.gamestate.descriptionmyturn = _('Roll a die to determine the card effect:');
+            this.updatePageTitle();
+            this.statusBar.removeActionButtons();
+            
+            // Create buttons for each possible dice result (1-6)
+            for (let i = 1; i <= 6; i++) {
+                this.addActionButton(`roll-${i}-btn`, _(`Roll ${i}`), () => {
+                    this.bgaPerformAction('actRollDie', { result: i });
+                });
+            }
+        },
+
+        setupDiscard: function() {
+            console.log("Setting up discard phase for player");
+            /* Present discard options to the player */
+            this.gamedatas.gamestate.descriptionmyturn = _('Choose a card to discard due to riots:');
+            this.updatePageTitle();
+            this.statusBar.removeActionButtons();
+            
+            this.addActionButton('discard-btn', _('Discard Selected Card'), () => {
+                const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                if (selectedCards.length > 0) {
+                    const card = selectedCards[0];
+                    this.bgaPerformAction('actDiscard', {
+                        card_id: card.id
+                    });
+                } else {
+                    this.showMessage(_('Please select a card to discard first'), 'error');
+                }
+            });
+            
+            // Initially disable the discard button until a card is selected
+            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+            if (selectedCards.length === 0) {
+                dojo.addClass('discard-btn', 'disabled');
+            }
         },
 
         sacrificeLeader: function(player_id, player_no, num_atheists) {
@@ -750,9 +902,15 @@ function (dojo, declare,) {
                 if ($('playCard-btn')) {
                     dojo.removeClass('playCard-btn', 'disabled');
                 }
+                if ($('discard-btn')) {
+                    dojo.removeClass('discard-btn', 'disabled');
+                }
             } else {
                 if ($('playCard-btn')) {
                     dojo.addClass('playCard-btn', 'disabled');
+                }
+                if ($('discard-btn')) {
+                    dojo.addClass('discard-btn', 'disabled');
                 }
             }
         },
@@ -903,12 +1061,26 @@ function (dojo, declare,) {
             if (passBtn && dojo.hasClass(passBtn, 'disabled')) {
                 dojo.removeClass(passBtn, 'disabled');
             }
-            console.log('Round leader has now played a card, pass button enabled');
+            
+            // Disable convert button if it exists after round leader plays a card
+            const convertBtn = document.getElementById('convert-btn');
+            if (convertBtn && !dojo.hasClass(convertBtn, 'disabled')) {
+                dojo.addClass(convertBtn, 'disabled');
+            }
+            
+            console.log('Round leader has now played a card, pass button enabled, convert button disabled');
         },
 
         notif_roundLeaderTurnStart: function(args) {
             // Reset round leader state when their turn starts
             this.gamedatas.round_leader_played_card = args.round_leader_played_card;
+            
+            // Re-enable convert button if round leader hasn't played a card yet
+            const convertBtn = document.getElementById('convert-btn');
+            if (convertBtn && !this.gamedatas.round_leader_played_card && dojo.hasClass(convertBtn, 'disabled')) {
+                dojo.removeClass(convertBtn, 'disabled');
+            }
+            
             console.log('Round leader turn started, pass button will be disabled until they play a card');
         },
 
@@ -928,6 +1100,126 @@ function (dojo, declare,) {
                     newIcon.className = 'icon_pg';
                 }
             }
+        },
+
+        notif_targetSelected: function(args) {
+            console.log('Target selected for disaster card:', args);
+            // The target selection is complete, the game will continue with card resolution
+            // No specific UI updates needed here as the game will transition to the next state
+        },
+
+        notif_amuletDecision: function(args) {
+            console.log('Amulet decision phase started:', args);
+            // Players with amulets can now decide whether to use them
+        },
+
+        notif_amuletUsed: function(args) {
+            console.log('Player used amulet:', args);
+            const player_name = args.player_name;
+            // Visual feedback could be added here to show amulet usage
+        },
+
+        notif_amuletNotUsed: function(args) {
+            console.log('Player chose not to use amulet:', args);
+            const player_name = args.player_name;
+            // Visual feedback could be added here
+        },
+
+        notif_diceRollRequired: function(args) {
+            console.log('Dice roll required:', args);
+            // Players who need to roll dice will be prompted in the setupDiceRoll method
+        },
+
+        notif_diceRolled: function(args) {
+            console.log('Player rolled dice:', args);
+            const player_name = args.player_name;
+            const result = args.result;
+            // Visual feedback could be added here to show the dice result
+        },
+
+        notif_templeIncremented: function(args) {
+            console.log('Temple incremented for player:', args);
+            const player_id = args.player_id;
+            // Update temple counter
+            if (this.templeCounters[player_id]) {
+                this.templeCounters[player_id].incValue(1);
+            }
+        },
+
+        notif_amuletIncremented: function(args) {
+            console.log('Amulet incremented for player:', args);
+            const player_id = args.player_id;
+            // Update amulet counter
+            if (this.amuletCounters[player_id]) {
+                this.amuletCounters[player_id].incValue(1);
+            }
+        },
+
+        notif_templeBonus: function(args) {
+            console.log('Temple bonus notification:', args);
+            // Just a notification message - the prayer counter will be updated by playerCountsChanged
+        },
+
+        notif_playerCountsChanged: function(args) {
+            console.log('Player counts changed:', args);
+            const player_id = args.player_id;
+            
+            // Update all player counters
+            if (this.familyCounters[player_id]) {
+                this.familyCounters[player_id].setValue(args.family_count);
+            }
+            if (this.prayerCounters[player_id]) {
+                this.prayerCounters[player_id].setValue(args.prayer);
+            }
+            if (this.happinessCounters[player_id] && args.happiness !== undefined) {
+                this.happinessCounters[player_id].setValue(args.happiness);
+            }
+            if (this.templeCounters[player_id] && args.temple_count !== undefined) {
+                this.templeCounters[player_id].setValue(args.temple_count);
+            }
+        },
+
+        notif_leaderRecovered: function(args) {
+            console.log('Leader recovered for player:', args);
+            const player_id = args.player_id;
+            
+            // Add chief meeple back to player's family stock
+            const playerFamilies = this[`fams_${player_id}`];
+            if (playerFamilies && this.gamedatas.players[player_id]) {
+                const sprite = this.gamedatas.players[player_id].sprite;
+                playerFamilies.addToStock(sprite - 1); // sprite - 1 = chief meeple type
+            }
+            
+            // Update leader display in player panel
+            const leaderElement = document.getElementById(`panel_l_${player_id}`);
+            if (leaderElement) {
+                leaderElement.innerHTML = `<span id="icon_cb_t" style="display:inline-block;vertical-align:middle;"></span>`;
+            }
+        },
+
+        notif_cardDiscarded: function(args) {
+            console.log('Card discarded:', args);
+            const player_id = args.player_id;
+            const card_id = args.card_id;
+            
+            // Remove the card from the player's hand if the stock exists
+            const playerCardsStock = this[`${player_id}_cards`];
+            if (playerCardsStock) {
+                playerCardsStock.removeFromStockById(card_id);
+            }
+            
+            // Remove the cardback from other players' view
+            const cardbackStock = this[`${player_id}_cardbacks`];
+            if (cardbackStock) {
+                cardbackStock.removeFromStockById(card_id);
+            }
+            
+            // Update card counter
+            if (this.cardCounters[player_id]) {
+                this.cardCounters[player_id].incValue(-1);
+            }
+            
+            console.log(`Card ${card_id} discarded by player ${player_id}`);
         },
 
         ///////////////////////////////////////////////////

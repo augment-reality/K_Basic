@@ -40,7 +40,7 @@ const ST_END_GAME = 99;
 const STR_CARD_TYPE_DISASTER = "disaster";
 const STR_CARD_TYPE_BONUS = "bonus";
 
-const HAND_SIZE = 1;
+const HAND_SIZE = 5;
 
 enum CardType: int
 {

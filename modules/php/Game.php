@@ -26,6 +26,8 @@ class Game extends \Table
     private static array $CARD_TYPES;
     private $disasterCards;
     private $bonusCards;
+    private array $playerUsedAmulet = []; // Track which players used amulets in current resolution
+    private array $diceResults = []; // Track dice results for current resolution
 
     // Global disaster choice costs
     const GLOBAL_DISASTER_AVOID_COST = 6;
@@ -308,35 +310,90 @@ class Game extends \Table
         }
         
         // Check for the first non-zero attribute to determine the next state
-        // Priority order: discard -> roll_dice -> convert_to_religion -> family_dies -> recover_leader -> keep_card
+        // Priority order: discard -> target_selection -> dice_roll -> amulet_decision -> recover_leader -> keep_card
         
         if ($effects['discard'] > 0) {
             $this->gamestate->nextState('discard');
             return;
         }
         
-        if ($effects['happiness_effect'] === "roll_d6" || $effects['prayer_effect'] === "roll_d6") {
+        // All local disaster cards require target selection first
+        if ($card_type === CardType::LocalDisaster->value) {
+            // Check if target is already selected
+            if ($target_player === null) {
+                // Set the active player to the one who played the card
+                $this->gamestate->changeActivePlayer($played_by);
+                $this->gamestate->nextState('selectTargets');
+                return;
+            }
+        }
+        
+        if ($effects['convert_to_religion'] === "roll_d6" || $effects['convert_to_religion'] > 0) {
+            // Convert to religion cards with specific targets need target selection first
+            if ($target_player === null) {
+                $this->gamestate->nextState('selectTargets');
+                return;
+            }
+        }
+        
+        // Check for dice roll requirements first
+        if ($effects['happiness_effect'] === "roll_d6" || 
+            $effects['prayer_effect'] === "roll_d6" || 
+            $effects['convert_to_religion'] === "roll_d6") {
             $this->gamestate->nextState('rollDice');
             return;
         }
         
-        if ($effects['convert_to_religion'] === "roll_d6" || $effects['convert_to_religion'] > 0) {
-            $this->gamestate->nextState('selectTargets');
-            return;
-        }
+        // After dice rolls (or if no dice needed), check if card has any negative effects that could be mitigated by amulets
+        $hasNegativeEffects = ($effects['family_dies'] > 0) || 
+                             ($effects['convert_to_atheist'] > 0) || 
+                             (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] < 0);
         
-        if ($effects['family_dies'] > 0) {
+        if ($hasNegativeEffects) {
             $this->gamestate->nextState('resolveAmulets');
             return;
         }
         
         if ($effects['recover_leader'] === true) {
-            $this->gamestate->nextState('selectTargets');
+            // Recover leader: set chief to 1 and notify UI
+            $this->DbQuery("UPDATE player SET player_chief = 1 WHERE player_id = $played_by");
+            
+            $this->notifyAllPlayers('leaderRecovered', clienttranslate('${player_name} gained a new leader'), [
+                'player_id' => $played_by,
+                'player_name' => $this->getPlayerNameById($played_by)
+            ]);
+            
+            // Apply basic card effects and move card to resolved
+            $this->applyBasicCardEffects($card, $effects);
+            $this->moveCardToResolved($card);
+            
+            // Check for more cards to resolve
+            $this->gamestate->nextState('beginAllPlay');
             return;
         }
         
         if ($effects['keep_card'] === true) {
-            $this->gamestate->nextState('selectTargets');
+            // Increment temple or amulet counter based on card type
+            if ($card_type === CardType::Bonus->value && $card_type_arg === BonusCard::Temple->value) {
+                $this->DbQuery("UPDATE player SET player_temple = player_temple + 1 WHERE player_id = $played_by");
+                $this->notifyAllPlayers('templeIncremented', clienttranslate('${player_name} gained a temple'), [
+                    'player_id' => $played_by,
+                    'player_name' => $this->getPlayerNameById($played_by)
+                ]);
+            } elseif ($card_type === CardType::Bonus->value && $card_type_arg === BonusCard::Amulets->value) {
+                $this->DbQuery("UPDATE player SET player_amulet = player_amulet + 1 WHERE player_id = $played_by");
+                $this->notifyAllPlayers('amuletIncremented', clienttranslate('${player_name} gained an amulet'), [
+                    'player_id' => $played_by,
+                    'player_name' => $this->getPlayerNameById($played_by)
+                ]);
+            }
+            
+            // Apply basic effects and move card to resolved
+            $this->applyBasicCardEffects($card, $effects);
+            $this->moveCardToResolved($card);
+            
+            // Check for more cards to resolve
+            $this->gamestate->nextState('beginAllPlay');
             return;
         }
         
@@ -767,6 +824,98 @@ class Game extends \Table
     public function stSelectTarget(): void
     {
         /* Active player must select the player to target with their disaster */
+        // Get the currently resolving card
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+        
+        $card_name = $this->getCardName($resolving_card);
+        $active_player_id = $this->getActivePlayerId();
+        
+        // Notify all players about target selection
+        $this->notifyAllPlayers("message", 
+            clienttranslate('${player_name} must select a target for ${card_name}'), 
+            [
+                'player_name' => $this->getPlayerNameById($active_player_id),
+                'card_name' => $card_name
+            ]
+        );
+    }
+
+    public function stResolveAmulets(): void
+    {
+        // Get the currently resolving card to determine who is targeted
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+
+        $card_play_info = $this->getCardWithPlayInfo($resolving_card['id']);
+        $target_player = $card_play_info['target_player'] ?? null;
+        
+        // For local disaster cards, only the target player can use an amulet
+        $card_type = (int)$resolving_card['type'];
+        $players_who_can_use_amulets = [];
+        
+        if ($card_type === CardType::LocalDisaster->value && $target_player !== null) {
+            // Check if target player has an amulet
+            $target_amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $target_player");
+            if ($target_amulet_count > 0) {
+                $players_who_can_use_amulets[] = $target_player;
+            }
+        } else {
+            // For global effects, all players who have amulets can potentially use them
+            $all_players = $this->loadPlayersBasicInfos();
+            foreach ($all_players as $player_id => $player) {
+                $amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $player_id");
+                if ($amulet_count > 0) {
+                    $players_who_can_use_amulets[] = $player_id;
+                }
+            }
+        }
+
+        if (empty($players_who_can_use_amulets)) {
+            // No players have amulets, proceed directly with card effects
+            $this->applyCardEffectsWithoutAmulets($resolving_card);
+            return;
+        }
+
+        // Set only players with amulets as active
+        $this->gamestate->setPlayersMultiactive($players_who_can_use_amulets, 'beginAllPlay');
+        
+        $card_name = $this->getCardName($resolving_card);
+        $this->notifyAllPlayers("amuletDecision", 
+            clienttranslate('Players with amulets must decide whether to use them against ${card_name}'), 
+            [
+                'card_name' => $card_name,
+                'players_with_amulets' => $players_who_can_use_amulets
+            ]
+        );
+    }
+
+    private function applyCardEffectsWithoutAmulets(array $card): void
+    {
+        $effects = $this->getCardEffects($card['type'], $card['type_arg']);
+        if ($effects === null) {
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$card['type']}, arg {$card['type_arg']}");
+        }
+
+        // Apply the card effects directly (dice results already incorporated if needed)
+        if (!empty($this->diceResults)) {
+            // Dice were rolled, apply effects with dice results
+            $this->applyBasicCardEffectsWithDiceAndAmulets($card, $effects);
+            $this->diceResults = []; // Clear dice results
+        } else {
+            // No dice were rolled, apply basic effects
+            $this->applyBasicCardEffects($card, $effects);
+        }
+        
+        // Move card from resolving to resolved and continue
+        $this->moveCardToResolved($card);
+        
+        // Continue with next card resolution
+        $this->gamestate->nextState('beginAllPlay');
     }
 
     public function stConvertPray(): void
@@ -786,14 +935,16 @@ class Game extends \Table
         $happinessScores = [];
         $converted_pool = 0;
 
-        // Get existing family and prayer counts for all players
+        // Get existing family, prayer, and happiness counts for all players
         $previous_family = [];
         $previous_prayer = [];
+        $previous_happiness = [];
         
         $players = $this->loadPlayersBasicInfos();
         foreach ($players as $player_id => $_) {
             $previous_family[$player_id] = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
             $previous_prayer[$player_id] = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+            $previous_happiness[$player_id] = (int)$this->getUniqueValueFromDb("SELECT player_happiness FROM player WHERE player_id = $player_id");
         }
 
         // Collect happiness scores
@@ -849,17 +1000,25 @@ class Game extends \Table
             }
         }
 
-        // Players receive prayers (1 per 5 family, and extra if not highest)
+        // Players receive prayers (1 per 5 family, extra if not highest, and +1 per temple)
         foreach ($players as $player_id => $_) {
             $family_count = $this->getFamilyCount($player_id);
+            $temple_count = (int)$this->getUniqueValueFromDb("SELECT player_temple FROM player WHERE player_id = $player_id");
             $prayers = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
+            $happiness = $happinessScores[$player_id];
+            
             $prayers += floor($family_count / 5);
             if ($happinessScores[$player_id] == $happy_value_low) {
                 $prayers += 4;
             } elseif ($happinessScores[$player_id] != $happy_value_high) {
                 $prayers += 2;
             }
-            self::DbQuery("UPDATE player SET player_prayer = $prayers WHERE player_id = $player_id");
+            
+            // Add temple bonuses: +1 prayer and +1 happiness per temple
+            $prayers += $temple_count;
+            $happiness += $temple_count;
+            
+            self::DbQuery("UPDATE player SET player_prayer = $prayers, player_happiness = $happiness WHERE player_id = $player_id");
         }
 
         // Check for player elimination (no chief/families)
@@ -900,20 +1059,32 @@ class Game extends \Table
         foreach ($players as $player_id => $_) {
 
             $family_count = $this->getFamilyCount($player_id);
+            $temple_count = (int)$this->getUniqueValueFromDb("SELECT player_temple FROM player WHERE player_id = $player_id");
             $eliminated = (int)$this->getUniqueValueFromDb("SELECT player_eliminated FROM player WHERE player_id = $player_id");
-            $happiness = $happinessScores[$player_id];
+            $happiness = (int)$this->getUniqueValueFromDb("SELECT player_happiness FROM player WHERE player_id = $player_id");
             $prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
 
             // Compute deltas (difference from previous round)
             $family_delta = $family_count - $previous_family[$player_id];
             $prayer_delta = $prayer - $previous_prayer[$player_id];
+            $happiness_delta = $happiness - $previous_happiness[$player_id];
 
             $family_change = $family_delta >= 0 ? "increased" : "decreased";
             $prayer_change = $prayer_delta >= 0 ? "increased" : "decreased";
+            $happiness_change = $happiness_delta >= 0 ? "increased" : "decreased";
+
+            // Add notification for temple bonuses if player has temples
+            if ($temple_count > 0) {
+                $this->notifyAllPlayers('templeBonus', clienttranslate('${player_name} receives +${temple_count} prayer and +${temple_count} happiness from ${temple_count} temple(s)'), [
+                    'player_id' => $player_id,
+                    'player_name' => $this->getPlayerNameById($player_id),
+                    'temple_count' => $temple_count
+                ]);
+            }
 
             $this->notifyAllPlayers(
                 'playerCountsChanged',
-                clienttranslate('${player_name}: Families ${family_count} (${family_change} by ${family_delta}), Prayers ${prayer} (${prayer_change} by ${prayer_delta})'),
+                clienttranslate('${player_name}: Families ${family_count} (${family_change} by ${family_delta}), Prayers ${prayer} (${prayer_change} by ${prayer_delta}), Happiness ${happiness} (${happiness_change} by ${happiness_delta})'),
                 [
                     'player_id' => $player_id,
                     'player_name' => $this->getPlayerNameById($player_id),
@@ -923,8 +1094,11 @@ class Game extends \Table
                     'prayer' => $prayer,
                     'prayer_change' => $prayer_change,
                     'prayer_delta' => abs($prayer_delta),
+                    'happiness' => $happiness,
+                    'happiness_change' => $happiness_change,
+                    'happiness_delta' => abs($happiness_delta),
                     'eliminated' => $eliminated,
-                    'happiness' => $happiness
+                    'temple_count' => $temple_count
                 ]
             );
 
@@ -1103,14 +1277,25 @@ class Game extends \Table
         // 2. Get current player (cast to int since moveCard expects int)
         $player_id = (int)$this->getActivePlayerId();
 
-        // 3. Validate the card belongs to the player
+        // 3. Validate the card belongs to the player by checking both decks directly
+        $card_in_hand = $this->getObjectFromDB("
+            SELECT card_id, card_type, card_type_arg 
+            FROM disaster_card 
+            WHERE card_id = $card_id AND card_location = 'hand' AND card_location_arg = $player_id
+            UNION
+            SELECT card_id, card_type, card_type_arg 
+            FROM bonus_card 
+            WHERE card_id = $card_id AND card_location = 'hand' AND card_location_arg = $player_id
+        ");
+        
+        if ($card_in_hand === null) {
+            throw new \BgaUserException("This card is not in your hand");
+        }
+        
+        // Get the card for further processing
         $card = $this->getCard($card_id);
         if ($card === null) {
             throw new \BgaUserException("Card not found");
-        }
-        
-        if ($card['location'] !== 'hand' || (int)$card['location_arg'] != $player_id) {
-            throw new \BgaUserException("This card is not in your hand");
         }
 
         // 4. Get prayer cost before checking if card can be played
@@ -1149,8 +1334,8 @@ class Game extends \Table
             'player_name' => $this->getActivePlayerName(),
             'card_id' => $card_id,
             'card_name' => $this->getCardName($card),
-            'card_type' => $card['type'],
-            'card_type_arg' => $card['type_arg'],
+            'card_type' => $card_in_hand['card_type'],
+            'card_type_arg' => $card_in_hand['card_type_arg'],
             'played_by' => $player_id,
             'target_player' => $target_player
         ];
@@ -1319,7 +1504,7 @@ class Game extends \Table
     public function actAvoidGlobal(): void
     {
         $this->checkAction('actAvoidGlobal');
-        $player_id = $this->getCurrentPlayerId();
+        $player_id = (int)$this->getCurrentPlayerId();
         $card_id = (int)$this->getGameStateValue('current_global_disaster');
         
         if ($card_id <= 0) {
@@ -1374,7 +1559,7 @@ class Game extends \Table
     public function actDoubleGlobal(): void
     {
         $this->checkAction('actDoubleGlobal');
-        $player_id = $this->getCurrentPlayerId();
+        $player_id = (int)$this->getCurrentPlayerId();
         $card_id = (int)$this->getGameStateValue('current_global_disaster');
         
         if ($card_id <= 0) {
@@ -1429,7 +1614,7 @@ class Game extends \Table
     public function actNormalGlobal(): void
     {
         $this->checkAction('actNormalGlobal');
-        $player_id = $this->getCurrentPlayerId();
+        $player_id = (int)$this->getCurrentPlayerId();
         $card_id = (int)$this->getGameStateValue('current_global_disaster');
         
         if ($card_id <= 0) {
@@ -1476,22 +1661,467 @@ class Game extends \Table
     /******** Resolve card actions ********/
     public function actSelectPlayer(int $player_id): void
     {
-
+        // Check if it's the active player's turn
+        $this->checkAction('actSelectPlayer');
+        
+        // Get the currently resolving card
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+        
+        // Validate the target player exists and is not the same as the player who played the card
+        $all_players = $this->loadPlayersBasicInfos();
+        if (!isset($all_players[$player_id])) {
+            throw new \BgaUserException("Invalid target player");
+        }
+        
+        $card_play_info = $this->getCardWithPlayInfo($resolving_card['id']);
+        $played_by = $card_play_info['played_by'];
+        
+        if ($player_id == $played_by) {
+            throw new \BgaUserException("You cannot target yourself with a local disaster");
+        }
+        
+        // Store the target player in the card record
+        $this->updateCardTarget($resolving_card['id'], $player_id);
+        
+        $card_name = $this->getCardName($resolving_card);
+        $target_name = $all_players[$player_id]['player_name'];
+        
+        // Notify all players about the target selection
+        $this->notifyAllPlayers("targetSelected", 
+            clienttranslate('${card_name} will target ${target_name}'), 
+            [
+                'card_name' => $card_name,
+                'target_name' => $target_name,
+                'target_player_id' => $player_id,
+                'card_id' => $resolving_card['id']
+            ]
+        );
+        
+        // Continue with card resolution
+        $this->resolveCardEffects($resolving_card);
     }
 
     public function actAmuletChoose(bool $use_amulet): void
     {
+        // Check if it's the active player's turn
+        $this->checkAction('actAmuletChoose');
+        $player_id = (int)$this->getCurrentPlayerId();
+        
+        // Verify player has an amulet
+        $amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $player_id");
+        if ($amulet_count <= 0) {
+            throw new \BgaUserException("You don't have any amulets to use");
+        }
 
+        $player_name = $this->getPlayerNameById($player_id);
+        
+        if ($use_amulet) {
+            // Player chooses to use their amulet
+            $this->DbQuery("UPDATE player SET player_amulet = player_amulet - 1 WHERE player_id = $player_id");
+            
+            $this->notifyAllPlayers("amuletUsed", 
+                clienttranslate('${player_name} uses an amulet to avoid the disaster effects'), 
+                [
+                    'player_name' => $player_name,
+                    'player_id' => $player_id
+                ]
+            );
+            
+            // Store that this player used an amulet for this card resolution
+            $resolving_card = $this->getCardOnTop('resolving');
+            if ($resolving_card) {
+                // We'll track amulet usage in a different way when applying effects
+                $this->playerUsedAmulet[$player_id] = true;
+            }
+        } else {
+            // Player chooses not to use their amulet
+            $this->notifyAllPlayers("amuletNotUsed", 
+                clienttranslate('${player_name} chooses not to use an amulet'), 
+                [
+                    'player_name' => $player_name,
+                    'player_id' => $player_id
+                ]
+            );
+        }
+
+        // Mark this player as having made their choice
+        $this->gamestate->setPlayerNonMultiactive($player_id, 'beginAllPlay');
+        
+        // Check if all players have made their decisions
+        if ($this->gamestate->isPlayerActive($player_id) === false) {
+            // All players have made their amulet decisions, now apply card effects
+            $this->applyCardEffectsWithAmuletChoices();
+        }
+    }
+
+    private function applyCardEffectsWithAmuletChoices(): void
+    {
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+
+        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
+        if ($effects === null) {
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
+        }
+
+        // Apply the card effects considering amulet usage (dice results already incorporated if needed)
+        if (!empty($this->diceResults)) {
+            // Dice were rolled, apply effects with both dice results and amulet choices
+            $this->applyBasicCardEffectsWithDiceAndAmulets($resolving_card, $effects);
+            $this->diceResults = []; // Clear dice results
+        } else {
+            // No dice were rolled, apply basic effects with amulet protection
+            $this->applyBasicCardEffectsWithAmulets($resolving_card, $effects);
+        }
+        
+        // Clear the amulet usage tracking for next resolution
+        $this->playerUsedAmulet = [];
+        
+        // Move card from resolving to resolved and continue
+        $this->moveCardToResolved($resolving_card);
+        
+        // Continue with next card resolution
+        $this->gamestate->nextState('beginAllPlay');
+    }
+
+    public function stRollDice(): void
+    {
+        // Get the currently resolving card to determine which players need to roll
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+
+        $card_type = (int)$resolving_card['type'];
+        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
+        if ($effects === null) {
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
+        }
+
+        $players_who_roll = [];
+        
+        // Determine which players need to roll based on card type and effects
+        if ($card_type === CardType::GlobalDisaster->value) {
+            // For global disasters, all players roll (subject to their choices)
+            $all_players = $this->loadPlayersBasicInfos();
+            $players_who_roll = array_keys($all_players);
+        } else if ($card_type === CardType::LocalDisaster->value) {
+            // For local disasters, only the target player rolls
+            $card_play_info = $this->getCardWithPlayInfo($resolving_card['id']);
+            $target_player = $card_play_info['target_player'] ?? null;
+            if ($target_player !== null) {
+                $players_who_roll = [$target_player];
+            }
+        } else {
+            // For bonus cards, the player who played it rolls
+            $card_play_info = $this->getCardWithPlayInfo($resolving_card['id']);
+            $played_by = $card_play_info['played_by'] ?? null;
+            if ($played_by !== null) {
+                $players_who_roll = [$played_by];
+            }
+        }
+
+        if (empty($players_who_roll)) {
+            // No players need to roll, continue with normal effect resolution
+            $this->applyBasicCardEffectsWithAmulets($resolving_card, $effects);
+            $this->moveCardToResolved($resolving_card);
+            $this->gamestate->nextState('beginAllPlay');
+            return;
+        }
+
+        // Set players who need to roll as active
+        $this->gamestate->setPlayersMultiactive($players_who_roll, 'beginAllPlay');
+        
+        // Determine what type of effect they're rolling for
+        $roll_type = '';
+        if ($effects['happiness_effect'] === "roll_d6") {
+            $roll_type = 'happiness';
+        } else if ($effects['prayer_effect'] === "roll_d6") {
+            $roll_type = 'prayer';
+        } else if ($effects['convert_to_religion'] === "roll_d6") {
+            $roll_type = 'convert_to_religion';
+        }
+
+        $card_name = $this->getCardName($resolving_card);
+        $this->notifyAllPlayers("diceRollRequired", 
+            clienttranslate('Players must roll dice to determine ${card_name} effects'), 
+            [
+                'card_name' => $card_name,
+                'roll_type' => $roll_type,
+                'players_rolling' => $players_who_roll
+            ]
+        );
+    }
+
+    private function applyBasicCardEffectsWithAmulets(array $card, array $effects): void
+    {
+        $card_id = (int)$card['id'];
+        $card_type = (int)$card['type'];
+        
+        // Get the full card information including who played it and who it targets
+        $card_play_info = $this->getCardWithPlayInfo($card_id);
+        $played_by = $card_play_info['played_by'] ?? null;
+        $target_player = $card_play_info['target_player'] ?? null;
+        
+        // Handle global disasters with player choices (amulets don't affect these as they have individual choices)
+        if ($card_type === CardType::GlobalDisaster->value) {
+            $this->applyGlobalDisasterEffects($card_id, $effects, $played_by);
+        } else {
+            // Handle local disasters and bonus cards with amulet consideration
+            $this->applyTargetedCardEffectsWithAmulets($card_id, $effects, $played_by, $target_player);
+        }
+        
+        $this->trace("Applied effects for card {$card_id} considering amulet usage: " . json_encode($this->playerUsedAmulet));
+    }
+
+    private function applyTargetedCardEffectsWithAmulets(int $card_id, array $effects, ?int $played_by, ?int $target_player): void
+    {
+        if ($target_player !== null) {
+            // Check if the target player used an amulet
+            $used_amulet = isset($this->playerUsedAmulet[$target_player]) && $this->playerUsedAmulet[$target_player];
+            
+            if ($used_amulet) {
+                $this->notifyAllPlayers("message", 
+                    clienttranslate('${player_name} is protected from the disaster effects by an amulet'), 
+                    ['player_name' => $this->getPlayerNameById($target_player)]
+                );
+                // Skip applying harmful effects
+            } else {
+                // Apply effects normally to the target
+                $this->applyEffectsToPlayer($target_player, $effects, 1.0, 'normal');
+            }
+        } else {
+            // Apply effects to the player who played the card (for bonus cards)
+            if ($played_by !== null) {
+                $this->applyEffectsToPlayer($played_by, $effects, 1.0, 'normal');
+            }
+        }
     }
 
     public function actRollDie(int $result): void
     {
+        // Check if it's the active player's turn
+        $this->checkAction('actRollDie');
+        $player_id = (int)$this->getCurrentPlayerId();
+        
+        // Validate dice result (1-6)
+        if ($result < 1 || $result > 6) {
+            throw new \BgaUserException("Invalid dice roll result. Must be between 1 and 6.");
+        }
 
+        $player_name = $this->getPlayerNameById($player_id);
+        
+        // Get the currently resolving card
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+
+        // Store the dice result for this player and card
+        $this->storeDiceResult($player_id, $resolving_card['id'], $result);
+
+        $this->notifyAllPlayers("diceRolled", 
+            clienttranslate('${player_name} rolled ${result}'), 
+            [
+                'player_name' => $player_name,
+                'player_id' => $player_id,
+                'result' => $result,
+                'card_id' => $resolving_card['id']
+            ]
+        );
+
+        // Mark this player as having completed their dice roll
+        $this->gamestate->setPlayerNonMultiactive($player_id, 'beginAllPlay');
+        
+        // Check if all players have rolled their dice
+        if ($this->gamestate->isPlayerActive($player_id) === false) {
+            // All players have rolled, now apply card effects using the dice results
+            $this->applyCardEffectsWithDiceResults();
+        }
     }
 
-    public function actDiscard(int $card_type, int $card_id): void
+    private function storeDiceResult(int $player_id, int $card_id, int $result): void
     {
+        // Store dice result in a property for this resolution
+        if (!isset($this->diceResults)) {
+            $this->diceResults = [];
+        }
+        $this->diceResults[$player_id] = $result;
+    }
 
+    private function applyCardEffectsWithDiceResults(): void
+    {
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+
+        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
+        if ($effects === null) {
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
+        }
+
+        // After dice rolls, check if amulet decisions are needed for negative effects
+        $hasNegativeEffects = ($effects['family_dies'] > 0) || 
+                             ($effects['convert_to_atheist'] > 0) || 
+                             (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] < 0);
+        
+        if ($hasNegativeEffects) {
+            $this->gamestate->nextState('resolveAmulets');
+            return;
+        }
+
+        // No amulet decisions needed, apply effects directly with dice results
+        $this->applyBasicCardEffectsWithDiceAndAmulets($resolving_card, $effects);
+        
+        // Clear dice results for next resolution
+        $this->diceResults = [];
+        
+        // Move card from resolving to resolved and continue
+        $this->moveCardToResolved($resolving_card);
+        
+        // Continue with next card resolution
+        $this->gamestate->nextState('beginAllPlay');
+    }
+
+    private function applyBasicCardEffectsWithDiceAndAmulets(array $card, array $effects): void
+    {
+        $card_id = (int)$card['id'];
+        $card_type = (int)$card['type'];
+        
+        // Get the full card information including who played it and who it targets
+        $card_play_info = $this->getCardWithPlayInfo($card_id);
+        $played_by = $card_play_info['played_by'] ?? null;
+        $target_player = $card_play_info['target_player'] ?? null;
+        
+        // Replace "roll_d6" placeholders with actual dice results for each player
+        $players_to_affect = [];
+        
+        if ($card_type === CardType::GlobalDisaster->value) {
+            // Global disasters affect all players
+            $all_players = $this->loadPlayersBasicInfos();
+            $players_to_affect = array_keys($all_players);
+        } else if ($card_type === CardType::LocalDisaster->value && $target_player !== null) {
+            // Local disasters affect only the target player
+            $players_to_affect = [$target_player];
+        } else if ($played_by !== null) {
+            // Bonus cards affect the player who played them
+            $players_to_affect = [$played_by];
+        }
+
+        foreach ($players_to_affect as $player_id) {
+            // Skip players who used amulets (for harmful effects)
+            $used_amulet = isset($this->playerUsedAmulet[$player_id]) && $this->playerUsedAmulet[$player_id];
+            
+            // Create personalized effects for this player
+            $player_effects = $effects;
+            
+            // Replace "roll_d6" with actual dice result for this player
+            $dice_result = $this->diceResults[$player_id] ?? 1; // Default to 1 if no result stored
+            
+            if ($player_effects['happiness_effect'] === "roll_d6") {
+                $player_effects['happiness_effect'] = $dice_result;
+            }
+            if ($player_effects['prayer_effect'] === "roll_d6") {
+                $player_effects['prayer_effect'] = $dice_result;
+            }
+            if ($player_effects['convert_to_religion'] === "roll_d6") {
+                $player_effects['convert_to_religion'] = $dice_result;
+            }
+            
+            // Apply effects to this player considering amulet usage
+            $this->applyEffectsToPlayerWithAmulet($player_id, $player_effects, $used_amulet);
+        }
+    }
+
+    private function applyEffectsToPlayerWithAmulet(int $player_id, array $effects, bool $used_amulet): void
+    {
+        // If player used an amulet, protect them from harmful effects
+        if ($used_amulet) {
+            // Remove harmful effects (family_dies, convert_to_atheist)
+            $effects['family_dies'] = 0;
+            $effects['convert_to_atheist'] = 0;
+            
+            // Keep beneficial effects (positive happiness_effect, prayer_effect, convert_to_religion)
+        }
+        
+        // Apply the (potentially modified) effects to the player
+        $this->applyEffectsToPlayer($player_id, $effects, 1.0, 'normal');
+    }
+
+    public function actDiscard(int $card_id): void
+    {
+        $this->checkAction('actDiscard');
+        $player_id = $this->getCurrentPlayerId();
+        
+        // Validate that the player owns this card
+        $card = $this->getObjectFromDB("
+            SELECT card_id, card_type, card_type_arg, card_location, card_location_arg 
+            FROM disaster_card 
+            WHERE card_id = $card_id AND card_location = 'hand' AND card_location_arg = $player_id
+            UNION
+            SELECT card_id, card_type, card_type_arg, card_location, card_location_arg 
+            FROM bonus_card 
+            WHERE card_id = $card_id AND card_location = 'hand' AND card_location_arg = $player_id
+        ");
+        
+        if (!$card) {
+            throw new \BgaVisibleSystemException("Invalid card or card not in your hand");
+        }
+        
+        // Move card to discard pile
+        $card_type = (int)$card['card_type'];
+        if ($card_type === CardType::GlobalDisaster->value || $card_type === CardType::LocalDisaster->value) {
+            $this->DbQuery("UPDATE disaster_card SET card_location = 'discard', card_location_arg = 0 WHERE card_id = $card_id");
+        } else {
+            $this->DbQuery("UPDATE bonus_card SET card_location = 'discard', card_location_arg = 0 WHERE card_id = $card_id");
+        }
+        
+        // Notify all players about the discard
+        $this->notifyAllPlayers('cardDiscarded', clienttranslate('${player_name} discarded a card'), [
+            'player_id' => $player_id,
+            'player_name' => $this->getPlayerNameById($player_id),
+            'card_id' => $card_id,
+            'card_type' => $card['card_type'],
+            'card_type_arg' => $card['card_type_arg']
+        ]);
+        
+        // Mark this player as having completed their discard
+        $this->gamestate->setPlayerNonMultiactive($player_id, 'beginAllPlay');
+    }
+
+    public function stDiscard(): void
+    {
+        // All players must discard a card when riots is played
+        $all_players = $this->loadPlayersBasicInfos();
+        $players_with_cards = [];
+        
+        // Check which players have cards in hand
+        foreach ($all_players as $player_id => $player) {
+            $card_count = $this->getCollectionFromDb("
+                SELECT card_id FROM disaster_card WHERE card_location = 'hand' AND card_location_arg = $player_id
+                UNION
+                SELECT card_id FROM bonus_card WHERE card_location = 'hand' AND card_location_arg = $player_id
+            ");
+            
+            if (count($card_count) > 0) {
+                $players_with_cards[] = $player_id;
+            }
+        }
+        
+        if (empty($players_with_cards)) {
+            // No players have cards to discard, move to next phase
+            $this->gamestate->nextState('beginAllPlay');
+            return;
+        }
+        
+        // Set all players with cards as active for discard phase
+        $this->gamestate->setPlayersMultiactive($players_with_cards, 'beginAllPlay');
     }
     /******************************/
 
@@ -1584,6 +2214,22 @@ class Game extends \Table
         // Try bonus cards - use aliases to match expected field names
         $bonus_card = $this->getObjectFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, play_order, played_by, target_player FROM bonus_card WHERE card_id = $card_id");
         return $bonus_card;
+    }
+
+    /**
+     * Update the target player for a card
+     * @param int $card_id The card ID to update
+     * @param int $target_player_id The player being targeted
+     */
+    private function updateCardTarget(int $card_id, int $target_player_id): void
+    {
+        // Try to update disaster card first
+        $disaster_updated = $this->DbQuery("UPDATE disaster_card SET target_player = $target_player_id WHERE card_id = $card_id");
+        
+        // If no disaster card was updated, try bonus card
+        if ($this->DbAffectedRow() == 0) {
+            $this->DbQuery("UPDATE bonus_card SET target_player = $target_player_id WHERE card_id = $card_id");
+        }
     }
 
     /**
@@ -2008,6 +2654,12 @@ class Game extends \Table
         /* Get all cards this player has and where it is */
         $result["handDisaster"] = $this->disasterCards->getPlayerHand($current_player_id);
         $result["handBonus"] = $this->bonusCards->getPlayerHand($current_player_id);
+
+        /* Get played and resolved cards for all players to display in the common areas */
+        $result["playedDisaster"] = $this->disasterCards->getCardsInLocation("played");
+        $result["playedBonus"] = $this->bonusCards->getCardsInLocation("played");
+        $result["resolvedDisaster"] = $this->disasterCards->getCardsInLocation("resolved");
+        $result["resolvedBonus"] = $this->bonusCards->getCardsInLocation("resolved");
 
         /* TODO get size of each players hand */
 
