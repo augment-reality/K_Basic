@@ -167,12 +167,12 @@ function (dojo, declare,) {
                 this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i);
             }
 
-            // Object.values(gamedatas.players).forEach((player, idx) => {
-            //     // Generate a random d6 value (1-6), then increment by 6 * player number (idx)
-            //     const dieValue = Math.floor(Math.random() * 6) + (6 * idx);
-            //     this['dice'].addToStock(dieValue);
-            // });
-
+            // Add a die for each player matching their color
+            Object.values(gamedatas.players).forEach(player => {
+                // Calculate die face: each player's color row starts at (sprite-1)*6 + 1, show face 1 (first face of their color)
+                const playerDieFace = ((player.sprite - 1) * 6) + 1;
+                this['dice'].addToStock(playerDieFace);
+            });
 
             // Initialize and create atheist families stock
             this['atheists'] = new ebg.stock();
@@ -595,32 +595,24 @@ function (dojo, declare,) {
                             this.bgaPerformAction('actGoToBuyCardReflex', {});
                         });
 
-                        // Show pass button for all players (including round leader)
+                        // Show pass button for all players
                         this.addActionButton('pass-btn', _('Pass'), () => {
-                            // Check if button is disabled (has disabled CSS class)
-                            const passBtn = document.getElementById('pass-btn');
-                            if (passBtn && dojo.hasClass(passBtn, 'disabled')) {
-                                this.showMessage(_('You must play at least one card before passing'), 'error');
-                                return;
-                            }
                             this.bgaPerformAction('actPlayCardPass', {});
                         });
 
-                        // Disable pass button for round leader if they haven't played a card yet
-                        if (this.player_id == this.gamedatas.round_leader && !this.gamedatas.round_leader_played_card) {
-                            dojo.addClass('pass-btn', 'disabled');
-                        }
-
-                        // Only show convert button for the round leader
+                        // Only show convert button for the round leader, and only enable it if they can convert
                         if (this.player_id == this.gamedatas.round_leader) {
                             this.addActionButton('convert-btn', _('CONVERT! (End Card Phase)'), () => {
                                 this.bgaPerformAction('actSayConvert', {});
                             });
                             
-                            // Disable convert button if round leader has already played a card
-                            if (this.gamedatas.round_leader_played_card) {
+                            // Use the args from the state to determine if convert is allowed
+                            const canConvert = args && args.can_convert;
+                            if (!canConvert) {
                                 dojo.addClass('convert-btn', 'disabled');
                             }
+                        } else {
+                            // For non-round leaders, no special logic needed - they can always pass
                         }
 
                         // Initially disable the play card button
@@ -805,27 +797,43 @@ function (dojo, declare,) {
             this.statusBar.removeActionButtons();
             
             this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
+                console.log("Player clicked Use Amulet");
+                this.disableAmuletButtons();
                 this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
             });
             
             this.addActionButton('no-amulet-btn', _('Do Not Use Amulet'), () => {
+                console.log("Player clicked Do Not Use Amulet");
+                this.disableAmuletButtons();
                 this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
             });
         },
 
+        disableAmuletButtons: function() {
+            // Disable buttons to prevent double-clicks and show feedback
+            const useBtn = document.getElementById('use-amulet-btn');
+            const noBtn = document.getElementById('no-amulet-btn');
+            if (useBtn) {
+                useBtn.disabled = true;
+                useBtn.style.opacity = '0.5';
+            }
+            if (noBtn) {
+                noBtn.disabled = true;
+                noBtn.style.opacity = '0.5';
+            }
+        },
+
         setupDiceRoll: function() {
             console.log("Setting up dice roll for player");
-            /* Present dice rolling options to the player */
+            /* Present dice rolling option to the player */
             this.gamedatas.gamestate.descriptionmyturn = _('Roll a die to determine the card effect:');
             this.updatePageTitle();
             this.statusBar.removeActionButtons();
             
-            // Create buttons for each possible dice result (1-6)
-            for (let i = 1; i <= 6; i++) {
-                this.addActionButton(`roll-${i}-btn`, _(`Roll ${i}`), () => {
-                    this.bgaPerformAction('actRollDie', { result: i });
-                });
-            }
+            // Create single button to roll dice (server generates random result)
+            this.addActionButton('roll-dice-btn', _('Roll Dice'), () => {
+                this.bgaPerformAction('actRollDie', {});
+            });
         },
 
         setupDiscard: function() {
@@ -1009,11 +1017,13 @@ function (dojo, declare,) {
             if (this.cardCounters[args.player_id]) {
                 this.cardCounters[args.player_id].incValue(-1);
             }
+            
             // Add the card to the played stock
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
                 this['played'].addToStock(uniqueId);
             }
+
             console.log(`Card ${args.card_id} played by player ${args.player_id}`);
         },
 
@@ -1072,16 +1082,10 @@ function (dojo, declare,) {
         },
 
         notif_roundLeaderTurnStart: function(args) {
-            // Reset round leader state when their turn starts
-            this.gamedatas.round_leader_played_card = args.round_leader_played_card;
+            // Update the game state data for round leader
+            this.gamedatas.round_leader_played_card = args.round_leader_played_card || 0;
             
-            // Re-enable convert button if round leader hasn't played a card yet
-            const convertBtn = document.getElementById('convert-btn');
-            if (convertBtn && !this.gamedatas.round_leader_played_card && dojo.hasClass(convertBtn, 'disabled')) {
-                dojo.removeClass(convertBtn, 'disabled');
-            }
-            
-            console.log('Round leader turn started, pass button will be disabled until they play a card');
+            console.log('Round leader turn started, round_leader_played_card =', this.gamedatas.round_leader_played_card);
         },
 
         updateRoundLeaderIcons: function(old_leader, new_leader) {
@@ -1111,17 +1115,25 @@ function (dojo, declare,) {
         notif_amuletDecision: function(args) {
             console.log('Amulet decision phase started:', args);
             // Players with amulets can now decide whether to use them
+            // Keep the decision UI active
         },
 
         notif_amuletUsed: function(args) {
             console.log('Player used amulet:', args);
             const player_name = args.player_name;
-            // Visual feedback could be added here to show amulet usage
+            const player_id = args.player_id;
+            
+            // Update amulet counter
+            if (this.amuletCounters[player_id]) {
+                // The counter should already be decremented by the server
+                // Visual feedback could be added here to show amulet usage
+            }
         },
 
         notif_amuletNotUsed: function(args) {
             console.log('Player chose not to use amulet:', args);
             const player_name = args.player_name;
+            // Visual feedback that player declined to use amulet
             // Visual feedback could be added here
         },
 
@@ -1133,16 +1145,42 @@ function (dojo, declare,) {
         notif_diceRolled: function(args) {
             console.log('Player rolled dice:', args);
             const player_name = args.player_name;
+            const player_id = args.player_id;
             const result = args.result;
-            // Visual feedback could be added here to show the dice result
+            
+            // Update the dice display to show the rolled result
+            if (player_id && this.gamedatas.players[player_id]) {
+                const player = this.gamedatas.players[player_id];
+                // Calculate which dice face to show: player's color row + rolled result
+                const playerDieFace = ((player.sprite - 1) * 6) + result;
+                
+                // Clear the current dice and show the new result
+                this['dice'].removeAll();
+                
+                // Add dice for all players, showing the rolling player's result and others showing face 1
+                Object.values(this.gamedatas.players).forEach(p => {
+                    if (p.id == player_id) {
+                        // Show the rolled result for the rolling player
+                        this['dice'].addToStock(playerDieFace);
+                    } else {
+                        // Show face 1 for other players
+                        const otherPlayerDieFace = ((p.sprite - 1) * 6) + 1;
+                        this['dice'].addToStock(otherPlayerDieFace);
+                    }
+                });
+            }
         },
 
         notif_templeIncremented: function(args) {
             console.log('Temple incremented for player:', args);
             const player_id = args.player_id;
-            // Update temple counter
+            // Update temple counter with exact count from server
             if (this.templeCounters[player_id]) {
-                this.templeCounters[player_id].incValue(1);
+                if (args.temple_count !== undefined) {
+                    this.templeCounters[player_id].setValue(args.temple_count);
+                } else {
+                    this.templeCounters[player_id].incValue(1);
+                }
             }
         },
 
@@ -1220,6 +1258,39 @@ function (dojo, declare,) {
             }
             
             console.log(`Card ${card_id} discarded by player ${player_id}`);
+        },
+
+        notif_cardResolved: function(args) {
+            console.log('Card resolved:', args);
+            const card_id = args.card_id;
+            const card_type = args.card_type;
+            const card_type_arg = args.card_type_arg;
+            
+            // Move card from played stock to resolved stock
+            const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
+            
+            // Remove from played stock
+            if (this['played']) {
+                this['played'].removeFromStockById(card_id);
+            }
+            
+            // Add to resolved stock
+            if (this['resolved']) {
+                this['resolved'].addToStockWithId(uniqueId, card_id);
+            }
+            
+            console.log(`Card ${card_id} (${args.card_name}) moved to resolved`);
+        },
+
+        notif_resolvedCardsCleanup: function(args) {
+            console.log('Cleaning up resolved cards:', args);
+            
+            // Clear all cards from the resolved stock
+            if (this['resolved']) {
+                this['resolved'].removeAll();
+            }
+            
+            console.log(`Cleaned up ${args.resolved_cards_count} resolved cards from UI`);
         },
 
         ///////////////////////////////////////////////////

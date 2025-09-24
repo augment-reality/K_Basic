@@ -106,6 +106,7 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must play a card'))
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stPlayCard')
+        ->args('argPlayCard')
         ->possibleactions([
             'actPlayCard',
             'actPlayCardPass', //only for non-round leader
