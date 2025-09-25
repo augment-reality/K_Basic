@@ -200,7 +200,9 @@ class Game extends \Table
             Resolve (or continue resolving) the resolving card */
 
         // Log the beginning of the resolution phase
-        $this->notifyAllPlayers("message", clienttranslate("Beginning card resolution phase..."), []);
+        $this->notifyAllPlayers("message", clienttranslate("Beginning card resolution phase..."), [
+            'preserve' => 2000 // Show message for 2 seconds
+        ]);
 
         // First check if there's a card currently resolving
         $resolving_card = $this->getCardOnTop('resolving');
@@ -211,6 +213,11 @@ class Game extends \Table
             
             if ($next_card === null) {
                 // No more cards to resolve, go to next phase
+                $this->notifyAllPlayers("cardResolutionComplete", 
+                    clienttranslate("Card resolution phase complete"), [
+                        'preserve' => 2000 // Show message for 2 seconds
+                    ]
+                );
                 $this->gamestate->nextState('noCards');
                 return;
             }
@@ -218,10 +225,32 @@ class Game extends \Table
             // Move the card from played to resolving
             $this->moveCardToResolving($next_card);
             $resolving_card = $next_card;
+            
+            // Notify players which card is being resolved
+            $card_name = $this->getCardName($resolving_card);
+            $this->notifyAllPlayers("cardBeingResolved", 
+                clienttranslate("Now resolving: ${card_name}"), [
+                    'card_name' => $card_name,
+                    'card_id' => $resolving_card['id'],
+                    'preserve' => 2500 // Show message for 2.5 seconds
+                ]
+            );
         }
         
         // Now resolve the card based on its effects
         $this->resolveCardEffects($resolving_card, $this->amuletsResolved);
+        
+        // Notify that this card's resolution is complete
+        $card_name = $this->getCardName($resolving_card);
+        $this->notifyAllPlayers("cardResolved", 
+            clienttranslate("${card_name} has been resolved"), [
+                'card_name' => $card_name,
+                'card_id' => $resolving_card['id'],
+                'card_type' => $resolving_card['type'],
+                'card_type_arg' => $resolving_card['type_arg'],
+                'preserve' => 1500 // Show message for 1.5 seconds
+            ]
+        );
 
     }
     
@@ -313,8 +342,8 @@ class Game extends \Table
         
         // Get the full card information including who played it and who it targets
         $card_play_info = $this->getCardWithPlayInfo($card_id);
-        $played_by = $card_play_info['played_by'] ?? null;
-        $target_player = $card_play_info['target_player'] ?? null;
+        $played_by = $card_play_info['played_by'] ? (int)$card_play_info['played_by'] : null;
+        $target_player = $card_play_info['target_player'] ? (int)$card_play_info['target_player'] : null;
         
         // Trace card resolution info for debugging
         $card_name = $this->getCardName($card);
@@ -374,8 +403,15 @@ class Game extends \Table
                              (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] < 0);
         
         if ($hasNegativeEffects && !$amulets_resolved) {
-            $this->gamestate->nextState('resolveAmulets');
-            return;
+            // Before transitioning to amulet resolution, check if anyone has amulets
+            if ($this->anyPlayerHasAmulets($card, $played_by, $target_player)) {
+                $this->gamestate->nextState('resolveAmulets');
+                return;
+            } else {
+                // No one has amulets, skip amulet resolution
+                $this->notifyAllPlayers('amuletPhaseSkipped', 
+                    clienttranslate('No players have amulets to use'), []);
+            }
         }
         
         if ($effects['recover_leader'] === true) {
@@ -523,7 +559,7 @@ class Game extends \Table
                     'keep_card' => 0,
                 ],
                 BonusCard::Fertility->value => [
-                    'prayer_cost' => 3,
+                    'prayer_cost' => 6,
                     'prayer_effect' => 0,
                     'happiness_effect' => 1,
                     'convert_to_atheist' => 0,
@@ -545,7 +581,7 @@ class Game extends \Table
                     'keep_card' => 0,
                 ],
                 BonusCard::Festivities->value => [
-                    'prayer_cost' => 2,
+                    'prayer_cost' => 5,
                     'prayer_effect' => 0,
                     'happiness_effect' => 3,
                     'convert_to_atheist' => 0,
@@ -567,7 +603,7 @@ class Game extends \Table
                     'keep_card' => 0,
                 ],
                 BonusCard::DoubleHarvest->value => [
-                    'prayer_cost' => 3,
+                    'prayer_cost' => 5,
                     'prayer_effect' => 5,
                     'happiness_effect' => 0,
                     'convert_to_atheist' => 0,
@@ -578,7 +614,7 @@ class Game extends \Table
                     'keep_card' => 0,
                 ],
                 BonusCard::Temple->value => [
-                    'prayer_cost' => 6,
+                    'prayer_cost' => 5,
                     'prayer_effect' => 0,
                     'happiness_effect' => 1,
                     'convert_to_atheist' => 0,
@@ -754,14 +790,31 @@ class Game extends \Table
         if (!empty($effects_to_apply)) {
             $this->applyCardEffects($player_id, $effects_to_apply);
             
-            // Create appropriate message based on multiplier and choice
+            // Determine if this is a bonus card (positive effects) or disaster card (negative effects)
+            $has_positive_effects = isset($effects['prayer_effect']) || isset($effects['happiness_effect']) ||
+                                   isset($effects['faith_effect']) || isset($effects['trade_effect']) || 
+                                   isset($effects['culture_effect']);
+            $has_negative_effects = isset($effects['faith_loss']) || isset($effects['trade_loss']) || 
+                                   isset($effects['culture_loss']) || isset($effects['prayer_loss']);
+            
+            // Create appropriate message based on card type, multiplier, and choice
             $message_key = '';
             if ($multiplier === 0.0) {
                 $message_key = clienttranslate('${player_name} is protected from the disaster effects');
-            } elseif ($multiplier === 2.0) {
-                $message_key = clienttranslate('${player_name} suffers double effects: ${effect_text}');
+            } elseif ($has_positive_effects && !$has_negative_effects) {
+                // This is a bonus card with positive effects
+                if ($multiplier === 2.0) {
+                    $message_key = clienttranslate('${player_name} receives double benefits: ${effect_text}');
+                } else {
+                    $message_key = clienttranslate('${player_name} receives benefits: ${effect_text}');
+                }
             } else {
-                $message_key = clienttranslate('${player_name} suffers normal effects: ${effect_text}');
+                // This is a disaster card or mixed effects
+                if ($multiplier === 2.0) {
+                    $message_key = clienttranslate('${player_name} suffers double effects: ${effect_text}');
+                } else {
+                    $message_key = clienttranslate('${player_name} suffers normal effects: ${effect_text}');
+                }
             }
             
             $this->notifyAllPlayers('effectApplied', $message_key, [
@@ -799,22 +852,14 @@ class Game extends \Table
             $updates[] = "player_prayer = GREATEST(0, player_prayer - " . (int)$effects['prayer_loss'] . ")";
         }
         
-        // Handle faith effects
-        if (isset($effects['faith_loss']) && $effects['faith_loss'] > 0) {
-            $updates[] = "player_faith = GREATEST(0, player_faith - " . (int)$effects['faith_loss'] . ")";
-        }
-        
-        // Handle trade effects  
-        if (isset($effects['trade_loss']) && $effects['trade_loss'] > 0) {
-            $updates[] = "player_trade = GREATEST(0, player_trade - " . (int)$effects['trade_loss'] . ")";
-        }
-        
-        // Handle culture effects
-        if (isset($effects['culture_loss']) && $effects['culture_loss'] > 0) {
-            $updates[] = "player_culture = GREATEST(0, player_culture - " . (int)$effects['culture_loss'] . ")";
-        }
+        // Note: Faith, trade, and culture effects are not stored in database for this game
+        // They may be used for game logic but don't have persistent storage
         
         // Handle happiness effects
+        if (isset($effects['happiness_effect']) && $effects['happiness_effect'] != 0) {
+            // Note: Happiness might need special handling based on game rules
+            $updates[] = "player_happiness = GREATEST(0, player_happiness + " . (int)$effects['happiness_effect'] . ")";
+        }
         if (isset($effects['happiness_effect']) && $effects['happiness_effect'] != 0) {
             // Note: Happiness might need special handling based on game rules
             $updates[] = "player_happiness = GREATEST(0, player_happiness + " . (int)$effects['happiness_effect'] . ")";
@@ -825,11 +870,16 @@ class Game extends \Table
             $sql = "UPDATE player SET " . implode(", ", $updates) . " WHERE player_id = $player_id";
             $this->DbQuery($sql);
             
+            // Get the updated player data to send to the UI
+            $player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
+                                                   player_family as family_count, player_temple as temple_count,
+                                                   player_amulet as amulet_count
+                                                   FROM player WHERE player_id = $player_id");
+            
             // Notify about the stat changes
-            $this->notifyPlayer($player_id, 'playerStats', '', [
-                'player_id' => $player_id,
-                'effects' => $effects
-            ]);
+            $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+                'player_id' => $player_id
+            ], $player_data));
         }
         
         // Handle more complex effects like family conversion, family death, etc.
@@ -933,6 +983,30 @@ class Game extends \Table
         );
     }
 
+    /**
+     * Check if any player has amulets that could be used for the current card
+     */
+    private function anyPlayerHasAmulets(array $card, ?int $played_by, ?int $target_player): bool
+    {
+        $card_type = (int)$card['type'];
+        
+        if ($card_type === CardType::LocalDisaster->value && $target_player !== null) {
+            // For local disasters, only the target player can use an amulet
+            $target_amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $target_player");
+            return $target_amulet_count > 0;
+        } else {
+            // For global effects, check if any player has amulets
+            $all_players = $this->loadPlayersBasicInfos();
+            foreach ($all_players as $player_id => $player) {
+                $amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $player_id");
+                if ($amulet_count > 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     public function stResolveAmulets(): void
     {
         // Get the currently resolving card to determine who is targeted
@@ -967,6 +1041,9 @@ class Game extends \Table
 
         if (empty($players_who_can_use_amulets)) {
             // No players have amulets, proceed directly with card effects
+            $this->notifyAllPlayers('amuletPhaseSkipped', 
+                clienttranslate('No players have amulets to use'), []);
+            
             $this->applyCardEffectsWithoutAmulets($resolving_card);
             return;
         }
@@ -1438,6 +1515,11 @@ class Game extends \Table
             throw new \BgaUserException("You don't have enough prayer points to play $card_name");
         }
 
+        // 5a. Deduct prayer cost from player
+        if ($prayer_cost > 0) {
+            $this->DbQuery("UPDATE player SET player_prayer = player_prayer - $prayer_cost WHERE player_id = $player_id");
+        }
+
         // 6. Move card to played location
         $this->moveCard($card_id, 'played', $player_id);
 
@@ -1451,7 +1533,7 @@ class Game extends \Table
         $target_player = $this->determineCardTarget($card, $player_id);
         $this->setCardPlayOrder($card_id, $player_id, $target_player);
 
-        // 7. Get updated player stats for notifications
+        // 7. Get updated player stats for notifications (after prayer deduction)
         $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
         $disaster_cards_in_hand = $this->disasterCards->countCardInLocation("hand", $player_id);
         $bonus_cards_in_hand = $this->bonusCards->countCardInLocation("hand", $player_id);
@@ -1837,8 +1919,8 @@ class Game extends \Table
             ]
         );
         
-        // Continue with card resolution
-        $this->resolveCardEffects($resolving_card);
+        // Continue with card resolution via proper state transition
+        $this->gamestate->nextState('beginAllPlay');
     }
 
     public function actAmuletChoose(bool $use_amulet): void
@@ -2591,40 +2673,10 @@ class Game extends \Table
         $card_type = (int)$card['type'];
         $card_type_arg = (int)$card['type_arg'];
         
-        // Define card effects (same as in canPlayCard)
-        $CARD_EFFECTS = [
-            CardType::GlobalDisaster->value => [
-                GlobalDisasterCard::Tsunami->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Famine->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Floods->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::MassiveFire->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Drought->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Death->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Thunderstorm->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Revenge->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Epidemic->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Riots->value => ['prayer_cost' => 0],
-            ],
-            CardType::LocalDisaster->value => [
-                LocalDisasterCard::Tornado->value => ['prayer_cost' => 4],
-                LocalDisasterCard::Earthquake->value => ['prayer_cost' => 5],
-                LocalDisasterCard::BadWeather->value => ['prayer_cost' => 1],
-                LocalDisasterCard::Locust->value => ['prayer_cost' => 3],
-                LocalDisasterCard::TempleDestroyed->value => ['prayer_cost' => 5],
-            ],
-            CardType::Bonus->value => [
-                BonusCard::GoodWeather->value => ['prayer_cost' => 2],
-                BonusCard::DoubleHarvest->value => ['prayer_cost' => 5],
-                BonusCard::Fertility->value => ['prayer_cost' => 6],
-                BonusCard::Festivities->value => ['prayer_cost' => 5],
-                BonusCard::NewLeader->value => ['prayer_cost' => 5],
-                BonusCard::Temple->value => ['prayer_cost' => 5],
-                BonusCard::Amulets->value => ['prayer_cost' => 4],
-            ]
-        ];
-        
-        if (isset($CARD_EFFECTS[$card_type][$card_type_arg]['prayer_cost'])) {
-            return (int)$CARD_EFFECTS[$card_type][$card_type_arg]['prayer_cost'];
+        // Use the same effects system as card resolution to ensure consistency
+        $effects = $this->getCardEffects($card_type, $card_type_arg);
+        if ($effects !== null && isset($effects['prayer_cost'])) {
+            return (int)$effects['prayer_cost'];
         }
         
         return 0; // Default to 0 if not found
@@ -2632,54 +2684,15 @@ class Game extends \Table
 
     public function canPlayCard(int $player_id, ?array $card): bool
     {
+        if ($card === null) {
+            return false;
+        }
         
-        $card_type = (int)$card['type'];
-        $card_type_arg = (int)$card['type_arg'];
         $player_prayer = (int)$this->getUniqueValueFromDb("SELECT player_prayer FROM player WHERE player_id = $player_id");
-
-        // Define card effects directly in the function to avoid global variable issues
-        $CARD_EFFECTS = [
-            CardType::GlobalDisaster->value => [
-                GlobalDisasterCard::Tsunami->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Famine->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Floods->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::MassiveFire->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Drought->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Death->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Thunderstorm->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Revenge->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Epidemic->value => ['prayer_cost' => 0],
-                GlobalDisasterCard::Riots->value => ['prayer_cost' => 0],
-            ],
-            CardType::LocalDisaster->value => [
-                LocalDisasterCard::Tornado->value => ['prayer_cost' => 1],
-                LocalDisasterCard::Earthquake->value => ['prayer_cost' => 2],
-                LocalDisasterCard::BadWeather->value => ['prayer_cost' => 1],
-                LocalDisasterCard::Locust->value => ['prayer_cost' => 1],
-                LocalDisasterCard::TempleDestroyed->value => ['prayer_cost' => 5],
-            ],
-            CardType::Bonus->value => [
-                BonusCard::GoodWeather->value => ['prayer_cost' => 2],
-                BonusCard::DoubleHarvest->value => ['prayer_cost' => 3],
-                BonusCard::Fertility->value => ['prayer_cost' => 4],
-                BonusCard::Festivities->value => ['prayer_cost' => 1],
-                BonusCard::NewLeader->value => ['prayer_cost' => 5],
-                BonusCard::Temple->value => ['prayer_cost' => 4],
-                BonusCard::Amulets->value => ['prayer_cost' => 3],
-            ]
-        ];
-        
-        $prayer_cost = (int)$CARD_EFFECTS[$card_type][$card_type_arg]['prayer_cost'];
+        $prayer_cost = $this->getCardPrayerCost($card);
         
         // Check if player has enough prayer points
-        $can_play = $player_prayer >= $prayer_cost;
-
-        if ($can_play && $prayer_cost > 0) {
-            $new_prayer = $player_prayer - $prayer_cost;
-            $this->DbQuery("UPDATE player SET player_prayer = $new_prayer WHERE player_id = $player_id");
-        }      
-
-        return $can_play;
+        return $player_prayer >= $prayer_cost;
     }
 
 
