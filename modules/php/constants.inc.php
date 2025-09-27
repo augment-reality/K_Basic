@@ -84,7 +84,8 @@ enum BonusCard: int
 
 }
 
-
+// Make CARD_EFFECTS globally accessible
+global $CARD_EFFECTS;
 
 $CARD_EFFECTS = [
     CardType::GlobalDisaster->value => [

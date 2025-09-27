@@ -46,7 +46,9 @@ class Game extends \Table
             "saved_active_player" => 12, /* Saved active player for reflexive actions */
             "current_global_disaster" => 13, /* Card ID of the current global disaster being processed */
             "round_leader_played_card" => 14, /* Whether round leader has played a card this turn */
-            "round_leader_continuing_play" => 15 /* Whether round leader is continuing to play multiple cards */
+            "round_leader_continuing_play" => 15, /* Whether round leader is continuing to play multiple cards */
+            "discard_completed_for_card" => 16, /* ID of the card for which discard has been completed */
+            "dice_completed_for_card" => 17 /* ID of the card for which dice rolling has been completed */
         ]);          
 
         //Make two decks: bonus and disaster
@@ -70,7 +72,28 @@ class Game extends \Table
         /* State to do any necessary cleanup, 
         notifications to UI (e.g. cards drawn by other players) 
         and set the active player to the first player */
-        $this->trace("KALUA Made it to initial finish");
+
+        // Send summary notification of all players' initial card draws
+        $playerSummary = [];
+        $players = $this->getCollectionFromDb("SELECT player_id, player_name FROM player ORDER BY player_no");
+        
+        foreach ($players as $player) {
+            $player_id = $player['player_id'];
+            $disasterCount = $this->disasterCards->countCardInLocation("hand", $player_id);
+            $bonusCount = $this->bonusCards->countCardInLocation("hand", $player_id);
+            
+            $playerSummary[] = [
+                'player_id' => $player_id,
+                'player_name' => $player['player_name'],
+                'disaster_cards' => $disasterCount,
+                'bonus_cards' => $bonusCount,
+                'total_cards' => $disasterCount + $bonusCount
+            ];
+        }
+        
+        $this->notifyAllPlayers('initialDrawComplete', clienttranslate('All players have completed their initial card selection'), [
+            'players' => $playerSummary
+        ]);
 
         /* Active player is already set */
         //$this->activeNextPlayer();
@@ -86,7 +109,6 @@ class Game extends \Table
         $args = $this->argActivateLeader();
         if ($args['_no_notify']) 
         {
-            $this->trace("KALUA skipping to next player!");
             /* Notify all players that the player is being skipped? */
             $this->gamestate->nextState();
         }
@@ -128,14 +150,15 @@ class Game extends \Table
 
     public function stPlayCard(): void
     {
-        // Only reset round leader played card flag when it's the round leader's FRESH turn
-        // (not when continuing to play cards via 'playAgain' transition)
+        // Reset round leader played card flag when starting a new round of card playing
+        // Only skip the reset when the round leader is continuing to play multiple cards in sequence
         $current_player = $this->getActivePlayerId();
         $round_leader = $this->getGameStateValue("roundLeader");
         $is_continuing_play = $this->getGameStateValue("round_leader_continuing_play");
         
         if ($current_player == $round_leader && !$is_continuing_play) {
-            // This is a fresh turn for the round leader, reset the flag
+            // This is either a fresh turn for the round leader OR we're starting a new round of card playing
+            // Reset the flag so the convert button becomes available again
             $this->setGameStateValue("round_leader_played_card", 0);
             
             // Notify frontend to reset round leader state
@@ -199,11 +222,6 @@ class Game extends \Table
             Else we’re done resolving cards - set the active player to the trick leader and go to PHASE THREE PLAY ACTION CARD
             Resolve (or continue resolving) the resolving card */
 
-        // Log the beginning of the resolution phase
-        $this->notifyAllPlayers("message", clienttranslate("Beginning card resolution phase..."), [
-            'preserve' => 2000 // Show message for 2 seconds
-        ]);
-
         // First check if there's a card currently resolving
         $resolving_card = $this->getCardOnTop('resolving');
         
@@ -218,7 +236,7 @@ class Game extends \Table
                         'preserve' => 2000 // Show message for 2 seconds
                     ]
                 );
-                $this->gamestate->nextState('noCards');
+                $this->gamestate->nextState('continueCardPhase');
                 return;
             }
             
@@ -293,12 +311,20 @@ class Game extends \Table
     {
         $card_id = $card['id'];
         $card_type = (int)$card['type'];
+        $card_type_arg = (int)$card['type_arg'];
         
         if ($card_type === CardType::GlobalDisaster->value || $card_type === CardType::LocalDisaster->value) {
             $this->disasterCards->moveCard($card_id, 'resolving');
         } else {
             $this->bonusCards->moveCard($card_id, 'resolving');
         }
+        
+        // Notify frontend to move card from played to resolving (removes from playedcards stock)
+        $this->notifyAllPlayers('cardMovedToResolving', '', [
+            'card_id' => $card_id,
+            'card_type' => $card_type,
+            'card_type_arg' => $card_type_arg
+        ]);
     }
     
     /**
@@ -334,6 +360,9 @@ class Game extends \Table
             $this->playerUsedAmulet = [];
             $this->diceResults = [];
             $this->multiactiveAmuletPlayers = [];
+            // Reset discard and dice completed flags for new card
+            $this->setGameStateValue("discard_completed_for_card", 0);
+            $this->setGameStateValue("dice_completed_for_card", 0);
         }
         
         $card_type = (int)$card['type'];
@@ -345,17 +374,8 @@ class Game extends \Table
         $played_by = $card_play_info['played_by'] ? (int)$card_play_info['played_by'] : null;
         $target_player = $card_play_info['target_player'] ? (int)$card_play_info['target_player'] : null;
         
-        // Trace card resolution info for debugging
+        // Get card name for notifications
         $card_name = $this->getCardName($card);
-        $this->trace("Resolving card {$card_id} ({$card_name}): played by {$played_by}, targets {$target_player}");
-        $this->trace("Card data: " . json_encode($card));
-        $this->trace("Looking for CARD_EFFECTS[{$card_type}][{$card_type_arg}]");
-        
-        // Debug: Show all disaster cards in the database for this type
-        if ($card_type === CardType::GlobalDisaster->value) {
-            $all_global_cards = $this->getObjectListFromDb("SELECT card_id, card_type, card_type_arg, card_location FROM disaster_card WHERE card_type = " . CardType::GlobalDisaster->value);
-            $this->trace("All Global Disaster cards in database: " . json_encode($all_global_cards));
-        }
         
         $effects = $this->getCardEffects($card_type, $card_type_arg);
         if ($effects === null) {
@@ -365,7 +385,10 @@ class Game extends \Table
         // Check for the first non-zero attribute to determine the next state
         // Priority order: discard -> target_selection -> dice_roll -> amulet_decision -> recover_leader -> keep_card
         
-        if ($effects['discard'] > 0) {
+        $discard_completed_for_card = $this->getGameStateValue("discard_completed_for_card");
+        if ($effects['discard'] > 0 && $discard_completed_for_card != $card_id) {
+            // Mark discard as being processed for this card
+            $this->setGameStateValue("discard_completed_for_card", $card_id);
             $this->gamestate->nextState('discard');
             return;
         }
@@ -389,10 +412,14 @@ class Game extends \Table
             }
         }
         
-        // Check for dice roll requirements first
-        if ($effects['happiness_effect'] === "roll_d6" || 
-            $effects['prayer_effect'] === "roll_d6" || 
-            $effects['convert_to_religion'] === "roll_d6") {
+        // Check for dice roll requirements first (only if dice haven't been rolled yet)
+        $diceNeeded = $effects['happiness_effect'] === "roll_d6" || 
+                      $effects['prayer_effect'] === "roll_d6" || 
+                      $effects['convert_to_religion'] === "roll_d6";
+        
+        $dice_completed_for_card = $this->getGameStateValue("dice_completed_for_card");
+        if ($diceNeeded && $dice_completed_for_card != $card_id) {
+            // Dice are needed but haven't been rolled yet for this card
             $this->gamestate->nextState('rollDice');
             return;
         }
@@ -474,169 +501,23 @@ class Game extends \Table
      */
     private function getCardEffects(int $card_type, int $card_type_arg): ?array
     {
-        // Define card effects directly to avoid global variable issues
-        $CARD_EFFECTS = [
-            CardType::GlobalDisaster->value => [
-                GlobalDisasterCard::Tsunami->value => [
-                    'prayer_cost' => 10,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => -2,
-                    'convert_to_atheist' => 1,
-                    'family_dies' => 2,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-            ],
-            CardType::LocalDisaster->value => [
-                LocalDisasterCard::Tornado->value => [
-                    'prayer_cost' => 4,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => -1,
-                    'convert_to_atheist' => 1,
-                    'family_dies' => 1,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                LocalDisasterCard::Earthquake->value => [
-                    'prayer_cost' => 5,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => -3,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 1,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                LocalDisasterCard::BadWeather->value => [
-                    'prayer_cost' => 1,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => -1,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 1,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                LocalDisasterCard::Locust->value => [
-                    'prayer_cost' => 3,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => -2,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 1,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                LocalDisasterCard::TempleDestroyed->value => [
-                    'prayer_cost' => 5,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => -2,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 1,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-            ],
-            CardType::Bonus->value => [
-                BonusCard::GoodWeather->value => [
-                    'prayer_cost' => 2,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => 2,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                BonusCard::Fertility->value => [
-                    'prayer_cost' => 6,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => 1,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 1,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                BonusCard::Amulets->value => [
-                    'prayer_cost' => 4,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => 0,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                BonusCard::Festivities->value => [
-                    'prayer_cost' => 5,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => 3,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                BonusCard::NewLeader->value => [
-                    'prayer_cost' => 5,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => 0,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => true,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                BonusCard::DoubleHarvest->value => [
-                    'prayer_cost' => 5,
-                    'prayer_effect' => 5,
-                    'happiness_effect' => 0,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 0,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 0,
-                ],
-                BonusCard::Temple->value => [
-                    'prayer_cost' => 5,
-                    'prayer_effect' => 0,
-                    'happiness_effect' => 1,
-                    'convert_to_atheist' => 0,
-                    'family_dies' => 0,
-                    'convert_to_religion' => 2,
-                    'recover_leader' => false,
-                    'discard' => 0,
-                    'keep_card' => 1,
-                ],
-            ],
-        ];
+        global $CARD_EFFECTS;
         
-        // Add debugging
-        $this->trace("Getting effects for type {$card_type}, arg {$card_type_arg}");
+        if (!isset($CARD_EFFECTS) || $CARD_EFFECTS === null) {
+            throw new \BgaVisibleSystemException("CARD_EFFECTS is not available - this should not happen as constants are included at class level");
+            throw new \BgaVisibleSystemException("Card effects not available - system error");
+        }
+        
+        // Get effects for card type and type_arg
+
         
         if (!isset($CARD_EFFECTS[$card_type])) {
-            $this->trace("Card type {$card_type} not found in CARD_EFFECTS. Available types: " . json_encode(array_keys($CARD_EFFECTS)));
+            $available_types = array_keys($CARD_EFFECTS);
             return null;
         }
         
         if (!isset($CARD_EFFECTS[$card_type][$card_type_arg])) {
-            $this->trace("Card type_arg {$card_type_arg} not found for type {$card_type}. Available args: " . json_encode(array_keys($CARD_EFFECTS[$card_type])));
+            $available_args = array_keys($CARD_EFFECTS[$card_type]);
             return null;
         }
         
@@ -665,9 +546,6 @@ class Game extends \Table
         }
         
         // This will be implemented to apply the basic effects like prayer_effect, happiness_effect, convert_to_atheist
-        // For now, just trace the effects with play information
-        $this->trace("Applying basic effects for card {$card_id}: " . json_encode($effects) . 
-                    " (played by: {$played_by}, targets: {$target_player})");
     }
 
     /**
@@ -691,8 +569,8 @@ class Game extends \Table
             $cost_paid = (int)$card_player_choice['cost_paid'];
         }
         
-        // Get all players
-        $sql = "SELECT player_id, player_prayer, player_faith, player_trade, player_culture 
+        // Get all players with their current stats
+        $sql = "SELECT player_id, player_prayer, player_happiness, player_family, player_temple, player_amulet 
                 FROM player 
                 WHERE player_eliminated = 0";
         $players = $this->getObjectListFromDb($sql);
@@ -711,8 +589,26 @@ class Game extends \Table
                 $multiplier = 2.0;
             }
             
-            // Apply effects to this player with the calculated multiplier
-            $this->applyEffectsToPlayer($player_id, $effects, $multiplier, $choice);
+            // For normal effect, apply silently and send generic notification afterwards
+            if ($choice === 'normal') {
+                $this->applyCardEffects($player_id, $effects); // Apply without notification
+            } else {
+                // Apply effects to this player with the calculated multiplier (with individual notifications)
+                $this->applyEffectsToPlayer($player_id, $effects, $multiplier, $choice);
+            }
+        }
+        
+        // Send generic notification for normal global effects
+        if ($choice === 'normal') {
+            $effect_text = $this->getEffectsText($effects);
+            $this->notifyAllPlayers('globalEffectApplied', 
+                clienttranslate('All players ${effect_type}: ${effect_text}'), [
+                    'effect_text' => $effect_text,
+                    'effect_type' => $this->getEffectTypeText($effects),
+                    'effects' => $effects,
+                    'multiplier' => 1.0,
+                    'choice' => $choice
+                ]);
         }
         
         // Clear choices after applying effects
@@ -938,6 +834,31 @@ class Game extends \Table
     }
     
     /**
+     * Get the type of effect (gain or lose) for generic notifications
+     */
+    private function getEffectTypeText(array $effects): string
+    {
+        $has_positive = isset($effects['prayer_effect']) && $effects['prayer_effect'] > 0 ||
+                       isset($effects['happiness_effect']) && $effects['happiness_effect'] > 0;
+                       
+        $has_negative = isset($effects['prayer_loss']) && $effects['prayer_loss'] > 0 ||
+                       isset($effects['faith_loss']) && $effects['faith_loss'] > 0 ||
+                       isset($effects['trade_loss']) && $effects['trade_loss'] > 0 ||
+                       isset($effects['culture_loss']) && $effects['culture_loss'] > 0 ||
+                       isset($effects['happiness_effect']) && $effects['happiness_effect'] < 0 ||
+                       isset($effects['convert_to_atheist']) && $effects['convert_to_atheist'] > 0 ||
+                       isset($effects['family_dies']) && $effects['family_dies'] > 0;
+        
+        if ($has_positive && !$has_negative) {
+            return clienttranslate('gain');
+        } elseif ($has_negative && !$has_positive) {
+            return clienttranslate('lose');
+        } else {
+            return clienttranslate('are affected by');
+        }
+    }
+    
+    /**
      * Move a card from resolving to resolved
      */
     private function moveCardToResolved(array $card): void
@@ -1064,9 +985,11 @@ class Game extends \Table
 
     private function applyCardEffectsWithoutAmulets(array $card): void
     {
-        $effects = $this->getCardEffects($card['type'], $card['type_arg']);
+        $card_type = (int)$card['type'];
+        $card_type_arg = (int)$card['type_arg'];
+        $effects = $this->getCardEffects($card_type, $card_type_arg);
         if ($effects === null) {
-            throw new \BgaVisibleSystemException("Unknown card effect for type {$card['type']}, arg {$card['type_arg']}");
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$card_type}, arg {$card_type_arg}");
         }
 
         // Apply the card effects directly (dice results already incorporated if needed)
@@ -1337,12 +1260,11 @@ class Game extends \Table
 ///////////Player Actions /////////////////////
     public function actDrawCardInit(string $type /* either "disaster" or "bonus" */): void
     {
-        /* Draws a card and notifies that user of the drawn card
-            Notifies UI to draw a card, and how many cards left to draw to reach 5
-            UI will update with cards drawn, or waiting once we hit 0 cards remaining
+        /* Draws a card during initial draw phase
+            Suppresses individual notifications - summary will be sent at end of phase
             Checks if all users have drawn 5 cards - if they have, go to INITIAL FINISH */
         
-        $this->drawCard_private($type);
+        $this->drawCard_private($type, null, true); // Suppress notifications during initial draw
         $player_id = $this->getCurrentPlayerId();
         
         if ($this->disasterCards->countCardInLocation("hand", $player_id) 
@@ -1376,7 +1298,7 @@ class Game extends \Table
     /***** Leader state actions *****/
     public function actGiveSpeech(): void
 {
-        $this->trace("KALUA gives a speech!");
+
         $player_id = $this->getCurrentPlayerId();
 
         self::DbQuery( "UPDATE player SET player_happiness = player_happiness + 1 WHERE player_id = {$this->getActivePlayerId()}");
@@ -1392,7 +1314,7 @@ class Game extends \Table
 
     public function actConvertAtheists(): void
     {
-        $this->trace("KALUA convert atheists!");
+
         $player_id = $this->getCurrentPlayerId();
 
         // Get current number of atheist families
@@ -1415,7 +1337,7 @@ class Game extends \Table
 
     public function actConvertBelievers(int $target_player_id): void
     {
-        $this->trace("KALUA convert believers!");
+
         // Move one family from target_player_id to current player
         $current_player_id = $this->getCurrentPlayerId();
 
@@ -1425,7 +1347,6 @@ class Game extends \Table
 
         // Only transfer if target has at least one family
         if ($target_family > 0) {
-            $this->trace("KALUA at least one family!");
             self::DbQuery("UPDATE player SET player_family = player_family - 1 WHERE player_id = $target_player_id");
             self::DbQuery("UPDATE player SET player_family = player_family + 1 WHERE player_id = $current_player_id");
 
@@ -1437,7 +1358,7 @@ class Game extends \Table
             ]);
         }
         else{
-            $this->trace("KALUA not converting any families!");
+
         }
 
         $this->gamestate->nextState();
@@ -1446,7 +1367,7 @@ class Game extends \Table
     public function actSacrificeLeader(): void
     {
         /* Increase player's happiness by one */
-        $this->trace("KALUA sacrifices leader!");
+
 
         $player_id = $this->getCurrentPlayerId();
 
@@ -1539,7 +1460,7 @@ class Game extends \Table
         $bonus_cards_in_hand = $this->bonusCards->countCardInLocation("hand", $player_id);
         $total_cards_in_hand = $disaster_cards_in_hand + $bonus_cards_in_hand;
 
-        // 8. Send notification to all players (include card_type and card_type_arg for frontend)
+        // 8. Send consolidated notification to all players about the card play
         $notification_message = clienttranslate('${player_name} plays ${card_name}');
         $notification_args = [
             'player_id' => $player_id,
@@ -1549,13 +1470,26 @@ class Game extends \Table
             'card_type' => $card['type'],
             'card_type_arg' => $card['type_arg'],
             'played_by' => $player_id,
-            'target_player' => $target_player
+            'target_player' => $target_player,
+            'prayer_cost' => $prayer_cost,
+            'new_prayer_total' => $player_prayer,
+            'card_count' => $total_cards_in_hand
         ];
         
-        // Add target information to notification if there's a specific target
-        if ($target_player !== null && $target_player !== $player_id) {
-            $notification_message = clienttranslate('${player_name} plays ${card_name} targeting ${target_name}');
-            $notification_args['target_name'] = $this->getPlayerNameById($target_player);
+        // Create comprehensive message including prayer cost if applicable
+        if ($prayer_cost > 0) {
+            if ($target_player !== null && $target_player !== $player_id) {
+                $notification_message = clienttranslate('${player_name} spends ${prayer_cost} prayer to play ${card_name} targeting ${target_name}');
+                $notification_args['target_name'] = $this->getPlayerNameById($target_player);
+            } else {
+                $notification_message = clienttranslate('${player_name} spends ${prayer_cost} prayer to play ${card_name}');
+            }
+        } else {
+            // No prayer cost, but check for targeting
+            if ($target_player !== null && $target_player !== $player_id) {
+                $notification_message = clienttranslate('${player_name} plays ${card_name} targeting ${target_name}');
+                $notification_args['target_name'] = $this->getPlayerNameById($target_player);
+            }
         }
         
         $this->notifyAllPlayers('cardPlayed', $notification_message, $notification_args);
@@ -1566,27 +1500,6 @@ class Game extends \Table
                 'round_leader_played_card' => 1
             ]);
         }
-
-        // 9. If prayer was spent, notify about prayer cost and updated sidebar counters
-        if ($prayer_cost > 0) {
-            $this->notifyAllPlayers('prayerSpent', 
-                clienttranslate('${player_name} spends ${prayer_cost} prayer points to play ${card_name}'), [
-                    'player_id' => $player_id,
-                    'player_name' => $this->getActivePlayerName(),
-                    'prayer_cost' => $prayer_cost,
-                    'new_prayer_total' => $player_prayer,
-                    'card_name' => $this->getCardName($card)
-                ]);
-        }
-
-        // 10. Notify about updated card count in sidebar
-        $this->notifyAllPlayers('playerStatsUpdated',
-            clienttranslate('${player_name} now has ${card_count} cards'), [
-                'player_id' => $player_id,
-                'player_name' => $this->getActivePlayerName(),
-                'card_count' => $total_cards_in_hand,
-                'prayer_points' => $player_prayer
-            ]);
 
         if ((int)$card['type'] === CardType::GlobalDisaster->value) {
             // Initialize choice for the player who played this global disaster
@@ -1617,7 +1530,7 @@ class Game extends \Table
         // Clear the continuing play flag since the player is passing
         $this->setGameStateValue("round_leader_continuing_play", 0);
         
-        $this->trace("KALUA passes their turn.");
+
         $this->gamestate->nextState('nextPlayerThree');
     }
 
@@ -1714,10 +1627,6 @@ class Game extends \Table
         $this->setGameStateValue('saved_active_player', 0);
         
         // Return to the saved state - jumpToState should restore the context properly
-        $this->gamestate->jumpToState($saved_state);
-        
-        // Log the restoration for debugging
-        $this->trace("Returned from reflexive state to state $saved_state for player $saved_player");
     }
 
     public function actAvoidGlobal(): void
@@ -1981,9 +1890,11 @@ class Game extends \Table
             throw new \BgaVisibleSystemException("No card currently resolving");
         }
 
-        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
+        $card_type = (int)$resolving_card['type'];
+        $card_type_arg = (int)$resolving_card['type_arg'];
+        $effects = $this->getCardEffects($card_type, $card_type_arg);
         if ($effects === null) {
-            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$card_type}, arg {$card_type_arg}");
         }
 
         // Apply the card effects considering amulet usage (dice results already incorporated if needed)
@@ -2015,9 +1926,10 @@ class Game extends \Table
         }
 
         $card_type = (int)$resolving_card['type'];
-        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
+        $card_type_arg = (int)$resolving_card['type_arg'];
+        $effects = $this->getCardEffects($card_type, $card_type_arg);
         if ($effects === null) {
-            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$card_type}, arg {$card_type_arg}");
         }
 
         $players_who_roll = [];
@@ -2051,6 +1963,10 @@ class Game extends \Table
             return;
         }
 
+        // Mark dice as completed for this card to prevent re-triggering
+        $card_id = (int)$resolving_card['id'];
+        $this->setGameStateValue("dice_completed_for_card", $card_id);
+        
         // Set players who need to roll as active
         $this->gamestate->setPlayersMultiactive($players_who_roll, 'beginAllPlay');
         
@@ -2093,7 +2009,7 @@ class Game extends \Table
             $this->applyTargetedCardEffectsWithAmulets($card_id, $effects, $played_by, $target_player);
         }
         
-        $this->trace("Applied effects for card {$card_id} considering amulet usage: " . json_encode($this->playerUsedAmulet));
+
     }
 
     private function applyTargetedCardEffectsWithAmulets(int $card_id, array $effects, ?int $played_by, ?int $target_player): void
@@ -2151,13 +2067,8 @@ class Game extends \Table
         );
 
         // Mark this player as having completed their dice roll
+        // BGA framework will automatically transition to 'beginAllPlay' when all players are done
         $this->gamestate->setPlayerNonMultiactive($player_id, 'beginAllPlay');
-        
-        // Check if all players have rolled their dice
-        if ($this->gamestate->isPlayerActive($player_id) === false) {
-            // All players have rolled, now apply card effects using the dice results
-            $this->applyCardEffectsWithDiceResults();
-        }
     }
 
     private function storeDiceResult(int $player_id, int $card_id, int $result): void
@@ -2167,41 +2078,6 @@ class Game extends \Table
             $this->diceResults = [];
         }
         $this->diceResults[$player_id] = $result;
-    }
-
-    private function applyCardEffectsWithDiceResults(): void
-    {
-        $resolving_card = $this->getCardOnTop('resolving');
-        if ($resolving_card === null) {
-            throw new \BgaVisibleSystemException("No card currently resolving");
-        }
-
-        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
-        if ($effects === null) {
-            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
-        }
-
-        // After dice rolls, check if amulet decisions are needed for negative effects
-        $hasNegativeEffects = ($effects['family_dies'] > 0) || 
-                             ($effects['convert_to_atheist'] > 0) || 
-                             (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] < 0);
-        
-        if ($hasNegativeEffects) {
-            $this->gamestate->nextState('resolveAmulets');
-            return;
-        }
-
-        // No amulet decisions needed, apply effects directly with dice results
-        $this->applyBasicCardEffectsWithDiceAndAmulets($resolving_card, $effects);
-        
-        // Clear dice results for next resolution
-        $this->diceResults = [];
-        
-        // Move card from resolving to resolved and continue
-        $this->moveCardToResolved($resolving_card);
-        
-        // Continue with next card resolution
-        $this->gamestate->nextState('beginAllPlay');
     }
 
     private function applyBasicCardEffectsWithDiceAndAmulets(array $card, array $effects): void
@@ -2315,6 +2191,7 @@ class Game extends \Table
         // All players must discard a card when riots is played
         $all_players = $this->loadPlayersBasicInfos();
         $players_with_cards = [];
+        $players_without_cards = [];
         
         // Check which players have cards in hand
         foreach ($all_players as $player_id => $player) {
@@ -2326,11 +2203,38 @@ class Game extends \Table
             
             if (count($card_count) > 0) {
                 $players_with_cards[] = $player_id;
+            } else {
+                $players_without_cards[] = $player_id;
             }
+        }
+        
+        // Notify players without cards that they are waiting
+        if (!empty($players_without_cards)) {
+            $players_without_names = [];
+            foreach ($players_without_cards as $player_id) {
+                $players_without_names[] = $all_players[$player_id]['player_name'];
+            }
+            $waiting_names = implode(', ', $players_without_names);
+            
+            $this->notifyAllPlayers('message', 
+                count($players_without_cards) == 1 ? 
+                    clienttranslate('${waiting_names} has no cards and is waiting for others to discard') :
+                    clienttranslate('${waiting_names} have no cards and are waiting for others to discard'), 
+                [
+                    'waiting_names' => $waiting_names,
+                    'preserve' => 3000
+                ]
+            );
         }
         
         if (empty($players_with_cards)) {
             // No players have cards to discard, move to next phase
+            $this->notifyAllPlayers('message', 
+                clienttranslate('No players have cards to discard'), 
+                [
+                    'preserve' => 2000
+                ]
+            );
             $this->gamestate->nextState('beginAllPlay');
             return;
         }
@@ -2653,7 +2557,7 @@ class Game extends \Table
     public function check_playerHasLeader() : bool
     {
         $leader_int = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = {$this->getActivePlayerId()}");
-        $this->trace(sprintf("KALUA leader int: %d", $leader_int));
+
         return $leader_int == 1;
     }
 
@@ -2934,7 +2838,14 @@ class Game extends \Table
         // $this->initStat("player", "player_teststat1", 0);
 
         // TODO: Setup the initial game situation here.
-        $this->setGameStateValue("roundLeader", $this->activeNextPlayer());
+        $initial_leader = $this->activeNextPlayer();
+        $this->setGameStateValue("roundLeader", $initial_leader);
+        
+        // Notify about initial round leader
+        $this->notifyAllPlayers('initialRoundLeader', clienttranslate('${player_name} will lead the first round'), [
+            'player_id' => $initial_leader,
+            'player_name' => $this->getPlayerNameById($initial_leader)
+        ]);
     }
 
     /**
@@ -2988,7 +2899,7 @@ class Game extends \Table
     }
 
     /* Helpers */
-    private function drawCard_private(string $type, ?int $player_id = null) : void
+    private function drawCard_private(string $type, ?int $player_id = null, bool $suppressNotifications = false) : void
     {
         $card = null;
         if ($player_id === null) {
@@ -2999,13 +2910,12 @@ class Game extends \Table
         {
             throw new \BgaVisibleSystemException($this->_("Unknown card type " + $type));
         }
-        $this->trace( "KALUA draw a card!! Player: $player_id, Type: $type" );
+
         
         // Check deck size before drawing
         if (STR_CARD_TYPE_DISASTER == $type)
         {
             $deck_count = $this->disasterCards->countCardInLocation("deck");
-            $this->trace("Disaster deck has $deck_count cards");
             if ($deck_count == 0) {
                 throw new \BgaUserException("No more disaster cards available");
             }
@@ -3014,7 +2924,6 @@ class Game extends \Table
         else if (STR_CARD_TYPE_BONUS == $type)
         {           
             $deck_count = $this->bonusCards->countCardInLocation("deck");
-            $this->trace("Bonus deck has $deck_count cards");
             if ($deck_count == 0) {
                 throw new \BgaUserException("No more bonus cards available");
             }
@@ -3025,20 +2934,21 @@ class Game extends \Table
             throw new \BgaUserException("No more cards available in the $type deck");
         }
 
-        $this->trace("Card drawn: " . json_encode($card));
+        // Send notifications only if not suppressed (during initial draw)
+        if (!$suppressNotifications) {
+            // Public notification that a card was drawn
+            $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+                    'player_id' => $player_id,
+                    'player_name' => $this->getPlayerNameById($player_id),
+                    'card_id' => $card['id'],
+                    'card_type' => $card['type'],
+                    'card_type_arg' => $card['type_arg']
+                ]);
 
-        // Public notification that a card was drawn
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-                'player_id' => $player_id,
-                'player_name' => $this->getPlayerNameById($player_id),
-                'card_id' => $card['id'],
-                'card_type' => $card['type'],
-                'card_type_arg' => $card['type_arg']
+            // Private notification to the player with card details
+            $this->notifyPlayer($player_id, 'cardDrawn', '', [
+                'card' => $card
             ]);
-
-        // Private notification to the player with card details
-        $this->notifyPlayer($player_id, 'cardDrawn', '', [
-            'card' => $card
-        ]);
+        }
     }
 }

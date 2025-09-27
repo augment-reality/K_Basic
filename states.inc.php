@@ -119,6 +119,7 @@ $machinestates = [
             'nextPlayerThree' => ST_PHASE_THREE_NEXT_PLAYER,
             'resolveCards' => ST_PHASE_THREE_RESOLVE_CARD,
             'buyCardReflex' => ST_REFLEXIVE_BUY_CARD, // Transition to reflexive state
+            'convertPray' => ST_PHASE_FOUR_CONVERT_PRAY, // Transition when round leader chooses convert
         ])
         ->build(),
         
@@ -155,7 +156,7 @@ $machinestates = [
         ->type(StateType::GAME)
         ->action('stResolveCard')
         ->transitions([
-            'noCards' => ST_PHASE_FOUR_CONVERT_PRAY,
+            'continueCardPhase' => ST_PHASE_THREE_PLAY_CARD, // Return to card playing after resolving cards
             'selectTargets' => ST_PHASE_THREE_SELECT_TARGETS,
             'resolveAmulets' => ST_PHASE_THREE_RESOLVE_AMULETS,
             'rollDice' => ST_PHASE_THREE_ROLL_DICE,
@@ -187,6 +188,7 @@ $machinestates = [
         ->description(clienttranslate('Some players may choose to use their amulets'))
 		->descriptionmyturn(clienttranslate('${you} must choose whether to use your amulet'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->action('stResolveAmulets')
         ->possibleactions([
             'actAmuletChoose',
             'actGoToBuyCardReflex' // Action to enter reflexive state
@@ -203,6 +205,7 @@ $machinestates = [
         ->description(clienttranslate('Players must roll a die'))
 		->descriptionmyturn(clienttranslate('${you} must roll a die'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
+        ->action('stRollDice')
         ->possibleactions([
             'actRollDie',
         ])
@@ -214,7 +217,7 @@ $machinestates = [
 
     ST_PHASE_THREE_DISCARD => GameStateBuilder::create()
         ->name('phaseThreeDiscard')
-        ->description(clienttranslate('Players must choose a discard'))
+        ->description(clienttranslate('Some players must discard a card (others wait)'))
 		->descriptionmyturn(clienttranslate('${you} must choose a card to discard'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
         ->action('stDiscard')
