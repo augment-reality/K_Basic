@@ -27,6 +27,7 @@ define([
 function (dojo, declare,) {
     return declare("bgagame.kalua", ebg.core.gamegui, {
         constructor: function(){
+            console.log('kalua constructor');
 
             // Setup non-player based divs
             document.getElementById('game_play_area').insertAdjacentHTML('beforeend', `
@@ -61,6 +62,7 @@ function (dojo, declare,) {
         },
         
         setup: function(gamedatas) {
+            console.log("Starting game setup");
 
             // Declare hexadecimal color maping for player tokens (default red/green/blue/orange/brown)
             
@@ -82,13 +84,13 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
-                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
                         <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
                         <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
+                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
                     </div>
                 `);
 
@@ -162,17 +164,15 @@ function (dojo, declare,) {
             this['dice'].setSelectionMode(0);
             this['dice'].image_items_per_row = 6;
             for (let i = 1; i <= 30; i++) {
-                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i - 1);
+                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i);
             }
 
-            // Add initial dice for each player matching their color (only if dice stock is empty)
-            if (this['dice'].count() === 0) {
-                Object.values(gamedatas.players).forEach(player => {
-                    // Calculate die face: each player's color row starts at (sprite-1)*6 + 1, show face 1 (first face of their color)
-                    const playerDieFace = ((player.sprite - 1) * 6) + 1;
-                    this['dice'].addToStock(playerDieFace);
-                });
-            }
+            // Add a die for each player matching their color
+            Object.values(gamedatas.players).forEach(player => {
+                // Calculate die face: each player's color row starts at (sprite-1)*6 + 1, show face 1 (first face of their color)
+                const playerDieFace = ((player.sprite - 1) * 6) + 1;
+                this['dice'].addToStock(playerDieFace);
+            });
 
             // Initialize and create atheist families stock
             this['atheists'] = new ebg.stock();
@@ -264,6 +264,7 @@ function (dojo, declare,) {
             for (let card_id = 1; card_id <= num_local_disaster_cards; card_id++)
             {
                 const uniqueId = this.getCardUniqueId(card_type_local_disaster, card_id);
+
                 
                 // Add to played cards stock
                 this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_All_600_887.png', card_id - 1);
@@ -455,7 +456,6 @@ function (dojo, declare,) {
 
                 case 'phaseThreeRollDice':
                     if (this.isCurrentPlayerActive()) {
-                        console.log("Entered phaseThreeRollDice state - calling setupDiceRoll");
                         this.setupDiceRoll();
                     }
                     break;
@@ -467,8 +467,6 @@ function (dojo, declare,) {
                     break;
 
                 default:
-                    console.log(`>>> Entering unknown state: ${stateName} - checking if this should be handled`);
-                    console.log('>>> Available states should include: phaseThreeRollDice');
                     // Perform actions for unknown state
                     break;
             }
@@ -495,6 +493,7 @@ function (dojo, declare,) {
                     break;
 
                 default:
+
                     // Perform actions for unknown state
                     break;
             }
@@ -710,7 +709,7 @@ function (dojo, declare,) {
             {
                 return 10 + 5 + type_id;
             }
-            // Invalid card type - this should not happen
+            console.log("INVALID CARD TYPE!!"); /* TODO exception? */
             return 0;
         },
 
@@ -820,18 +819,22 @@ function (dojo, declare,) {
 
         setupAmuletDecision: function() {
             console.log("Setting up amulet decision for player");
+            /* Present amulet usage choice to the player */
+            this.gamedatas.gamestate.descriptionmyturn = _('Do you want to use an amulet to avoid the disaster effects?');
+            this.updatePageTitle();
+            this.statusBar.removeActionButtons();
             
-            // Check if current player has amulets
-            const currentPlayerId = this.player_id;
-            const currentPlayerAmulets = this.gamedatas.players[currentPlayerId]?.amulet || 0;
+            this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
+                console.log("Player clicked Use Amulet");
+                this.disableAmuletButtons();
+                this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
+            });
             
-            if (currentPlayerAmulets > 0) {
-                // Player has amulets - buttons will be handled by onUpdateActionButtons
-                console.log("Player has amulets, waiting for buttons from onUpdateActionButtons");
-            } else {
-                // Player has no amulets - show waiting message
-                console.log("Player has no amulets, showing waiting message");
-            }
+            this.addActionButton('no-amulet-btn', _('Do Not Use Amulet'), () => {
+                console.log("Player clicked Do Not Use Amulet");
+                this.disableAmuletButtons();
+                this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
+            });
         },
 
         disableAmuletButtons: function() {
@@ -919,9 +922,6 @@ function (dojo, declare,) {
 
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
-            
-            // Set custom duration for initial draw complete notification to make it stay visible for 3 seconds
-            this.notifqueue.setSynchronousDuration('initialDrawComplete', 3000);
         },
 
         onPlayerHandSelectionChanged: function () {
@@ -1035,25 +1035,17 @@ function (dojo, declare,) {
             if (cardbackStock) {
                 cardbackStock.removeFromStockById(args.card_id);
             }
-
-            // Update card counter with the actual card count from the notification
-            if (this.cardCounters[args.player_id] && args.card_count !== undefined) {
-                this.cardCounters[args.player_id].setValue(args.card_count);
+            
+            if (this.cardCounters[args.player_id]) {
+                this.cardCounters[args.player_id].incValue(-1);
             }
             
-            // Update prayer counter if prayer was spent
-            if (this.prayerCounters[args.player_id] && args.new_prayer_total !== undefined) {
-                this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
-            }
-            
-            // Add the card to the played stock using the specific card ID to maintain proper tracking
+            // Add the card to the played stock
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
-                this['played'].addToStockWithId(uniqueId, args.card_id);
+                this['played'].addToStock(uniqueId);
             }
 
-            console.log(`Card ${args.card_id} played by player ${args.player_id}` + 
-                       (args.prayer_cost > 0 ? ` (spent ${args.prayer_cost} prayer)` : ''));
         },
 
         notif_cardBought: function(args) {
@@ -1095,7 +1087,6 @@ function (dojo, declare,) {
                 player_name: playerName
             }), 'info');
             
-            console.log(`Round leader changed from ${args.old_leader} to ${args.player_id}`);
         },
 
         notif_initialRoundLeader: function(args) {
@@ -1105,7 +1096,6 @@ function (dojo, declare,) {
                 player_name: playerName
             }), 'info');
             
-            console.log(`Initial round leader set to ${args.player_id}`);
         },
 
         notif_roundLeaderPlayedCard: function(args) {
@@ -1116,7 +1106,6 @@ function (dojo, declare,) {
             const passBtn = document.getElementById('pass-btn');
             if (passBtn && dojo.hasClass(passBtn, 'disabled')) {
                 dojo.removeClass(passBtn, 'disabled');
-                console.log('Round leader pass button enabled after playing card');
             }
             
             // Disable convert button if it exists after round leader plays a card
@@ -1233,37 +1222,26 @@ function (dojo, declare,) {
             const player_id = args.player_id;
             const result = args.result;
             
-            // If this is the current player who rolled, keep the button disabled
-            if (player_id == this.player_id) {
-                const rollBtn = document.getElementById('roll-dice-btn');
-                if (rollBtn) {
-                    rollBtn.disabled = true;
-                    rollBtn.style.opacity = '0.5';
-                    rollBtn.innerHTML = _('Dice Rolled');
-                }
-            }
-            
             // Update the dice display to show the rolled result
             if (player_id && this.gamedatas.players[player_id]) {
                 const player = this.gamedatas.players[player_id];
                 // Calculate which dice face to show: player's color row + rolled result
                 const playerDieFace = ((player.sprite - 1) * 6) + result;
                 
-                // Update only the dice for the player who rolled
-                // First, remove any existing dice for this player
-                const existingDice = this['dice'].getAllItems();
-                const playerColorStart = (player.sprite - 1) * 6 + 1;
-                const playerColorEnd = player.sprite * 6;
+                // Clear the current dice and show the new result
+                this['dice'].removeAll();
                 
-                // Remove existing dice for this player's color
-                existingDice.forEach(die => {
-                    if (die.type >= playerColorStart && die.type <= playerColorEnd) {
-                        this['dice'].removeFromStockById(die.id);
+                // Add dice for all players, showing the rolling player's result and others showing face 1
+                Object.values(this.gamedatas.players).forEach(p => {
+                    if (p.id == player_id) {
+                        // Show the rolled result for the rolling player
+                        this['dice'].addToStock(playerDieFace);
+                    } else {
+                        // Show face 1 for other players
+                        const otherPlayerDieFace = ((p.sprite - 1) * 6) + 1;
+                        this['dice'].addToStock(otherPlayerDieFace);
                     }
                 });
-                
-                // Add the new die showing the rolled result
-                this['dice'].addToStock(playerDieFace);
             }
         },
 
@@ -1362,34 +1340,20 @@ function (dojo, declare,) {
             const card_type = args.card_type;
             const card_type_arg = args.card_type_arg;
             
-            // Check if card is already in resolved stock to prevent duplicates
+            // Move card from played stock to resolved stock
             const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
-            if (this['resolved'] && this['resolved'].getItemById(card_id)) {
-                console.log(`Card ${card_id} already in resolved stock, skipping`);
-                return;
-            }
             
-            // Remove card from played stock if it's still there
+            // Remove from played stock
             if (this['played']) {
                 this['played'].removeFromStockById(card_id);
             }
             
-            // Add card to resolved stock using the specific card ID to maintain proper tracking
+            // Add to resolved stock
             if (this['resolved']) {
                 this['resolved'].addToStockWithId(uniqueId, card_id);
             }
             
-            console.log(`Card ${card_id} (${args.card_name}) moved from played to resolved`);
-        },
-
-        notif_cardMovedToResolving: function(args) {
-            console.log('Card moved to resolving:', args);
-            const card_id = args.card_id;
-            
-            // Don't remove card from played stock here - let cardResolved handle the atomic move
-            // This prevents visual flickering and ensures cards move directly from played to resolved
-            
-            console.log(`Card ${card_id} starting resolution process`);
+            console.log(`Card ${card_id} (${args.card_name}) moved to resolved`);
         },
 
         notif_resolvedCardsCleanup: function(args) {
@@ -1401,60 +1365,6 @@ function (dojo, declare,) {
             }
             
             console.log(`Cleaned up ${args.resolved_cards_count} resolved cards from UI`);
-        },
-
-        notif_initialDrawComplete: function(args) {
-            console.log('Initial draw phase complete:', args);
-            
-            // Update card counters and cardbacks for all players based on the summary
-            args.players.forEach(playerData => {
-                const player_id = playerData.player_id;
-                
-                // Update card counter in sidebar
-                if (this.cardCounters[player_id]) {
-                    this.cardCounters[player_id].setValue(playerData.total_cards);
-                }
-                
-                // For other players (not current player), add appropriate cardbacks
-                if (player_id != this.player_id) {
-                    const cardbackStock = this[`${player_id}_cardbacks`];
-                    if (cardbackStock) {
-                        // Clear any existing cardbacks first
-                        cardbackStock.removeAll();
-                        
-                        let cardback_id_counter = 0;
-                        
-                        // Add disaster cardbacks
-                        for (let i = 0; i < playerData.disaster_cards; i++) {
-                            const unique_cardback_id = player_id * 1000 + cardback_id_counter++;
-                            cardbackStock.addToStockWithId(80, unique_cardback_id); // 80 = disaster cardback
-                        }
-                        
-                        // Add bonus cardbacks
-                        for (let i = 0; i < playerData.bonus_cards; i++) {
-                            const unique_cardback_id = player_id * 1000 + cardback_id_counter++;
-                            cardbackStock.addToStockWithId(81, unique_cardback_id); // 81 = bonus cardback
-                        }
-                    }
-                }
-            });
-            
-            // Show summary message
-            const summary = args.players.map(p => 
-                `${p.player_name}: ${p.disaster_cards} disaster, ${p.bonus_cards} bonus (${p.total_cards} total)`
-            ).join('; ');
-            
-            this.showMessage(`Initial card selection complete - ${summary}`, 'info');
-        },
-
-        notif_globalEffectApplied: function(args) {
-            console.log('Global effect applied to all players:', args);
-            
-            // Show the generic message for global effects
-            this.showMessage(args.message || `All players ${args.effect_type}: ${args.effect_text}`, 'info');
-            
-            // The individual player effects have already been applied by the backend
-            // No need to update individual counters here as they should be handled by other notifications
         },
 
         ///////////////////////////////////////////////////

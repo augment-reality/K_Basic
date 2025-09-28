@@ -325,13 +325,6 @@ class Game extends \Table
         } else {
             $this->bonusCards->moveCard($card_id, 'resolving');
         }
-        
-        // Notify frontend to move card from played to resolving (removes from playedcards stock)
-        $this->notifyAllPlayers('cardMovedToResolving', '', [
-            'card_id' => $card_id,
-            'card_type' => $card_type,
-            'card_type_arg' => $card_type_arg
-        ]);
     }
     
     /**
@@ -1267,11 +1260,12 @@ class Game extends \Table
 ///////////Player Actions /////////////////////
     public function actDrawCardInit(string $type /* either "disaster" or "bonus" */): void
     {
-        /* Draws a card during initial draw phase
-            Suppresses individual notifications - summary will be sent at end of phase
+        /* Draws a card and notifies that user of the drawn card
+            Notifies UI to draw a card, and how many cards left to draw to reach 5
+            UI will update with cards drawn, or waiting once we hit 0 cards remaining
             Checks if all users have drawn 5 cards - if they have, go to INITIAL FINISH */
         
-        $this->drawCard_private($type, null, true); // Suppress notifications during initial draw
+        $this->drawCard_private($type);
         $player_id = $this->getCurrentPlayerId();
         
         if ($this->disasterCards->countCardInLocation("hand", $player_id) 
@@ -1634,6 +1628,8 @@ class Game extends \Table
         $this->setGameStateValue('saved_active_player', 0);
         
         // Return to the saved state - jumpToState should restore the context properly
+        $this->gamestate->jumpToState($saved_state);
+        
     }
 
     public function actAvoidGlobal(): void
@@ -1973,7 +1969,7 @@ class Game extends \Table
         // Mark dice as completed for this card to prevent re-triggering
         $card_id = (int)$resolving_card['id'];
         $this->setGameStateValue("dice_completed_for_card", $card_id);
-        
+
         // Set players who need to roll as active
         $this->gamestate->setPlayersMultiactive($players_who_roll, 'beginAllPlay');
         
@@ -2074,8 +2070,13 @@ class Game extends \Table
         );
 
         // Mark this player as having completed their dice roll
-        // BGA framework will automatically transition to 'beginAllPlay' when all players are done
         $this->gamestate->setPlayerNonMultiactive($player_id, 'beginAllPlay');
+        
+        // Check if all players have rolled their dice
+        if ($this->gamestate->isPlayerActive($player_id) === false) {
+            // All players have rolled, now apply card effects using the dice results
+            $this->applyCardEffectsWithDiceResults();
+        }
     }
 
     private function storeDiceResult(int $player_id, int $card_id, int $result): void
@@ -2085,6 +2086,41 @@ class Game extends \Table
             $this->diceResults = [];
         }
         $this->diceResults[$player_id] = $result;
+    }
+
+    private function applyCardEffectsWithDiceResults(): void
+    {
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            throw new \BgaVisibleSystemException("No card currently resolving");
+        }
+
+        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
+        if ($effects === null) {
+            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
+        }
+
+        // After dice rolls, check if amulet decisions are needed for negative effects
+        $hasNegativeEffects = ($effects['family_dies'] > 0) || 
+                             ($effects['convert_to_atheist'] > 0) || 
+                             (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] < 0);
+        
+        if ($hasNegativeEffects) {
+            $this->gamestate->nextState('resolveAmulets');
+            return;
+        }
+
+        // No amulet decisions needed, apply effects directly with dice results
+        $this->applyBasicCardEffectsWithDiceAndAmulets($resolving_card, $effects);
+        
+        // Clear dice results for next resolution
+        $this->diceResults = [];
+        
+        // Move card from resolving to resolved and continue
+        $this->moveCardToResolved($resolving_card);
+        
+        // Continue with next card resolution
+        $this->gamestate->nextState('beginAllPlay');
     }
 
     private function applyBasicCardEffectsWithDiceAndAmulets(array $card, array $effects): void
@@ -2906,7 +2942,7 @@ class Game extends \Table
     }
 
     /* Helpers */
-    private function drawCard_private(string $type, ?int $player_id = null, bool $suppressNotifications = false) : void
+    private function drawCard_private(string $type, ?int $player_id = null) : void
     {
         $card = null;
         if ($player_id === null) {
@@ -2943,19 +2979,19 @@ class Game extends \Table
 
         // Send notifications only if not suppressed (during initial draw)
         if (!$suppressNotifications) {
-            // Public notification that a card was drawn
-            $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-                    'player_id' => $player_id,
-                    'player_name' => $this->getPlayerNameById($player_id),
-                    'card_id' => $card['id'],
-                    'card_type' => $card['type'],
-                    'card_type_arg' => $card['type_arg']
-                ]);
-
-            // Private notification to the player with card details
-            $this->notifyPlayer($player_id, 'cardDrawn', '', [
-                'card' => $card
+        // Public notification that a card was drawn
+        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
+                'player_id' => $player_id,
+                'player_name' => $this->getPlayerNameById($player_id),
+                'card_id' => $card['id'],
+                'card_type' => $card['type'],
+                'card_type_arg' => $card['type_arg']
             ]);
+
+        // Private notification to the player with card details
+        $this->notifyPlayer($player_id, 'cardDrawn', '', [
+            'card' => $card
+        ]);
         }
     }
 }
