@@ -100,6 +100,13 @@ class Game extends \Table
         $this->gamestate->nextState();
     }
 
+    public function stPhaseOneDraw(): void
+    {
+        // State action for phaseOneDraw
+        // This is called when entering the draw phase
+        // No special setup needed - player can start drawing cards
+    }
+
     public function stActivateLeader(): void
     {
         /* No need to set the active player here */

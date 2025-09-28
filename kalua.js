@@ -82,13 +82,13 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
+                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
                         <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
                         <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
-                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
                     </div>
                 `);
 
@@ -735,7 +735,7 @@ function (dojo, declare,) {
             console.log("drawing unique ID " + uniqueId)
 
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
-            console.log(`Card ${card_id} added to player ${this.player}'s hand`);            
+            console.log(`Card ${card_id} added to player ${player}'s hand`);            
         },
 
         movetokens: function(tokenTypeToMove, desiredShift) {
