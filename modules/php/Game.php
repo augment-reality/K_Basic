@@ -263,19 +263,23 @@ class Game extends \Table
         }
         
         // Now resolve the card based on its effects
-        $this->resolveCardEffects($resolving_card, $this->amuletsResolved);
+        $resolution_complete = $this->resolveCardEffects($resolving_card, $this->amuletsResolved);
         
-        // Notify that this card's resolution is complete
-        $card_name = $this->getCardName($resolving_card);
-        $this->notifyAllPlayers("cardResolved", 
-            clienttranslate("${card_name} has been resolved"), [
-                'card_name' => $card_name,
-                'card_id' => $resolving_card['id'],
-                'card_type' => $resolving_card['type'],
-                'card_type_arg' => $resolving_card['type_arg'],
-                'preserve' => 1500 // Show message for 1.5 seconds
-            ]
-        );
+        // Only send completion notification if the card resolution is actually complete
+        // (i.e., not waiting for player input like target selection)
+        if ($resolution_complete) {
+            // Notify that this card's resolution is complete
+            $card_name = $this->getCardName($resolving_card);
+            $this->notifyAllPlayers("cardResolved", 
+                clienttranslate("${card_name} has been resolved"), [
+                    'card_name' => $card_name,
+                    'card_id' => $resolving_card['id'],
+                    'card_type' => $resolving_card['type'],
+                    'card_type_arg' => $resolving_card['type_arg'],
+                    'preserve' => 1500 // Show message for 1.5 seconds
+                ]
+            );
+        }
 
     }
     
@@ -352,7 +356,7 @@ class Game extends \Table
      * @param array $card The card to resolve
      * @param bool $amulets_resolved Whether amulets have already been resolved for this card
      */
-    private function resolveCardEffects(array $card, bool $amulets_resolved = false): void
+    private function resolveCardEffects(array $card, bool $amulets_resolved = false): bool
     {
         // If this is a fresh card resolution (not returning from amulet/dice resolution), reset flags
         if (!$amulets_resolved) {
@@ -390,7 +394,7 @@ class Game extends \Table
             // Mark discard as being processed for this card
             $this->setGameStateValue("discard_completed_for_card", $card_id);
             $this->gamestate->nextState('discard');
-            return;
+            return false; // Resolution not complete, waiting for player input
         }
         
         // All local disaster cards require target selection first
@@ -400,7 +404,7 @@ class Game extends \Table
                 // Set the active player to the one who played the card
                 $this->gamestate->changeActivePlayer($played_by);
                 $this->gamestate->nextState('selectTargets');
-                return;
+                return false; // Resolution not complete, waiting for target selection
             }
         }
         
@@ -408,7 +412,7 @@ class Game extends \Table
             // Convert to religion cards with specific targets need target selection first
             if ($target_player === null) {
                 $this->gamestate->nextState('selectTargets');
-                return;
+                return false; // Resolution not complete, waiting for target selection
             }
         }
         
@@ -421,7 +425,7 @@ class Game extends \Table
         if ($diceNeeded && $dice_completed_for_card != $card_id) {
             // Dice are needed but haven't been rolled yet for this card
             $this->gamestate->nextState('rollDice');
-            return;
+            return false; // Resolution not complete, waiting for dice roll
         }
         
         // After dice rolls (or if no dice needed), check if card has any negative effects that could be mitigated by amulets
@@ -433,7 +437,7 @@ class Game extends \Table
             // Before transitioning to amulet resolution, check if anyone has amulets
             if ($this->anyPlayerHasAmulets($card, $played_by, $target_player)) {
                 $this->gamestate->nextState('resolveAmulets');
-                return;
+                return false; // Resolution not complete, waiting for amulet decisions
             } else {
                 // No one has amulets, skip amulet resolution
                 $this->notifyAllPlayers('amuletPhaseSkipped', 
@@ -456,7 +460,7 @@ class Game extends \Table
             
             // Check for more cards to resolve
             $this->gamestate->nextState('beginAllPlay');
-            return;
+            return true; // Resolution complete
         }
         
         if ($effects['keep_card'] === true || $effects['keep_card'] === 1) {
@@ -483,7 +487,7 @@ class Game extends \Table
             
             // Check for more cards to resolve
             $this->gamestate->nextState('beginAllPlay');
-            return;
+            return true; // Resolution complete
         }
         
         // If no special effects, apply basic effects and continue resolving
@@ -494,6 +498,7 @@ class Game extends \Table
         
         // Check for more cards to resolve
         $this->gamestate->nextState('beginAllPlay');
+        return true; // Resolution complete
     }
 
     /**
@@ -1265,7 +1270,7 @@ class Game extends \Table
             UI will update with cards drawn, or waiting once we hit 0 cards remaining
             Checks if all users have drawn 5 cards - if they have, go to INITIAL FINISH */
         
-        $this->drawCard_private($type);
+        $this->drawCard_private($type, null, true); // Suppress notifications during initial draw
         $player_id = $this->getCurrentPlayerId();
         
         if ($this->disasterCards->countCardInLocation("hand", $player_id) 
@@ -2090,36 +2095,8 @@ class Game extends \Table
 
     private function applyCardEffectsWithDiceResults(): void
     {
-        $resolving_card = $this->getCardOnTop('resolving');
-        if ($resolving_card === null) {
-            throw new \BgaVisibleSystemException("No card currently resolving");
-        }
-
-        $effects = $this->getCardEffects($resolving_card['type'], $resolving_card['type_arg']);
-        if ($effects === null) {
-            throw new \BgaVisibleSystemException("Unknown card effect for type {$resolving_card['type']}, arg {$resolving_card['type_arg']}");
-        }
-
-        // After dice rolls, check if amulet decisions are needed for negative effects
-        $hasNegativeEffects = ($effects['family_dies'] > 0) || 
-                             ($effects['convert_to_atheist'] > 0) || 
-                             (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] < 0);
-        
-        if ($hasNegativeEffects) {
-            $this->gamestate->nextState('resolveAmulets');
-            return;
-        }
-
-        // No amulet decisions needed, apply effects directly with dice results
-        $this->applyBasicCardEffectsWithDiceAndAmulets($resolving_card, $effects);
-        
-        // Clear dice results for next resolution
-        $this->diceResults = [];
-        
-        // Move card from resolving to resolved and continue
-        $this->moveCardToResolved($resolving_card);
-        
-        // Continue with next card resolution
+        // All players have completed their dice rolls
+        // Return to the main resolution flow which will handle the rest
         $this->gamestate->nextState('beginAllPlay');
     }
 
@@ -2942,7 +2919,7 @@ class Game extends \Table
     }
 
     /* Helpers */
-    private function drawCard_private(string $type, ?int $player_id = null) : void
+    private function drawCard_private(string $type, ?int $player_id = null, bool $suppressNotifications = false) : void
     {
         $card = null;
         if ($player_id === null) {
@@ -2977,21 +2954,26 @@ class Game extends \Table
             throw new \BgaUserException("No more cards available in the $type deck");
         }
 
-        // Send notifications only if not suppressed (during initial draw)
-        if (!$suppressNotifications) {
-        // Public notification that a card was drawn
-        $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), [
-                'player_id' => $player_id,
-                'player_name' => $this->getPlayerNameById($player_id),
-                'card_id' => $card['id'],
-                'card_type' => $card['type'],
-                'card_type_arg' => $card['type_arg']
-            ]);
+        // Always send public notification with card data (for real-time UI updates)
+        $notificationData = [
+            'player_id' => $player_id,
+            'player_name' => $this->getPlayerNameById($player_id),
+            'card_id' => $card['id'],
+            'card_type' => $card['type'],
+            'card_type_arg' => $card['type_arg']
+        ];
 
-        // Private notification to the player with card details
+        if (!$suppressNotifications) {
+            // Send with text message for normal gameplay
+            $this->notifyAllPlayers('playerDrewCard', clienttranslate('${player_name} drew a card'), $notificationData);
+        } else {
+            // Send without text message during initial draw (suppress sidebar text)
+            $this->notifyAllPlayers('playerDrewCard', '', $notificationData);
+        }
+
+        // Always send private notification to the player with card details
         $this->notifyPlayer($player_id, 'cardDrawn', '', [
             'card' => $card
         ]);
-        }
     }
 }

@@ -164,14 +164,16 @@ function (dojo, declare,) {
             this['dice'].setSelectionMode(0);
             this['dice'].image_items_per_row = 6;
             for (let i = 1; i <= 30; i++) {
-                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i);
+                // Fix: image position should be 0-based (i-1)
+                this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i - 1);
             }
 
             // Add a die for each player matching their color
             Object.values(gamedatas.players).forEach(player => {
                 // Calculate die face: each player's color row starts at (sprite-1)*6 + 1, show face 1 (first face of their color)
                 const playerDieFace = ((player.sprite - 1) * 6) + 1;
-                this['dice'].addToStock(playerDieFace);
+                // Use player ID as unique die ID so we can update individual dice
+                this['dice'].addToStockWithId(playerDieFace, player.id);
             });
 
             // Initialize and create atheist families stock
@@ -717,7 +719,10 @@ function (dojo, declare,) {
                 // You played a card. If it exists in your hand, move card from there and remove
                 // corresponding item
                     this[`${player_id}_cards`].removeFromStockById(card_id);
-                    this.cardCounters[player_id].incValue(-1);
+                    if (this.cardCounters[player_id]) {
+                        const currentValue = this.cardCounters[player_id].getValue();
+                        this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
+                    }
 
             // Add card to played cards area
             const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
@@ -976,8 +981,11 @@ function (dojo, declare,) {
                 }
             }
             
-            /* Update counter */
-            this.cardCounters[player_id].incValue(1);
+            /* Update counter with protection against negative values */
+            if (this.cardCounters[player_id]) {
+                const currentValue = this.cardCounters[player_id].getValue();
+                this.cardCounters[player_id].setValue(Math.max(0, currentValue + 1));
+            }
         },
 
         notif_giveSpeech: async function( args )
@@ -1036,8 +1044,9 @@ function (dojo, declare,) {
                 cardbackStock.removeFromStockById(args.card_id);
             }
             
-            if (this.cardCounters[args.player_id]) {
-                this.cardCounters[args.player_id].incValue(-1);
+            // Update card counter with exact count from server (prevents negative values)
+            if (this.cardCounters[args.player_id] && args.card_count !== undefined) {
+                this.cardCounters[args.player_id].setValue(Math.max(0, args.card_count));
             }
             
             // Add the card to the played stock
@@ -1046,12 +1055,18 @@ function (dojo, declare,) {
                 this['played'].addToStock(uniqueId);
             }
 
+            // Update prayer counter if prayer was spent
+            if (args.new_prayer_total !== undefined && this.prayerCounters[args.player_id]) {
+                this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
+            }
+
         },
 
         notif_cardBought: function(args) {
             // Update card counter for the player who bought a card
             if (this.cardCounters[args.player_id]) {
-                this.cardCounters[args.player_id].incValue(1);
+                const currentValue = this.cardCounters[args.player_id].getValue();
+                this.cardCounters[args.player_id].setValue(Math.max(0, currentValue + 1));
             }
             console.log(`Player ${args.player_id} bought a card`);
 
@@ -1222,26 +1237,15 @@ function (dojo, declare,) {
             const player_id = args.player_id;
             const result = args.result;
             
-            // Update the dice display to show the rolled result
+            // Update only the specific player's die
             if (player_id && this.gamedatas.players[player_id]) {
                 const player = this.gamedatas.players[player_id];
                 // Calculate which dice face to show: player's color row + rolled result
                 const playerDieFace = ((player.sprite - 1) * 6) + result;
                 
-                // Clear the current dice and show the new result
-                this['dice'].removeAll();
-                
-                // Add dice for all players, showing the rolling player's result and others showing face 1
-                Object.values(this.gamedatas.players).forEach(p => {
-                    if (p.id == player_id) {
-                        // Show the rolled result for the rolling player
-                        this['dice'].addToStock(playerDieFace);
-                    } else {
-                        // Show face 1 for other players
-                        const otherPlayerDieFace = ((p.sprite - 1) * 6) + 1;
-                        this['dice'].addToStock(otherPlayerDieFace);
-                    }
-                });
+                // Remove the old die for this player and add the new result
+                this['dice'].removeFromStockById(player_id);
+                this['dice'].addToStockWithId(playerDieFace, player_id);
             }
         },
 
@@ -1326,9 +1330,10 @@ function (dojo, declare,) {
                 cardbackStock.removeFromStockById(card_id);
             }
             
-            // Update card counter
+            // Update card counter (prevent negative values)
             if (this.cardCounters[player_id]) {
-                this.cardCounters[player_id].incValue(-1);
+                const currentValue = this.cardCounters[player_id].getValue();
+                this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
             }
             
             console.log(`Card ${card_id} discarded by player ${player_id}`);
