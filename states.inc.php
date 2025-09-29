@@ -162,6 +162,7 @@ $machinestates = [
             'rollDice' => ST_PHASE_THREE_ROLL_DICE,
             'discard' => ST_PHASE_THREE_DISCARD,
             'beginAllPlay'  => ST_PHASE_THREE_RESOLVE_CARD,
+            'convertPray' => ST_PHASE_FOUR_CONVERT_PRAY, // Proceed to convert/pray after resolving cards
         ])
         ->build(),
 
@@ -189,6 +190,7 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must choose whether to use your amulet'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
         ->action('stResolveAmulets')
+        ->args('argResolveAmulets')
         ->possibleactions([
             'actAmuletChoose',
             'actGoToBuyCardReflex' // Action to enter reflexive state

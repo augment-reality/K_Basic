@@ -86,11 +86,12 @@ function (dojo, declare,) {
                     <div>
                         <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
                         <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
+                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
                         <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
                         <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
-                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
+
                     </div>
                 `);
 
@@ -219,8 +220,15 @@ function (dojo, declare,) {
             }
             // Place HK tokens for each player based on their sprite value from gamedatas
             Object.values(gamedatas.players).forEach(player => {
+                // Ensure happiness is within 0-10 range
+                const happiness = Math.max(0, Math.min(10, player.happiness || 0));
+                
                 // Add the correct token type for this player color
-                this[`hkToken_${player.happiness}`].addToStock(player.sprite - 1);
+                if (this[`hkToken_${happiness}`]) {
+                    this[`hkToken_${happiness}`].addToStock(player.sprite - 1);
+                } else {
+                    console.error('Missing happiness token stock for happiness level:', happiness, 'player:', player);
+                }
             });
 
             // Create stock for played cards
@@ -323,7 +331,7 @@ function (dojo, declare,) {
             /* Update counters */
             Object.values(gamedatas.players).forEach(player => {
                 this.prayerCounters[player.id].setValue(player.prayer);
-                this.happinessCounters[player.id].setValue(player.happiness);
+                this.happinessCounters[player.id].setValue(Math.max(0, Math.min(10, player.happiness || 0)));
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
@@ -397,7 +405,7 @@ function (dojo, declare,) {
             // Update sidebar counters based on gamedata
             Object.values(gamedatas.players).forEach(player => {
                 this.prayerCounters[player.id].setValue(player.prayer);
-                this.happinessCounters[player.id].setValue(player.happiness);
+                this.happinessCounters[player.id].setValue(Math.max(0, Math.min(10, player.happiness || 0)));
                 this.cardCounters[player.id].setValue(player.cards);
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
@@ -763,7 +771,9 @@ function (dojo, declare,) {
 
         giveSpeech: function(player_id) {
             console.log("Giving a speech");
-            this.happinessCounters[player_id].incValue(1); // Increase happiness by 1
+            const currentValue = this.happinessCounters[player_id].getValue();
+            const newValue = Math.max(0, Math.min(10, currentValue + 1));
+            this.happinessCounters[player_id].setValue(newValue); // Increase happiness by 1, clamped to 0-10
             // Use the player's sprite value from gamedatas to move the correct token
             const sprite = this.gamedatas.players[player_id].sprite;
             this.movetokens(sprite-1, 1);
@@ -1052,7 +1062,7 @@ function (dojo, declare,) {
             // Add the card to the played stock
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
-                this['played'].addToStock(uniqueId);
+                this['played'].addToStockWithId(uniqueId, args.card_id);
             }
 
             // Update prayer counter if prayer was spent
@@ -1282,13 +1292,47 @@ function (dojo, declare,) {
             
             // Update all player counters
             if (this.familyCounters[player_id]) {
-                this.familyCounters[player_id].setValue(args.family_count);
+                const currentFamilyCount = this.familyCounters[player_id].getValue();
+                const newFamilyCount = args.family_count;
+                const familyChange = newFamilyCount - currentFamilyCount;
+                
+                this.familyCounters[player_id].setValue(newFamilyCount);
+                
+                // Update family stock (visual meeples) if there's a change
+                if (familyChange !== 0 && this[`fams_${player_id}`]) {
+                    if (familyChange > 0) {
+                        // Add family meeples
+                        for (let i = 0; i < familyChange; i++) {
+                            this[`fams_${player_id}`].addToStock(this.ID_AHTHIEST_STOCK);
+                        }
+                    } else {
+                        // Remove family meeples
+                        const meeplesToRemove = Math.abs(familyChange);
+                        for (let i = 0; i < meeplesToRemove; i++) {
+                            // Check if we have family meeples to remove
+                            const currentFamilyMeeples = this[`fams_${player_id}`].getItemNumber(this.ID_AHTHIEST_STOCK);
+                            if (currentFamilyMeeples > 0) {
+                                this[`fams_${player_id}`].removeFromStock(this.ID_AHTHIEST_STOCK);
+                            }
+                        }
+                    }
+                }
             }
             if (this.prayerCounters[player_id]) {
                 this.prayerCounters[player_id].setValue(args.prayer);
             }
             if (this.happinessCounters[player_id] && args.happiness !== undefined) {
-                this.happinessCounters[player_id].setValue(args.happiness);
+                const currentHappiness = this.happinessCounters[player_id].getValue();
+                const newHappiness = Math.max(0, Math.min(10, args.happiness || 0));
+                const happinessChange = newHappiness - currentHappiness;
+                
+                this.happinessCounters[player_id].setValue(newHappiness);
+                
+                // Move happiness token if there's a change
+                if (happinessChange !== 0 && this.gamedatas.players[player_id]) {
+                    const sprite = this.gamedatas.players[player_id].sprite;
+                    this.movetokens(sprite - 1, happinessChange);
+                }
             }
             if (this.templeCounters[player_id] && args.temple_count !== undefined) {
                 this.templeCounters[player_id].setValue(args.temple_count);
@@ -1370,6 +1414,46 @@ function (dojo, declare,) {
             }
             
             console.log(`Cleaned up ${args.resolved_cards_count} resolved cards from UI`);
+        },
+
+        notif_allCardsCleanup: function(args) {
+            console.log('Cleaning up all played and resolved cards for new round:', args);
+            
+            // Clear all cards from both played and resolved stocks
+            if (this['played']) {
+                this['played'].removeAll();
+                console.log(`Cleared ${args.played_cards_count} cards from played stock`);
+            }
+            
+            if (this['resolved']) {
+                this['resolved'].removeAll();
+                console.log(`Cleared ${args.resolved_cards_count} cards from resolved stock`);
+            }
+            
+            console.log(`Total ${args.total_cards_count} cards moved to discard for new round`);
+        },
+
+        notif_familiesConverted: function(args) {
+            console.log('Families converted to atheism:', args);
+            
+            // Update family counter for the affected player
+            if (this.familyCounters[args.player_id]) {
+                this.familyCounters[args.player_id].setValue(args.families_remaining);
+            }
+            
+            // Add converted families to atheist stock
+            for (let i = 0; i < args.families_count; i++) {
+                this['atheists'].addToStock(this.ID_AHTHIEST_STOCK); // 5 = atheist meeple
+            }
+        },
+
+        notif_familiesDied: function(args) {
+            console.log('Families died:', args);
+            
+            // Update family counter for the affected player
+            if (this.familyCounters[args.player_id]) {
+                this.familyCounters[args.player_id].setValue(args.families_remaining);
+            }
         },
 
         ///////////////////////////////////////////////////

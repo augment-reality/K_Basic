@@ -48,7 +48,8 @@ class Game extends \Table
             "round_leader_played_card" => 14, /* Whether round leader has played a card this turn */
             "round_leader_continuing_play" => 15, /* Whether round leader is continuing to play multiple cards */
             "discard_completed_for_card" => 16, /* ID of the card for which discard has been completed */
-            "dice_completed_for_card" => 17 /* ID of the card for which dice rolling has been completed */
+            "dice_completed_for_card" => 17, /* ID of the card for which dice rolling has been completed */
+            "convert_pray_requested" => 18 /* Whether the round leader requested convert/pray phase */
         ]);          
 
         //Make two decks: bonus and disaster
@@ -168,6 +169,9 @@ class Game extends \Table
             // Reset the flag so the convert button becomes available again
             $this->setGameStateValue("round_leader_played_card", 0);
             
+            // Also reset convert/pray request flag for new round
+            $this->setGameStateValue("convert_pray_requested", 0);
+            
             // Notify frontend to reset round leader state
             $this->notifyAllPlayers('roundLeaderTurnStart', '', [
                 'round_leader_played_card' => 0
@@ -237,13 +241,28 @@ class Game extends \Table
             $next_card = $this->getNextCardToResolve();
             
             if ($next_card === null) {
-                // No more cards to resolve, go to next phase
-                $this->notifyAllPlayers("cardResolutionComplete", 
-                    clienttranslate("Card resolution phase complete"), [
-                        'preserve' => 2000 // Show message for 2 seconds
-                    ]
-                );
-                $this->gamestate->nextState('continueCardPhase');
+                // No more cards to resolve, check if convert/pray was requested
+                $convert_pray_requested = $this->getGameStateValue("convert_pray_requested");
+                
+                if ($convert_pray_requested) {
+                    // Reset the flag and proceed to convert/pray phase
+                    $this->setGameStateValue("convert_pray_requested", 0);
+                    
+                    $this->notifyAllPlayers("cardResolutionComplete", 
+                        clienttranslate("Card resolution complete. Proceeding to convert/pray phase"), [
+                            'preserve' => 2000 // Show message for 2 seconds
+                        ]
+                    );
+                    $this->gamestate->nextState('convertPray');
+                } else {
+                    // Normal case - return to card playing
+                    $this->notifyAllPlayers("cardResolutionComplete", 
+                        clienttranslate("Card resolution phase complete"), [
+                            'preserve' => 2000 // Show message for 2 seconds
+                        ]
+                    );
+                    $this->gamestate->nextState('continueCardPhase');
+                }
                 return;
             }
             
@@ -266,21 +285,46 @@ class Game extends \Table
         $resolution_complete = $this->resolveCardEffects($resolving_card, $this->amuletsResolved);
         
         // Only send completion notification if the card resolution is actually complete
-        // (i.e., not waiting for player input like target selection)
+        // AND the card hasn't been moved to resolved yet (to avoid duplicate notifications)
         if ($resolution_complete) {
-            // Notify that this card's resolution is complete
-            $card_name = $this->getCardName($resolving_card);
-            $this->notifyAllPlayers("cardResolved", 
-                clienttranslate("${card_name} has been resolved"), [
-                    'card_name' => $card_name,
-                    'card_id' => $resolving_card['id'],
-                    'card_type' => $resolving_card['type'],
-                    'card_type_arg' => $resolving_card['type_arg'],
-                    'preserve' => 1500 // Show message for 1.5 seconds
-                ]
-            );
+            // Check if card is still in resolving location (not yet moved to resolved)
+            $still_resolving = $this->getCardOnTop('resolving');
+            if ($still_resolving && $still_resolving['id'] == $resolving_card['id']) {
+                // Card is still in resolving state, move it to resolved
+                $this->moveCardToResolved($resolving_card);
+            }
+            
+            // After completing card resolution, check for more cards to resolve
+            $this->gamestate->nextState('beginAllPlay');
         }
 
+    }
+    
+    /**
+     * Get the next player in turn order based on player_no
+     */
+    private function getNextPlayerInTurnOrder(int $current_player_id): int
+    {
+        // Get all players ordered by player_no
+        $players = $this->getObjectListFromDb("SELECT player_id, player_no FROM player ORDER BY player_no ASC");
+        
+        // Find current player's position
+        $current_position = null;
+        foreach ($players as $index => $player) {
+            if ((int)$player['player_id'] == $current_player_id) {
+                $current_position = $index;
+                break;
+            }
+        }
+        
+        // If current player not found, return first player
+        if ($current_position === null) {
+            return (int)$players[0]['player_id'];
+        }
+        
+        // Get next player, wrapping around to first if at end
+        $next_position = ($current_position + 1) % count($players);
+        return (int)$players[$next_position]['player_id'];
     }
     
     /**
@@ -364,9 +408,18 @@ class Game extends \Table
             $this->playerUsedAmulet = [];
             $this->diceResults = [];
             $this->multiactiveAmuletPlayers = [];
-            // Reset discard and dice completed flags for new card
-            $this->setGameStateValue("discard_completed_for_card", 0);
-            $this->setGameStateValue("dice_completed_for_card", 0);
+            
+            // Only reset completion flags if this is truly a new card (different card ID)
+            $current_card_id = (int)$card['id'];
+            $dice_completed_for_card = $this->getGameStateValue("dice_completed_for_card");
+            $discard_completed_for_card = $this->getGameStateValue("discard_completed_for_card");
+            
+            if ($dice_completed_for_card != $current_card_id) {
+                $this->setGameStateValue("dice_completed_for_card", 0);
+            }
+            if ($discard_completed_for_card != $current_card_id) {
+                $this->setGameStateValue("discard_completed_for_card", 0);
+            }
         }
         
         $card_type = (int)$card['type'];
@@ -423,6 +476,9 @@ class Game extends \Table
         
         $dice_completed_for_card = $this->getGameStateValue("dice_completed_for_card");
         if ($diceNeeded && $dice_completed_for_card != $card_id) {
+            // Mark dice rolling as being processed for this card and reset all player dice
+            $this->setGameStateValue("dice_completed_for_card", $card_id);
+            $this->DbQuery("UPDATE player SET player_die = 0");
             // Dice are needed but haven't been rolled yet for this card
             $this->gamestate->nextState('rollDice');
             return false; // Resolution not complete, waiting for dice roll
@@ -446,21 +502,33 @@ class Game extends \Table
         }
         
         if ($effects['recover_leader'] === true) {
-            // Recover leader: set chief to 1 and notify UI
-            $this->DbQuery("UPDATE player SET player_chief = 1 WHERE player_id = $played_by");
+            // Check if player already has a leader
+            $current_chief = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = $played_by");
             
-            $this->notifyAllPlayers('leaderRecovered', clienttranslate('${player_name} gained a new leader'), [
-                'player_id' => $played_by,
-                'player_name' => $this->getPlayerNameById($played_by)
-            ]);
-            
-            // Apply basic card effects and move card to resolved
-            $this->applyBasicCardEffects($card, $effects);
-            $this->moveCardToResolved($card);
-            
-            // Check for more cards to resolve
-            $this->gamestate->nextState('beginAllPlay');
-            return true; // Resolution complete
+            if ($current_chief === 0) {
+                // Player doesn't have a chief, give them one
+                $this->DbQuery("UPDATE player SET player_chief = 1 WHERE player_id = $played_by");
+                
+                $this->notifyAllPlayers('leaderRecovered', clienttranslate('${player_name} gained a new leader'), [
+                    'player_id' => $played_by,
+                    'player_name' => $this->getPlayerNameById($played_by)
+                ]);
+                
+                // Apply basic card effects only if amulets haven't been resolved yet
+                if (!$amulets_resolved) {
+                    $this->applyBasicCardEffects($card, $effects);
+                }
+                
+                return true; // Resolution complete
+            } else {
+                // Player already has a chief, skip leader recovery and just apply base card effects
+                $this->notifyAllPlayers('leaderAlreadyPresent', clienttranslate('${player_name} already has a leader'), [
+                    'player_id' => $played_by,
+                    'player_name' => $this->getPlayerNameById($played_by)
+                ]);
+                
+                // Continue to base card effects processing (don't return here)
+            }
         }
         
         if ($effects['keep_card'] === true || $effects['keep_card'] === 1) {
@@ -481,23 +549,19 @@ class Game extends \Table
                 ]);
             }
             
-            // Apply basic effects and move card to resolved
-            $this->applyBasicCardEffects($card, $effects);
-            $this->moveCardToResolved($card);
+            // Apply basic effects only if amulets haven't been resolved yet
+            if (!$amulets_resolved) {
+                $this->applyBasicCardEffects($card, $effects);
+            }
             
-            // Check for more cards to resolve
-            $this->gamestate->nextState('beginAllPlay');
             return true; // Resolution complete
         }
         
-        // If no special effects, apply basic effects and continue resolving
-        $this->applyBasicCardEffects($card, $effects);
+        // If no special effects and amulets haven't been resolved yet, apply basic effects and continue resolving
+        if (!$amulets_resolved) {
+            $this->applyBasicCardEffects($card, $effects);
+        }
         
-        // Move card from resolving to resolved and continue
-        $this->moveCardToResolved($card);
-        
-        // Check for more cards to resolve
-        $this->gamestate->nextState('beginAllPlay');
         return true; // Resolution complete
     }
 
@@ -542,6 +606,13 @@ class Game extends \Table
         $played_by = $card_play_info['played_by'] !== null ? (int)$card_play_info['played_by'] : null;
         $target_player = $card_play_info['target_player'] !== null ? (int)$card_play_info['target_player'] : null;
         
+        // Replace "roll_d6" placeholders with actual dice results if dice were rolled
+        $dice_completed_for_card = $this->getGameStateValue("dice_completed_for_card");
+        if ($dice_completed_for_card == $card_id) {
+            // Dice were rolled for this card, replace the placeholders
+            $effects = $this->replaceDicePlaceholders($effects);
+        }
+        
         // Handle global disasters with player choices
         if ($card_type === CardType::GlobalDisaster->value) {
             $this->applyGlobalDisasterEffects($card_id, $effects, $played_by);
@@ -551,6 +622,37 @@ class Game extends \Table
         }
         
         // This will be implemented to apply the basic effects like prayer_effect, happiness_effect, convert_to_atheist
+    }
+
+    /**
+     * Replace "roll_d6" placeholders in effects with actual dice results
+     * This uses the first player's dice result for cards that affect all players equally
+     */
+    private function replaceDicePlaceholders(array $effects): array
+    {
+        // For cards that need dice replacement, we need to get a representative dice result
+        // For global effects, we can use any player's result since they should all be the same card
+        $dice_result = 1; // Default
+        
+        // Get any player's dice result from the database
+        $any_player_dice = $this->getObjectFromDB("SELECT player_die FROM player WHERE player_die > 0 LIMIT 1");
+        if ($any_player_dice) {
+            $dice_result = (int)$any_player_dice['player_die'];
+        }
+        
+        // Replace dice placeholders
+        $processed_effects = $effects;
+        if ($processed_effects['happiness_effect'] === "roll_d6") {
+            $processed_effects['happiness_effect'] = $dice_result;
+        }
+        if ($processed_effects['prayer_effect'] === "roll_d6") {
+            $processed_effects['prayer_effect'] = $dice_result;
+        }
+        if ($processed_effects['convert_to_religion'] === "roll_d6") {
+            $processed_effects['convert_to_religion'] = $dice_result;
+        }
+        
+        return $processed_effects;
     }
 
     /**
@@ -583,6 +685,28 @@ class Game extends \Table
         foreach ($players as $player) {
             $player_id = (int)$player['player_id'];
             
+            // Replace dice placeholders with this player's individual dice result
+            $player_effects = $effects;
+            $dice_completed_for_card = $this->getGameStateValue("dice_completed_for_card");
+            if ($dice_completed_for_card == $card_id) {
+                // Get this specific player's dice result
+                $dice_result = (int)$this->getUniqueValueFromDb("SELECT player_die FROM player WHERE player_id = $player_id");
+                if ($dice_result === 0) {
+                    $dice_result = 1; // Default to 1 if no result stored
+                }
+                
+                // Replace dice placeholders for this player
+                if ($player_effects['happiness_effect'] === "roll_d6") {
+                    $player_effects['happiness_effect'] = $dice_result;
+                }
+                if ($player_effects['prayer_effect'] === "roll_d6") {
+                    $player_effects['prayer_effect'] = $dice_result;
+                }
+                if ($player_effects['convert_to_religion'] === "roll_d6") {
+                    $player_effects['convert_to_religion'] = $dice_result;
+                }
+            }
+            
             // Calculate effect multiplier based on choice and player
             $multiplier = 1.0; // Default: normal effect
             
@@ -596,10 +720,10 @@ class Game extends \Table
             
             // For normal effect, apply silently and send generic notification afterwards
             if ($choice === 'normal') {
-                $this->applyCardEffects($player_id, $effects); // Apply without notification
+                $this->applyCardEffects($player_id, $player_effects); // Apply without notification
             } else {
                 // Apply effects to this player with the calculated multiplier (with individual notifications)
-                $this->applyEffectsToPlayer($player_id, $effects, $multiplier, $choice);
+                $this->applyEffectsToPlayer($player_id, $player_effects, $multiplier, $choice);
             }
         }
         
@@ -687,6 +811,21 @@ class Game extends \Table
             }
         }
         
+        // Handle family-related effects (convert_to_atheist, family_dies)
+        if (isset($effects['convert_to_atheist']) && $effects['convert_to_atheist'] > 0) {
+            $convert_to_atheist = (int)($effects['convert_to_atheist'] * $multiplier);
+            if ($convert_to_atheist > 0) {
+                $effects_to_apply['convert_to_atheist'] = $convert_to_atheist;
+            }
+        }
+        
+        if (isset($effects['family_dies']) && $effects['family_dies'] > 0) {
+            $family_dies = (int)($effects['family_dies'] * $multiplier);
+            if ($family_dies > 0) {
+                $effects_to_apply['family_dies'] = $family_dies;
+            }
+        }
+        
         // Apply the calculated effects using the existing applyCardEffects method
         if (!empty($effects_to_apply)) {
             $this->applyCardEffects($player_id, $effects_to_apply);
@@ -759,11 +898,7 @@ class Game extends \Table
         // Handle happiness effects
         if (isset($effects['happiness_effect']) && $effects['happiness_effect'] != 0) {
             // Note: Happiness might need special handling based on game rules
-            $updates[] = "player_happiness = GREATEST(0, player_happiness + " . (int)$effects['happiness_effect'] . ")";
-        }
-        if (isset($effects['happiness_effect']) && $effects['happiness_effect'] != 0) {
-            // Note: Happiness might need special handling based on game rules
-            $updates[] = "player_happiness = GREATEST(0, player_happiness + " . (int)$effects['happiness_effect'] . ")";
+            $updates[] = "player_happiness = LEAST(10, GREATEST(0, player_happiness + " . (int)$effects['happiness_effect'] . "))";
         }
         
         // Apply all updates in a single query if there are any
@@ -786,11 +921,74 @@ class Game extends \Table
         // Handle more complex effects like family conversion, family death, etc.
         // These might need separate methods
         if (isset($effects['convert_to_atheist']) && $effects['convert_to_atheist'] > 0) {
-            // TODO: Implement family conversion logic
+            $families_to_convert = (int)$effects['convert_to_atheist'];
+            $current_families = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
+            
+            // Can only convert as many families as the player has
+            $actual_converted = min($families_to_convert, $current_families);
+            
+            if ($actual_converted > 0) {
+                // Remove families from player
+                self::DbQuery("UPDATE player SET player_family = GREATEST(0, player_family - $actual_converted) WHERE player_id = $player_id");
+                
+                // Add to global atheist families pool (global_id = 101)
+                self::DbQuery("UPDATE global SET global_value = global_value + $actual_converted WHERE global_id = 101");
+                
+                // Get updated player data and send notification
+                $player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
+                                                       player_family as family_count, player_temple as temple_count,
+                                                       player_amulet as amulet_count
+                                                       FROM player WHERE player_id = $player_id");
+                
+                // Update UI counters
+                $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+                    'player_id' => $player_id
+                ], $player_data));
+                
+                // Notify about the conversion
+                $this->notifyAllPlayers('familiesConverted', 
+                    clienttranslate('${player_name} loses ${families_count} families to atheism'), [
+                        'player_id' => $player_id,
+                        'player_name' => $this->getPlayerNameById($player_id),
+                        'families_count' => $actual_converted,
+                        'families_remaining' => $current_families - $actual_converted
+                    ]
+                );
+            }
         }
         
         if (isset($effects['family_dies']) && $effects['family_dies'] > 0) {
-            // TODO: Implement family death logic (with amulet protection)
+            $families_to_kill = (int)$effects['family_dies'];
+            $current_families = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
+            
+            // Can only kill as many families as the player has
+            $actual_killed = min($families_to_kill, $current_families);
+            
+            if ($actual_killed > 0) {
+                // Remove families from player (they die, don't become atheist)
+                self::DbQuery("UPDATE player SET player_family = GREATEST(0, player_family - $actual_killed) WHERE player_id = $player_id");
+                
+                // Get updated player data and send notification
+                $player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
+                                                       player_family as family_count, player_temple as temple_count,
+                                                       player_amulet as amulet_count
+                                                       FROM player WHERE player_id = $player_id");
+                
+                // Update UI counters
+                $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+                    'player_id' => $player_id
+                ], $player_data));
+                
+                // Notify about the deaths
+                $this->notifyAllPlayers('familiesDied', 
+                    clienttranslate('${player_name} loses ${families_count} families to death'), [
+                        'player_id' => $player_id,
+                        'player_name' => $this->getPlayerNameById($player_id),
+                        'families_count' => $actual_killed,
+                        'families_remaining' => $current_families - $actual_killed
+                    ]
+                );
+            }
         }
     }
     
@@ -988,6 +1186,24 @@ class Game extends \Table
         );
     }
 
+    public function argResolveAmulets(): array
+    {
+        $resolving_card = $this->getCardOnTop('resolving');
+        if ($resolving_card === null) {
+            return [];
+        }
+
+        $current_player_id = $this->getCurrentPlayerId();
+        $player_amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $current_player_id");
+        
+        return [
+            'card_id' => $resolving_card['id'],
+            'card_name' => $this->getCardName($resolving_card),
+            'player_amulet_count' => $player_amulet_count,
+            'can_use_amulet' => $player_amulet_count > 0
+        ];
+    }
+
     private function applyCardEffectsWithoutAmulets(array $card): void
     {
         $card_type = (int)$card['type'];
@@ -1001,7 +1217,6 @@ class Game extends \Table
         if (!empty($this->diceResults)) {
             // Dice were rolled, apply effects with dice results
             $this->applyBasicCardEffectsWithDiceAndAmulets($card, $effects);
-            $this->diceResults = []; // Clear dice results
         } else {
             // No dice were rolled, apply basic effects
             $this->applyBasicCardEffects($card, $effects);
@@ -1114,6 +1329,9 @@ class Game extends \Table
             $prayers += $temple_count;
             $happiness += $temple_count;
             
+            // Enforce 0-10 range for happiness
+            $happiness = max(0, min(10, $happiness));
+            
             self::DbQuery("UPDATE player SET player_prayer = $prayers, player_happiness = $happiness WHERE player_id = $player_id");
         }
 
@@ -1132,10 +1350,13 @@ class Game extends \Table
             return;
         }
 
-        // Update round leader to next non-eliminated player
-        $next_leader = $this->getGameStateValue("roundLeader");
+        // Update round leader to next non-eliminated player in turn order
+        $current_leader = (int)$this->getGameStateValue("roundLeader");
+        $next_leader = $this->getNextPlayerInTurnOrder($current_leader);
+        
+        // Skip any eliminated players
         while ((int)$this->getUniqueValueFromDb("SELECT player_eliminated FROM player WHERE player_id = $next_leader") == 1) {
-            $next_leader = $this->activeNextPlayer();
+            $next_leader = $this->getNextPlayerInTurnOrder($next_leader);
         }
 
 
@@ -1210,6 +1431,9 @@ class Game extends \Table
         $old_leader = $this->getGameStateValue("roundLeader");
         $this->setGameStateValue("roundLeader", $next_leader);
         
+        // Set the new round leader as the active player for the draw phase
+        $this->gamestate->changeActivePlayer($next_leader);
+        
         // Notify all players about the round leader change
         if ($old_leader != $next_leader) {
             $this->notifyAllPlayers('roundLeaderChanged', clienttranslate('${player_name} is now the round leader'), [
@@ -1226,37 +1450,42 @@ class Game extends \Table
     }
     
     /**
-     * Move all resolved cards to discard pile and clean up UI
+     * Move all played and resolved cards to discard pile and clean up UI
      */
     private function cleanupResolvedCards(): void
     {
-        // Get all resolved cards from both decks
+        // Get all cards from both played and resolved locations
+        $played_disaster_cards = $this->disasterCards->getCardsInLocation('played');
+        $played_bonus_cards = $this->bonusCards->getCardsInLocation('played');
         $resolved_disaster_cards = $this->disasterCards->getCardsInLocation('resolved');
         $resolved_bonus_cards = $this->bonusCards->getCardsInLocation('resolved');
         
-        $all_resolved_cards = array_merge($resolved_disaster_cards, $resolved_bonus_cards);
+        $all_cards_to_cleanup = array_merge($played_disaster_cards, $played_bonus_cards, $resolved_disaster_cards, $resolved_bonus_cards);
         
-        if (!empty($all_resolved_cards)) {
-            // Move disaster cards to discard
-            foreach ($resolved_disaster_cards as $card) {
+        if (!empty($all_cards_to_cleanup)) {
+            // Move all disaster cards to discard
+            foreach (array_merge($played_disaster_cards, $resolved_disaster_cards) as $card) {
                 $this->disasterCards->moveCard($card['id'], 'discard');
             }
             
-            // Move bonus cards to discard  
-            foreach ($resolved_bonus_cards as $card) {
+            // Move all bonus cards to discard  
+            foreach (array_merge($played_bonus_cards, $resolved_bonus_cards) as $card) {
                 $this->bonusCards->moveCard($card['id'], 'discard');
             }
             
-            // Notify frontend to clean up resolved cards display
-            $this->notifyAllPlayers('resolvedCardsCleanup', clienttranslate('All resolved cards have been discarded'), [
-                'resolved_cards_count' => count($all_resolved_cards),
-                'resolved_cards' => array_map(function($card) {
+            // Notify frontend to clear all played/resolved card stocks and displays
+            $this->notifyAllPlayers('allCardsCleanup', clienttranslate('All played and resolved cards have been discarded for the new round'), [
+                'total_cards_count' => count($all_cards_to_cleanup),
+                'played_cards_count' => count($played_disaster_cards) + count($played_bonus_cards),
+                'resolved_cards_count' => count($resolved_disaster_cards) + count($resolved_bonus_cards),
+                'cards_cleaned' => array_map(function($card) {
                     return [
                         'card_id' => $card['id'],
                         'card_type' => $card['type'],
-                        'card_type_arg' => $card['type_arg']
+                        'card_type_arg' => $card['type_arg'],
+                        'location' => $card['location']
                     ];
-                }, $all_resolved_cards)
+                }, $all_cards_to_cleanup)
             ]);
         }
     }
@@ -1307,7 +1536,7 @@ class Game extends \Table
 
         $player_id = $this->getCurrentPlayerId();
 
-        self::DbQuery( "UPDATE player SET player_happiness = player_happiness + 1 WHERE player_id = {$this->getActivePlayerId()}");
+        self::DbQuery( "UPDATE player SET player_happiness = LEAST(10, player_happiness + 1) WHERE player_id = {$this->getActivePlayerId()}");
 
         // Notify all players
         $this->notifyAllPlayers('giveSpeech', clienttranslate('${player_name} gave a speech'), [
@@ -1545,6 +1774,9 @@ class Game extends \Table
         // Clear the continuing play flag since the round leader is moving to card resolution
         $this->setGameStateValue("round_leader_continuing_play", 0);
         
+        // Set flag to indicate convert/pray was requested after card resolution
+        $this->setGameStateValue("convert_pray_requested", 1);
+        
         $this->gamestate->nextState("resolveCards");
     }
 
@@ -1684,7 +1916,8 @@ class Game extends \Table
         $round_leader = $this->getGameStateValue("roundLeader");
         
         if ($current_player == $round_leader) {
-            // Round leader can play again
+            // Round leader can play again - mark as continuing play to maintain proper state
+            $this->setGameStateValue("round_leader_continuing_play", 1);
             $this->gamestate->nextState("playAgain");
         } else {
             // Non-round leader moves to next player
@@ -1739,7 +1972,8 @@ class Game extends \Table
         $round_leader = $this->getGameStateValue("roundLeader");
         
         if ($current_player == $round_leader) {
-            // Round leader can play again
+            // Round leader can play again - mark as continuing play to maintain proper state
+            $this->setGameStateValue("round_leader_continuing_play", 1);
             $this->gamestate->nextState("playAgain");
         } else {
             // Non-round leader moves to next player
@@ -1784,7 +2018,8 @@ class Game extends \Table
         $round_leader = $this->getGameStateValue("roundLeader");
         
         if ($current_player == $round_leader) {
-            // Round leader can play again
+            // Round leader can play again - mark as continuing play to maintain proper state
+            $this->setGameStateValue("round_leader_continuing_play", 1);
             $this->gamestate->nextState("playAgain");
         } else {
             // Non-round leader moves to next player
@@ -1909,7 +2144,6 @@ class Game extends \Table
         if (!empty($this->diceResults)) {
             // Dice were rolled, apply effects with both dice results and amulet choices
             $this->applyBasicCardEffectsWithDiceAndAmulets($resolving_card, $effects);
-            $this->diceResults = []; // Clear dice results
         } else {
             // No dice were rolled, apply basic effects with amulet protection
             $this->applyBasicCardEffectsWithAmulets($resolving_card, $effects);
@@ -1970,10 +2204,6 @@ class Game extends \Table
             $this->gamestate->nextState('beginAllPlay');
             return;
         }
-
-        // Mark dice as completed for this card to prevent re-triggering
-        $card_id = (int)$resolving_card['id'];
-        $this->setGameStateValue("dice_completed_for_card", $card_id);
 
         // Set players who need to roll as active
         $this->gamestate->setPlayersMultiactive($players_who_roll, 'beginAllPlay');
@@ -2077,27 +2307,19 @@ class Game extends \Table
         // Mark this player as having completed their dice roll
         $this->gamestate->setPlayerNonMultiactive($player_id, 'beginAllPlay');
         
-        // Check if all players have rolled their dice
-        if ($this->gamestate->isPlayerActive($player_id) === false) {
-            // All players have rolled, now apply card effects using the dice results
-            $this->applyCardEffectsWithDiceResults();
-        }
+        // BGA framework will automatically transition to 'beginAllPlay' when all multiactive players are done
     }
 
     private function storeDiceResult(int $player_id, int $card_id, int $result): void
     {
-        // Store dice result in a property for this resolution
+        // Store dice result in the database for persistence
+        $this->DbQuery("UPDATE player SET player_die = $result WHERE player_id = $player_id");
+        
+        // Also update the temporary property for immediate use in this request
         if (!isset($this->diceResults)) {
             $this->diceResults = [];
         }
         $this->diceResults[$player_id] = $result;
-    }
-
-    private function applyCardEffectsWithDiceResults(): void
-    {
-        // All players have completed their dice rolls
-        // Return to the main resolution flow which will handle the rest
-        $this->gamestate->nextState('beginAllPlay');
     }
 
     private function applyBasicCardEffectsWithDiceAndAmulets(array $card, array $effects): void
@@ -2133,7 +2355,10 @@ class Game extends \Table
             $player_effects = $effects;
             
             // Replace "roll_d6" with actual dice result for this player
-            $dice_result = $this->diceResults[$player_id] ?? 1; // Default to 1 if no result stored
+            $dice_result = (int)$this->getUniqueValueFromDb("SELECT player_die FROM player WHERE player_id = $player_id");
+            if ($dice_result === 0) {
+                $dice_result = 1; // Default to 1 if no result stored
+            }
             
             if ($player_effects['happiness_effect'] === "roll_d6") {
                 $player_effects['happiness_effect'] = $dice_result;
