@@ -16,7 +16,7 @@
  */
 
 define([
-    "dojo","dojo/_base/declare",
+    "dojo","dojo/_base/declare","dijit/Tooltip",
     "ebg/core/gamegui",
     "ebg/counter",
     "ebg/stock",
@@ -360,22 +360,26 @@ function (dojo, declare,) {
             Object.values(gamedatas.playedDisaster).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['played'].addToStockWithId(uniqueId, card.id);
+                this.addCardTooltipByUniqueId('played', uniqueId);
             });
 
             Object.values(gamedatas.playedBonus).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['played'].addToStockWithId(uniqueId, card.id);
+                this.addCardTooltipByUniqueId('played', uniqueId);
             });
 
             /* Populate resolved cards from database */
             Object.values(gamedatas.resolvedDisaster).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['resolved'].addToStockWithId(uniqueId, card.id);
+                this.addCardTooltipByUniqueId('resolved', uniqueId);
             });
 
             Object.values(gamedatas.resolvedBonus).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['resolved'].addToStockWithId(uniqueId, card.id);
+                this.addCardTooltipByUniqueId('resolved', uniqueId);
             });
 
             /* Add cardbacks for other players' cards */
@@ -422,7 +426,154 @@ function (dojo, declare,) {
 
         },
 
-       
+        ///////////////////////////////////////////////////
+        //// Card tooltip functions
+        
+        getCardTypeFromUniqueId: function(uniqueId) {
+            // Based on getCardUniqueId logic:
+            // Global Disaster: uniqueId = type_id (1-10)
+            // Local Disaster: uniqueId = 10 + type_id (11-15)  
+            // Bonus: uniqueId = 15 + type_id (16-22)
+            if (uniqueId >= 1 && uniqueId <= 10) {
+                return this.ID_GLOBAL_DISASTER; // 1
+            } else if (uniqueId >= 11 && uniqueId <= 15) {
+                return this.ID_LOCAL_DISASTER; // 2
+            } else if (uniqueId >= 16 && uniqueId <= 22) {
+                return this.ID_BONUS; // 3
+            }
+            return null;
+        },
+        
+        getCardIdFromUniqueId: function(uniqueId) {
+            // Reverse the getCardUniqueId calculation
+            if (uniqueId >= 1 && uniqueId <= 10) {
+                return uniqueId; // Global disaster type_id
+            } else if (uniqueId >= 11 && uniqueId <= 15) {
+                return uniqueId - 10; // Local disaster type_id
+            } else if (uniqueId >= 16 && uniqueId <= 22) {
+                return uniqueId - 15; // Bonus type_id
+            }
+            return null;
+        },
+        
+        addCardTooltip: function(elementId, cardType, cardId) {
+            // Calculate image position for the larger image
+            let imagePosition = 0;
+            
+            if (cardType === this.ID_LOCAL_DISASTER) {
+                // Local Disaster cards: positions 0-4 (cardId 1-5 maps to positions 0-4)
+                imagePosition = cardId - 1;
+            } else if (cardType === this.ID_GLOBAL_DISASTER) {
+                // Global Disaster cards: positions 5-14 (cardId 1-10 maps to positions 5-14)  
+                imagePosition = cardId + 4;
+            } else if (cardType === this.ID_BONUS) {
+                // Bonus cards: positions 15-21 (cardId 1-7 maps to positions 15-21)
+                imagePosition = cardId + 14;
+            }
+            
+            // Remove the +1 adjustment since it's causing the offset
+            
+            // Calculate X,Y position in sprite grid
+            // Sprite: 1200×1774 pixels, 5 cards per row, 5 rows
+            // Each card: 240×354.8 pixels
+            const cardsPerRow = 5;
+            const cardWidth = 240;   // 1200 ÷ 5 = 240px per card
+            const cardHeight = 354.8; // 1774 ÷ 5 = 354.8px per card
+            
+            const col = imagePosition % cardsPerRow;  // Column (0-4)
+            const row = Math.floor(imagePosition / cardsPerRow);  // Row (0-4)
+            
+            const bgPositionX = -(col * cardWidth);
+            const bgPositionY = -(row * cardHeight);
+            
+            // Create image tooltip
+            const imageUrl = g_gamethemeurl + 'img/Cards_All_1200_1774.png';
+            
+            // Use img tag approach with correct card dimensions and positioning
+            const imgTooltip = `<img src="${imageUrl}" style="width: 240px; height: 354.8px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
+            
+            // Add image tooltip
+            this.addTooltipHtml(elementId, imgTooltip, 300);
+        },
+        
+        addCardTooltipByUniqueId: function(stockName, uniqueId) {
+            const cardType = this.getCardTypeFromUniqueId(uniqueId);
+            const cardId = this.getCardIdFromUniqueId(uniqueId);
+            
+            if (cardType && cardId !== null) {
+                console.log(`Tooltip request: uniqueId=${uniqueId}, cardType=${cardType}, cardId=${cardId} for ${stockName}`);
+                
+                // Use setTimeout to ensure the element exists in DOM before adding tooltip
+                setTimeout(() => {
+                    this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardId);
+                }, 300);
+            }
+        },
+        
+        addTooltipToLatestCard: function(stockName, uniqueId, cardType, cardId) {
+            // Find elements based on stock type
+            let allElements;
+            
+            if (stockName.includes('_cards')) {
+                // Player card stocks use the standard pattern
+                allElements = document.querySelectorAll(`[id^="${stockName}_item_"]`);
+            } else if (stockName === 'played' || stockName === 'resolved') {
+                // Played/resolved stocks use different patterns
+                allElements = document.querySelectorAll(`[id*="${stockName}"] .stockitem, .${stockName} .stockitem, [class*="${stockName}"] .stockitem`);
+                
+                if (allElements.length === 0) {
+                    // Try broader patterns
+                    allElements = document.querySelectorAll(`[id*="${stockName}"][id*="item"], [class*="${stockName}"][class*="item"]`);
+                }
+            } else {
+                // Fallback to standard pattern
+                allElements = document.querySelectorAll(`[id^="${stockName}_item_"]`);
+            }
+            
+            console.log(`Found ${allElements.length} elements in ${stockName}`);
+            
+            // Find the latest element that doesn't have a tooltip yet
+            let targetElement = null;
+            for (let i = allElements.length - 1; i >= 0; i--) {
+                const element = allElements[i];
+                if (!element.hasAttribute('data-tooltip-added')) {
+                    targetElement = element;
+                    break;
+                }
+            }
+            
+            if (targetElement) {
+                const elementId = targetElement.id || `${stockName}_${uniqueId}`;
+                console.log(`Adding tooltip to latest element: ${elementId} -> uniqueId=${uniqueId}`);
+                
+                this.addCardTooltip(elementId, cardType, cardId);
+                targetElement.setAttribute('data-tooltip-added', 'true');
+                targetElement.setAttribute('data-unique-id', uniqueId);
+            } else {
+                console.log(`No available element found for tooltip in ${stockName}`);
+            }
+        },
+        
+        // Function to manually refresh tooltips for all visible cards
+        refreshAllCardTooltips: function() {
+            console.log("Refreshing all card tooltips...");
+            
+            // Find all player card areas
+            const playerCardAreas = document.querySelectorAll('[id$="_cards_item_"]');
+            const playedCardsArea = document.querySelectorAll('[id^="played_item_"]');
+            
+            // For each card element, try to determine what it should be
+            const allCardElements = [...playerCardAreas, ...playedCardsArea];
+            
+            allCardElements.forEach((element) => {
+                if (!element.hasAttribute('data-tooltip-added')) {
+                    // Add a generic "Card" tooltip for now - better than nothing
+                    this.addTooltip(element.id, "Card", "");
+                    element.setAttribute('data-tooltip-added', 'true');
+                }
+            });
+        },
+
         ///////////////////////////////////////////////////
         //// Game & client states
 
@@ -736,6 +887,7 @@ function (dojo, declare,) {
             const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
             console.log("playing unique ID " + uniqueId)
             this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
+            this.addCardTooltipByUniqueId('played', uniqueId); // Add tooltip
 
             console.log(`Card ${card_id} played by player ${player_id}`);
         },
@@ -747,6 +899,7 @@ function (dojo, declare,) {
             console.log("drawing unique ID " + uniqueId)
 
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
+            this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId); // Add tooltip
             console.log(`Card ${card_id} added to player ${player}'s hand`);            
         },
 
@@ -937,6 +1090,11 @@ function (dojo, declare,) {
 
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
+            
+            // Add tooltips to any cards that might have been missed
+            setTimeout(() => {
+                this.refreshAllCardTooltips();
+            }, 1000);
         },
 
         onPlayerHandSelectionChanged: function () {
@@ -1063,6 +1221,7 @@ function (dojo, declare,) {
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
                 this['played'].addToStockWithId(uniqueId, args.card_id);
+                this.addCardTooltipByUniqueId('played', uniqueId);
             }
 
             // Update prayer counter if prayer was spent
@@ -1090,6 +1249,7 @@ function (dojo, declare,) {
                 const playerCardsStock = this[`${this.player_id}_cards`];
                 if (playerCardsStock) {
                     playerCardsStock.addToStockWithId(uniqueId, card.id);
+                    this.addCardTooltipByUniqueId(`${this.player_id}_cards`, uniqueId);
                 }
             }
         },
@@ -1103,6 +1263,9 @@ function (dojo, declare,) {
         },
 
         notif_roundLeaderChanged: function(args) {
+            // Update the round leader in gamedatas
+            this.gamedatas.round_leader = args.player_id;
+            
             // Update prayer icons when round leader changes
             this.updateRoundLeaderIcons(args.old_leader, args.player_id);
             
@@ -1400,6 +1563,7 @@ function (dojo, declare,) {
             // Add to resolved stock
             if (this['resolved']) {
                 this['resolved'].addToStockWithId(uniqueId, card_id);
+                this.addCardTooltipByUniqueId('resolved', uniqueId);
             }
             
             console.log(`Card ${card_id} (${args.card_name}) moved to resolved`);
