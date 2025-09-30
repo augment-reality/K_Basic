@@ -264,6 +264,16 @@ function (dojo, declare,) {
                     this[`${player.id}_cardbacks`].addItemType(card_id, card_id, g_gamethemeurl + 'img/Cards_Backs_240_174.png', card_id);
                 }
 
+                //create amulet/temple stock 1 = amulet, 2 = temple
+                this[`${player.id}_kept`] = new ebg.stock();
+                this[`${player.id}_kept`].create(this, $(`${player.id}_InPlay`), 118.5, 76);
+                this[`${player.id}_kept`].image_items_per_row = 2;
+                this[`${player.id}_kept`].setSelectionMode(0);
+                for (let kept_id = 1; kept_id <= 2; kept_id++)
+                {
+                    this[`${player.id}_kept`].addItemType(kept_id, kept_id, g_gamethemeurl + 'img/temple_amulet_237_76.png', kept_id);
+                }
+
             });
 
 
