@@ -3111,27 +3111,221 @@ class Game extends \Table
      */
     protected function zombieTurn(array $state, int $active_player): void
     {
-        $state_name = $state["name"];
-
-        if ($state["type"] === "activeplayer") {
-            switch ($state_name) {
-                default:
-                {
-                    $this->gamestate->nextState("zombiePass");
+        $statename = $state['name'];
+        
+        if ($state['type'] === "activeplayer") {
+            switch ($statename) {
+                case "phaseOneDraw":
+                    // Zombie player always draws from disaster deck
+                    $this->actDrawCard(STR_CARD_TYPE_DISASTER);
                     break;
-                }
+                    
+                case "phaseTwoActivateLeader":
+                    // Zombie player selects randomly from available options
+                    $args = $this->argActivateLeader();
+                    $available_actions = [];
+                    
+                    if (isset($args['can_sacrifice']) && $args['can_sacrifice']) $available_actions[] = 'sacrifice';
+                    if (isset($args['can_convert_atheists']) && $args['can_convert_atheists']) $available_actions[] = 'convert_atheists';
+                    if (isset($args['can_convert_believers']) && $args['can_convert_believers']) $available_actions[] = 'convert_believers';
+                    if (isset($args['can_give_speech']) && $args['can_give_speech']) $available_actions[] = 'give_speech';
+                    
+                    if (!empty($available_actions)) {
+                        $chosen_action = $available_actions[array_rand($available_actions)];
+                        switch ($chosen_action) {
+                            case 'sacrifice':
+                                $this->actSacrificeLeader();
+                                break;
+                            case 'convert_atheists':
+                                $this->actConvertAtheists();
+                                break;
+                            case 'convert_believers':
+                                // Pick a random target for conversion
+                                $targets = $this->getAvailableTargetsForConvert($active_player);
+                                if (!empty($targets)) {
+                                    $target_id = $targets[array_rand($targets)];
+                                    $this->actConvertBelievers($target_id);
+                                } else {
+                                    $this->gamestate->nextState("nextPlayerTwo");
+                                }
+                                break;
+                            case 'give_speech':
+                                $this->actGiveSpeech();
+                                break;
+                        }
+                    } else {
+                        // No actions available, skip turn
+                        $this->gamestate->nextState("nextPlayerTwo");
+                    }
+                    break;
+                    
+                case "phaseThreePlayCard":
+                    $args = $this->argPlayCard();
+                    $player_hand = $this->getPlayerHandForZombie($active_player);
+                    
+                    if (isset($args['can_pass']) && $args['can_pass']) {
+                        // Non-round leader zombie passes
+                        $this->actPlayCardPass();
+                    } else {
+                        // Round leader zombie must play a card
+                        if (!empty($player_hand)) {
+                            // Check for Destroy Temple card if another player has temples
+                            $destroy_temple_card = null;
+                            $other_players_have_temples = false;
+                            
+                            // Check if other players have temples
+                            $players = $this->loadPlayersBasicInfos();
+                            foreach (array_keys($players) as $player_id) {
+                                if ($player_id != $active_player) {
+                                    $temple_count = $this->getUniqueValueFromDb("SELECT player_temple FROM player WHERE player_id = $player_id");
+                                    if ($temple_count > 0) {
+                                        $other_players_have_temples = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Look for Destroy Temple card
+                            if ($other_players_have_temples) {
+                                foreach ($player_hand as $card) {
+                                    if (
+                                        isset($card['type']) && isset($card['type_arg']) &&
+                                        $card['type'] == CardType::Bonus->value &&
+                                        $card['type_arg'] == LocalDisasterCard::TempleDestroyed->value
+                                    ) {
+                                        $destroy_temple_card = $card;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Play Destroy Temple if available and conditions met, otherwise play random card
+                            $card_to_play = $destroy_temple_card ? $destroy_temple_card : $player_hand[array_rand($player_hand)];
+                            $this->actPlayCard($card_to_play['id']);
+                        } else {
+                            // No cards to play, say convert
+                            $this->actSayConvert();
+                        }
+                    }
+                    break;
+                    
+                case "phaseThreeCheckGlobal":
+                    // Zombie player randomly selects from available options
+                    $args = $this->argGlobalOption();
+                    $available_options = [];
+                    
+                    if (isset($args['can_avoid']) && $args['can_avoid']) $available_options[] = 'avoid';
+                    if (isset($args['can_double']) && $args['can_double']) $available_options[] = 'double';
+                    $available_options[] = 'normal'; // Always available
+                    
+                    $chosen_option = $available_options[array_rand($available_options)];
+                    switch ($chosen_option) {
+                    case 'avoid':
+                        $this->actAvoidGlobal();
+                        break;
+                    case 'double':
+                        $this->actDoubleGlobal();
+                        break;
+                    case 'normal':
+                        $this->actNormalGlobal();
+                        break;
+                    }
+                    break;
+                    
+                case "phaseThreeSelectTargets":
+                    // Zombie player selects target randomly
+                    $available_targets = $this->getAvailableTargets();
+                    if (!empty($available_targets)) {
+                        $random_target = $available_targets[array_rand($available_targets)];
+                        $this->actSelectPlayer($random_target);
+                    } else {
+                        // No targets available, this shouldn't happen but handle gracefully
+                        $this->gamestate->nextState("beginAllPlay");
+                    }
+                    break;
+                    
+                case "reflexiveBuyCard":
+                    // Zombie player cancels buy card
+                    $this->actCancelBuyCard();
+                    break;
+                    
+                default:
+                    throw new \BgaVisibleSystemException("Zombie handling not implemented for state: $statename");
             }
-
-            return;
+        } else if ($state['type'] === "multipleactiveplayers") {
+            switch ($statename) {
+                case "phaseThreeResolveAmulets":
+                    // Zombie player doesn't use amulet
+                    $this->actAmuletChoose(false);
+                    break;
+                    
+                case "phaseThreeRollDice":
+                    // Zombie player rolls dice automatically
+                    $this->actRollDie();
+                    break;
+                    
+                case "phaseThreeDiscard":
+                    // Zombie player discards randomly
+                    $player_hand = $this->getPlayerHandForZombie($active_player);
+                    if (!empty($player_hand)) {
+                        $random_card = array_rand($player_hand);
+                        $this->actDiscard($player_hand[$random_card]['id']);
+                    } else {
+                        $this->gamestate->setPlayerNonMultiactive($active_player, 'beginAllPlay');
+                    }
+                    break;
+                    
+                case "initialDraw":
+                    // Zombie player draws randomly during initial setup
+                    $this->actDrawCardInit(STR_CARD_TYPE_DISASTER);
+                    break;
+                    
+                default:
+                    // For other multiactive states, just set player as non-active
+                    $this->gamestate->setPlayerNonMultiactive($active_player, '');
+                    break;
+            }
         }
+    }
 
-        // Make sure player is in a non-blocking status for role turn.
-        if ($state["type"] === "multipleactiveplayer") {
-            $this->gamestate->setPlayerNonMultiactive($active_player, '');
-            return;
+    private function getAvailableTargets()
+    {
+        // Get all other players as potential targets
+        $players = $this->loadPlayersBasicInfos();
+        $targets = [];
+        $current_player = $this->getActivePlayerId();
+        
+        foreach (array_keys($players) as $player_id) {
+            if ($player_id != $current_player) {
+                $targets[] = $player_id;
+            }
         }
+        
+        return $targets;
+    }
 
-        throw new \feException("Zombie mode not supported at this game state: \"{$state_name}\".");
+    // Helper for zombie: get all cards in hand for a player
+    private function getPlayerHandForZombie($player_id)
+    {
+        $hand = [];
+        $hand = array_merge(
+            $this->disasterCards->getPlayerHand($player_id),
+            $this->bonusCards->getPlayerHand($player_id)
+        );
+        return $hand;
+    }
+
+    // Helper for zombie: get available targets for convert believers
+    private function getAvailableTargetsForConvert($active_player)
+    {
+        $players = $this->loadPlayersBasicInfos();
+        $targets = [];
+        foreach (array_keys($players) as $player_id) {
+            if ($player_id != $active_player) {
+                $targets[] = $player_id;
+            }
+        }
+        return $targets;
     }
 
     // set aux score (tie breaker)

@@ -5,19 +5,14 @@ The files won't be committed into source control repository and
 won't be packaged for deployment.
 It can contains notes, docs, tools, tests, data files, etc...
 
----------------------------   Summary so far ----------------------------------------
+---------------------------   Bugs to Squash   ----------------------------------------
 
-State machine is implemented, but most of code to execute during state has not been written.
-HTML for desktop is largely finished. Should re-scan cards for improved quality.
 
----------------------------   Cards "not in hand" ----------------------------------------
 
-Double Harvest
-Temple
-Fertility
 
 ----------------------------    To do   -------------------------------------------
 
+-tooltips not staying aligned with cards
 -test buy-for-5 in all states
 -sidebars names not color coded?
 -player color preferences: https://en.doc.boardgamearena.com/Main_game_logic:_Game.php#Player_color_preferences
@@ -26,6 +21,9 @@ Fertility
     and therefore into the stars location on the player board. This occurs sometime after the game setup() function.
     However this score must be updated as the game progresses using notifications.
 
+-autopass playing card when no cards and < 5 prayer
+-warnings for: xxx
+-calculate number of families lost/gained during pray/convert for easier player decision making?
 -undo buttons
 -"play a card" - option to play w/onclick?
 -option to hide other players divs?
