@@ -39,12 +39,24 @@ function (dojo, declare,) {
 
                 <div id="card_areas">
                 
-                    <div id="playedCards"><div class="played_resolved">Played Cards:</div>
+                    <div id="playedCards">
+                        <div class="played_resolved">Played Cards:</div>
+                        <div id="playedCardsContent"></div>
                     </div>
-                    <div id="resolvedCards"><div class="played_resolved">Resolved Cards:</div>
+                    <div id="resolvedCards" style="position: relative;">
+                        <div class="played_resolved">Resolved Cards:</div>
+                        <div id="resolvedCardsContent"></div>
+                        <div id="prediction_panel" style="display: none; position: absolute; top: 0; left: 100%; margin-left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000; max-width: 250px; min-width: 200px;">
+                            <div id="prediction_panel_header" style="font-weight: bold; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                                ⭐ Convert/Pray Predictions ✖
+                            </div>
+                            <div id="prediction_content"></div>
+                            <div style="font-size: 10px; margin-top: 5px; opacity: 0.7;">
+                                Based on current happiness & temples
+                            </div>
+                        </div>
                     </div>
                 </div>
-
 
                 <div id="player-tables" class="zone-container"></div>
             `);
@@ -59,6 +71,12 @@ function (dojo, declare,) {
             this.templeCounters = {};
             this.amuletCounters = {};
             this.familyCounters = {};
+            
+            // Prediction panel settings
+            this.predictionPanelEnabled = false;
+            
+            // Card resolution notification timing (in milliseconds)
+            this.cardResolutionDelay = 500;
         },
         
         setup: function(gamedatas) {
@@ -70,26 +88,56 @@ function (dojo, declare,) {
             
             // Create player areas
             Object.values(gamedatas.players).forEach(player => {
+                console.log('Player color debug:', player.id, player.color); // Debug line
+                
+                // Fix truncated colors - ensure they have 6 hex digits
+                let fixedColor = player.color;
+                if (fixedColor && fixedColor.startsWith('#') && fixedColor.length === 6) {
+                    // Color is missing the last digit, add the appropriate digit based on pattern
+                    const colorMap = {
+                        '#4685F': '#4685FF', // Blue
+                        '#2EA23': '#2EA232', // Green  
+                        '#C22D2': '#C22D2D', // Red
+                        '#C8CA2': '#C8CA25', // Yellow
+                        '#913CB': '#913CB3'  // Purple
+                    };
+                    fixedColor = colorMap[fixedColor] || fixedColor;
+                    console.log('Fixed color from', player.color, 'to', fixedColor);
+                }
+                
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
                     <div id="player_area_${player.id}" class="player_area">
-                        <div class="player_name">${player.name}</div>
+                        <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
                         <div id="${player.id}_cards" class="player_cards"></div>
                         <div id="${player.id}_families" class="player_families"></div>
-                        <div id="${player.id}_InPlay" class="player_kept_cards">Kept Cards:</div>
+                        <div id="${player.id}_InPlay" class="player_kept_cards">
+                            Kept Cards:
+                            <div id="${player.id}_InPlayContent"></div>
+                        </div>
                     </div>
                 `);
+                
+                // Additional color setting via JavaScript as backup
+                setTimeout(() => {
+                    const nameElement = document.getElementById(`player_name_${player.id}`);
+                    if (nameElement && fixedColor) {
+                        nameElement.style.color = fixedColor;
+                        nameElement.style.setProperty('color', fixedColor, 'important');
+                        console.log('Applied color to', player.name, ':', fixedColor);
+                    }
+                }, 100);
             });
 
             // Set up players' side panels
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
-                        <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
-                        <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
-                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
+                        <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span> <span>Prayer: <span id="panel_p_${player.id}"></span><br>
+                        <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span> <span>Happiness: <span id="panel_h_${player.id}"></span> </span><br>
+                        <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span> <span>Family: <span id="panel_f_${player.id}"></span> </span>
                         <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
-                        <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
+                        <span>Temples: <span id="panel_t_${player.id}"></span></span>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
 
                     </div>
@@ -233,13 +281,13 @@ function (dojo, declare,) {
 
             // Create stock for played cards
             this['played'] = new ebg.stock();  
-            this['played'].create(this, document.getElementById('playedCards'), 120, 177.4);
+            this['played'].create(this, document.getElementById('playedCardsContent'), 120, 177.4);
             this['played'].image_items_per_row = 5;
             this['played'].setSelectionMode(0);
 
             // Create stock for resolved cards
             this['resolved'] = new ebg.stock();
-            this['resolved'].create(this, document.getElementById('resolvedCards'), 120, 177.4);
+            this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 177.4);
             this['resolved'].image_items_per_row = 5;
             this['resolved'].setSelectionMode(0);
 
@@ -266,13 +314,14 @@ function (dojo, declare,) {
 
                 //create amulet/temple stock 1 = amulet, 2 = temple
                 this[`${player.id}_kept`] = new ebg.stock();
-                this[`${player.id}_kept`].create(this, $(`${player.id}_InPlay`), 118.5, 76);
+                this[`${player.id}_kept`].create(this, $(`${player.id}_InPlayContent`), 118.5, 76);
                 this[`${player.id}_kept`].image_items_per_row = 2;
                 this[`${player.id}_kept`].setSelectionMode(0);
                 for (let kept_id = 1; kept_id <= 2; kept_id++)
                 {
                     this[`${player.id}_kept`].addItemType(kept_id, kept_id, g_gamethemeurl + 'img/temple_amulet_237_76.png', kept_id);
                 }
+                console.log('Created kept stock for player', player.id, ':', this[`${player.id}_kept`]);
 
             });
 
@@ -345,6 +394,23 @@ function (dojo, declare,) {
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
+                
+                // Initialize kept cards based on temple and amulet counts
+                if (this[`${player.id}_kept`]) {
+                    console.log(`Initializing kept cards for player ${player.id}: amulets=${player.amulet}, temples=${player.temple}`);
+                    // Add amulet cards (kept_id = 1)
+                    for (let i = 0; i < player.amulet; i++) {
+                        this[`${player.id}_kept`].addToStock(1);
+                    }
+                    // Add temple cards (kept_id = 2)
+                    for (let i = 0; i < player.temple; i++) {
+                        this[`${player.id}_kept`].addToStock(2);
+                    }
+                    console.log('Initialized kept stock items:', this[`${player.id}_kept`].getAllItems());
+                } else {
+                    console.error('No kept stock found during initialization for player', player.id);
+                }
+                
                 /* TODO get each player's hand length to update counters */
                 element = $(`panel_l_${player.id}`);
                 if (player.chief == 1)
@@ -424,11 +490,72 @@ function (dojo, declare,) {
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
+                
+                // Initialize kept cards based on temple and amulet counts
+                if (this[`${player.id}_kept`]) {
+                    console.log(`Re-initializing kept cards for player ${player.id}: amulets=${player.amulet}, temples=${player.temple}`);
+                    // Add amulet cards (kept_id = 1)
+                    for (let i = 0; i < player.amulet; i++) {
+                        this[`${player.id}_kept`].addToStock(1);
+                    }
+                    // Add temple cards (kept_id = 2)
+                    for (let i = 0; i < player.temple; i++) {
+                        this[`${player.id}_kept`].addToStock(2);
+                    }
+                    console.log('Re-initialized kept stock items:', this[`${player.id}_kept`].getAllItems());
+                } else {
+                    console.error('No kept stock found during re-initialization for player', player.id);
+                }
             });
 
             // Set initial round leader prayer icon to grayed version
             if (gamedatas.round_leader) {
                 this.updateRoundLeaderIcons(null, gamedatas.round_leader);
+            }
+
+            // Add prediction toggle button to the bottom right of resolved cards div
+            const resolvedCardsDiv = document.getElementById('resolvedCards');
+            if (resolvedCardsDiv) {
+                resolvedCardsDiv.insertAdjacentHTML('beforeend', `
+                    <div id="prediction_toggle_panel" style="
+                        position: absolute; 
+                        bottom: 5px; 
+                        right: 5px; 
+                        background: rgba(240,240,240,0.95); 
+                        border-radius: 5px; 
+                        padding: 5px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    ">
+                        <button id="prediction_toggle_btn" style="
+                            padding: 4px 8px; 
+                            background: #4a90e2; 
+                            color: white; 
+                            border: none; 
+                            border-radius: 3px; 
+                            cursor: pointer; 
+                            font-size: 11px;
+                            white-space: nowrap;
+                        ">
+                            📊 Predictions
+                        </button>
+                    </div>
+                `);
+                
+                // Add click event listener after creating the button
+                const toggleBtn = document.getElementById('prediction_toggle_btn');
+                if (toggleBtn) {
+                    toggleBtn.addEventListener('click', () => {
+                        this.togglePredictionPanel();
+                    });
+                }
+            }
+            
+            // Add click event listener for prediction panel close button
+            const panelHeader = document.getElementById('prediction_panel_header');
+            if (panelHeader) {
+                panelHeader.addEventListener('click', () => {
+                    this.togglePredictionPanel();
+                });
             }
 
             // Setup game notifications to handle (see "setupNotifications" method below)
@@ -620,9 +747,7 @@ function (dojo, declare,) {
                     break;
 
                 case 'phaseThreeResolveAmulets':
-                    if (this.isCurrentPlayerActive()) {
-                        this.setupAmuletDecision();
-                    }
+                    // Button setup is handled by onUpdateActionButtons
                     break;
 
                 case 'phaseThreeRollDice':
@@ -635,6 +760,18 @@ function (dojo, declare,) {
                     if (this.isCurrentPlayerActive()) {
                         this.setupDiscard();
                     }
+                    break;
+
+                case 'phaseThreePlayCard':
+                    // Show predictions when players are making decisions about cards
+                    // since the round might end and family redistribution will occur
+                    this.predictionPanelEnabled = true;
+                    this.showPredictionPanel();
+                    break;
+
+                case 'phaseFourConvertPray':
+                    // Hide predictions during the actual family redistribution
+                    this.hidePredictionPanel();
                     break;
 
                 default:
@@ -837,6 +974,10 @@ function (dojo, declare,) {
                     case 'phaseThreeResolveAmulets':
                         console.log("onUpdateActionButtons called for phaseThreeResolveAmulets state");
                         
+                        // Set the description for amulet decision
+                        this.gamedatas.gamestate.descriptionmyturn = _('Do you want to use an amulet to avoid the disaster effects?');
+                        this.updatePageTitle();
+                        
                         // Check if current player has amulets
                         const currentPlayerId = this.player_id;
                         const currentPlayerAmulets = this.gamedatas.players[currentPlayerId]?.amulet || 0;
@@ -853,8 +994,11 @@ function (dojo, declare,) {
                                 this.disableAmuletButtons();
                                 this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
                             });
+                        } else {
+                            // Player has no amulets, just waiting
+                            this.gamedatas.gamestate.descriptionmyturn = _('Waiting for other players to decide on amulet usage...');
+                            this.updatePageTitle();
                         }
-                        // If player has no amulets, no buttons are shown (they just wait)
                         break;
                 }
             }
@@ -940,6 +1084,9 @@ function (dojo, declare,) {
             // Use the player's sprite value from gamedatas to move the correct token
             const sprite = this.gamedatas.players[player_id].sprite;
             this.movetokens(sprite-1, 1);
+            
+            // Update prediction panel if active
+            this.refreshPredictionPanelIfActive();
         },
 
         convertAtheists: function(player_id, num_atheists) {
@@ -993,6 +1140,178 @@ function (dojo, declare,) {
 
             this.familyCounters[player_id].incValue(1);
             this.familyCounters[target_player_id].incValue(-1);
+        },
+
+        // Calculate predicted family and happiness changes during convert/pray phase
+        calculatePrayConvertPredictions: function() {
+            const predictions = {};
+            const allPlayers = Object.values(this.gamedatas.players);
+            const happinessScores = {};
+            
+            // Collect current happiness scores (including temple bonuses)
+            allPlayers.forEach(player => {
+                const currentHappiness = this.happinessCounters[player.id].getValue();
+                const templeCount = this.templeCounters[player.id].getValue();
+                // Happiness with temple bonus (clamped 0-10)
+                happinessScores[player.id] = Math.max(0, Math.min(10, currentHappiness + templeCount));
+            });
+
+            // Find lowest and highest happiness scores
+            const happinessValues = Object.values(happinessScores);
+            const happy_value_low = Math.min(...happinessValues);
+            const happy_value_high = Math.max(...happinessValues);
+
+            // Get high happiness players
+            const high_happiness_players = allPlayers.filter(player => 
+                happinessScores[player.id] === happy_value_high
+            );
+            const high_players = high_happiness_players.length;
+
+            // Calculate predictions for each player
+            allPlayers.forEach(player => {
+                const player_id = player.id;
+                const currentFamilies = this.familyCounters[player_id].getValue();
+                const currentPrayer = this.prayerCounters[player_id].getValue();
+                const currentHappiness = happinessScores[player_id]; // Already includes temple bonus
+                const templeCount = this.templeCounters[player_id].getValue();
+                
+                let predictedFamilies = currentFamilies;
+                let predictedPrayer = currentPrayer;
+                let predictedHappiness = currentHappiness; // Already includes temple bonus
+
+                // Family redistribution (only if not everyone has same happiness)
+                if (happy_value_low !== happy_value_high) {
+                    if (happinessScores[player_id] === happy_value_low) {
+                        // Lose 2 families (or all if less than 2)
+                        const to_lose = Math.min(2, currentFamilies);
+                        predictedFamilies -= to_lose;
+                    } else if (happinessScores[player_id] !== happy_value_high) {
+                        // Lose 1 family (middle happiness)
+                        if (currentFamilies > 0) {
+                            predictedFamilies -= 1;
+                        }
+                    } else {
+                        // High happiness: receive families from the pool
+                        // Calculate total converted pool
+                        let converted_pool = 0;
+                        allPlayers.forEach(p => {
+                            const p_families = this.familyCounters[p.id].getValue();
+                            if (happinessScores[p.id] === happy_value_low) {
+                                converted_pool += Math.min(2, p_families);
+                            } else if (happinessScores[p.id] !== happy_value_high && p_families > 0) {
+                                converted_pool += 1;
+                            }
+                        });
+                        
+                        // Divide families among high happiness players
+                        const fams_to_happy = Math.floor(converted_pool / high_players);
+                        predictedFamilies += fams_to_happy;
+                    }
+                }
+
+                // Prayer calculation: 1 per 5 families + bonuses + temples
+                predictedPrayer += Math.floor(predictedFamilies / 5);
+                if (happinessScores[player_id] === happy_value_low) {
+                    predictedPrayer += 4;
+                } else if (happinessScores[player_id] !== happy_value_high) {
+                    predictedPrayer += 2;
+                }
+                predictedPrayer += templeCount; // Temple prayer bonus
+
+                predictions[player_id] = {
+                    familyChange: predictedFamilies - currentFamilies,
+                    prayerChange: predictedPrayer - currentPrayer,
+                    happinessChange: predictedHappiness - this.happinessCounters[player_id].getValue(), // Temple bonus effect
+                    predictedFamilies: predictedFamilies,
+                    predictedPrayer: predictedPrayer,
+                    predictedHappiness: predictedHappiness
+                };
+            });
+
+            return predictions;
+        },
+
+        // Update and show the prediction panel
+        updatePredictionPanel: function() {
+            if (!this.predictionPanelEnabled) return;
+            
+            const predictions = this.calculatePrayConvertPredictions();
+            const content = document.getElementById('prediction_content');
+            const panel = document.getElementById('prediction_panel');
+            
+            if (!content || !panel) return;
+
+            let html = '';
+            Object.values(this.gamedatas.players).forEach(player => {
+                const prediction = predictions[player.id];
+                const playerName = player.name;
+                const isMe = player.id == this.player_id;
+                
+                html += `<div style="margin-bottom: 3px; ${isMe ? 'font-weight: bold; color: #ffff80;' : ''}">`;
+                html += `<span style="color: ${player.color};">●</span> ${playerName}:<br>`;
+                
+                // Family change
+                if (prediction.familyChange !== 0) {
+                    const familyColor = prediction.familyChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;👨‍👩‍👧‍👦 ${prediction.familyChange > 0 ? '+' : ''}${prediction.familyChange}<br>`;
+                }
+                
+                // Prayer change
+                if (prediction.prayerChange !== 0) {
+                    const prayerColor = prediction.prayerChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;🙏 ${prediction.prayerChange > 0 ? '+' : ''}${prediction.prayerChange}<br>`;
+                }
+                
+                // Happiness change
+                if (prediction.happinessChange !== 0) {
+                    const happinessColor = prediction.happinessChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;😊 ${prediction.happinessChange > 0 ? '+' : ''}${prediction.happinessChange}<br>`;
+                }
+                
+                html += `</div>`;
+            });
+            
+            content.innerHTML = html;
+            panel.style.display = 'block';
+        },
+
+        // Show prediction panel if appropriate game state
+        showPredictionPanel: function() {
+            if (!this.predictionPanelEnabled) return;
+            
+            const panel = document.getElementById('prediction_panel');
+            if (panel) {
+                this.updatePredictionPanel();
+                panel.style.display = 'block';
+            }
+        },
+
+        // Hide prediction panel
+        hidePredictionPanel: function() {
+            const panel = document.getElementById('prediction_panel');
+            if (panel) {
+                panel.style.display = 'none';
+            }
+        },
+
+        // Toggle prediction panel visibility
+        togglePredictionPanel: function() {
+            this.predictionPanelEnabled = !this.predictionPanelEnabled;
+            const toggleButton = document.getElementById('prediction_toggle_btn');
+            
+            if (this.predictionPanelEnabled) {
+                this.showPredictionPanel();
+                if (toggleButton) {
+                    toggleButton.style.background = '#28a745';
+                    toggleButton.innerHTML = '📊 Hide';
+                }
+            } else {
+                this.hidePredictionPanel();
+                if (toggleButton) {
+                    toggleButton.style.background = '#4a90e2';
+                    toggleButton.innerHTML = '📊 Predictions';
+                }
+            }
         },
 
         setupAmuletDecision: function() {
@@ -1100,6 +1419,21 @@ function (dojo, declare,) {
 
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
+            
+            // Add delays to card resolution notifications so players can follow along
+            // All delays controlled by this.cardResolutionDelay variable
+            this.notifqueue.setSynchronous('playerCountsChanged', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('familiesConverted', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('familiesDied', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('templeDestroyed', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('leaderRecovered', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('templeBuilt', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('amuletGained', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('cardResolved', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('cardBeingResolved', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('diceRolled', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('amuletUsed', this.cardResolutionDelay);
+            this.notifqueue.setSynchronous('amuletNotUsed', this.cardResolutionDelay);
             
             // Add tooltips to any cards that might have been missed
             setTimeout(() => {
@@ -1409,6 +1743,15 @@ function (dojo, declare,) {
             // Visual feedback could be added here
         },
 
+        notif_amuletProtection: function(args) {
+            console.log('Player protected by amulet:', args);
+            const player_name = args.player_name;
+            const player_id = args.player_id;
+            
+            // Visual feedback could be added here to show amulet protection
+            // For example, a brief animation or highlighting of the player's board
+        },
+
         notif_diceRollRequired: function(args) {
             console.log('Dice roll required:', args);
             // Players who need to roll dice will be prompted in the setupDiceRoll method
@@ -1443,6 +1786,18 @@ function (dojo, declare,) {
                     this.templeCounters[player_id].incValue(1);
                 }
             }
+            
+            // Add temple card to kept area (kept_id = 2 for temple, based on comment in setup)
+            const keptStock = this[`${player_id}_kept`];
+            console.log('Kept stock for player', player_id, ':', keptStock);
+            if (keptStock) {
+                console.log('Attempting to add temple (kept_id=2) to stock...');
+                keptStock.addToStock(2);
+                console.log('Added temple to kept stock for player', player_id);
+                console.log('Stock items after adding:', keptStock.getAllItems());
+            } else {
+                console.error('No kept stock found for player', player_id);
+            }
         },
 
         notif_amuletIncremented: function(args) {
@@ -1451,6 +1806,42 @@ function (dojo, declare,) {
             // Update amulet counter
             if (this.amuletCounters[player_id]) {
                 this.amuletCounters[player_id].incValue(1);
+            }
+            
+            // Add amulet card to kept area (kept_id = 1 for amulet, based on comment in setup)
+            const keptStock = this[`${player_id}_kept`];
+            console.log('Kept stock for player', player_id, ':', keptStock);
+            if (keptStock) {
+                console.log('Attempting to add amulet (kept_id=1) to stock...');
+                keptStock.addToStock(1);
+                console.log('Added amulet to kept stock for player', player_id);
+                console.log('Stock items after adding:', keptStock.getAllItems());
+            } else {
+                console.error('No kept stock found for player', player_id);
+            }
+        },
+
+        notif_templeDestroyed: function(args) {
+            console.log('Temple destroyed for player:', args);
+            const player_id = args.player_id;
+            const temples_destroyed = args.temples_count;
+            
+            // Update temple counter
+            if (this.templeCounters[player_id] && args.temples_remaining !== undefined) {
+                this.templeCounters[player_id].setValue(args.temples_remaining);
+            }
+            
+            // Remove temple cards from kept area (kept_id = 2 for temple)
+            const keptStock = this[`${player_id}_kept`];
+            if (keptStock && temples_destroyed > 0) {
+                for (let i = 0; i < temples_destroyed; i++) {
+                    // Remove one temple item from stock
+                    const templeItems = keptStock.getAllItems().filter(item => item.type == 2);
+                    if (templeItems.length > 0) {
+                        keptStock.removeFromStockById(templeItems[0].id);
+                    }
+                }
+                console.log('Removed', temples_destroyed, 'temple(s) from kept stock for player', player_id);
             }
         },
 
@@ -1510,6 +1901,9 @@ function (dojo, declare,) {
             if (this.templeCounters[player_id] && args.temple_count !== undefined) {
                 this.templeCounters[player_id].setValue(args.temple_count);
             }
+            
+            // Update prediction panel if active
+            this.refreshPredictionPanelIfActive();
         },
 
         notif_leaderRecovered: function(args) {
@@ -1627,6 +2021,17 @@ function (dojo, declare,) {
             // Update family counter for the affected player
             if (this.familyCounters[args.player_id]) {
                 this.familyCounters[args.player_id].setValue(args.families_remaining);
+            }
+        },
+
+        ///////////////////////////////////////////////////
+        //// Utility Notifications
+
+        // Helper function to refresh prediction panel after counter updates
+        refreshPredictionPanelIfActive: function() {
+            if (this.predictionPanelEnabled && document.getElementById('prediction_panel') && 
+                document.getElementById('prediction_panel').style.display !== 'none') {
+                this.updatePredictionPanel();
             }
         },
 

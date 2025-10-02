@@ -255,6 +255,8 @@ $CARD_EFFECTS = [
             'recover_leader' => false,
             'discard' => 0,
             'keep_card' => 0,
+            'temple_destroyed' => 1, // Special effect: destroys 1 temple from target
+            'requires_temple_target' => true, // Requires targeting a player with temples
         ],
     ],
     CardType::Bonus->value => [

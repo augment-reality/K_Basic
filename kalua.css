@@ -88,7 +88,7 @@ border-radius: 5px; */
 
 #playedCards {
     width: 650px; /* needs to hold five cards */
-    height: 190px; /* Match card height */
+    height: 210px; /* Match card height plus header */
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -101,7 +101,7 @@ border-radius: 5px; */
 
 #resolvedCards {
     width: 650px; /* needs to hold five cards */
-    height: 190px; /* Match card height */
+    height: 210px; /* Match card height plus header */
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;

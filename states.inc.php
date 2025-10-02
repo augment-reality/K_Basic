@@ -155,6 +155,7 @@ $machinestates = [
         ->name('phaseThreeResolveCard')
         ->type(StateType::GAME)
         ->action('stResolveCard')
+        ->updateGameProgression(true)  // Update progression during card resolution
         ->transitions([
             'continueCardPhase' => ST_PHASE_THREE_PLAY_CARD, // Return to card playing after resolving cards
             'selectTargets' => ST_PHASE_THREE_SELECT_TARGETS,
@@ -172,6 +173,7 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must select a target'))
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stSelectTarget')
+        ->args('argSelectTarget')
         ->possibleactions([
             'actSelectPlayer',
             'actGoToBuyCardReflex' // Action to enter reflexive state
@@ -236,6 +238,7 @@ $machinestates = [
         ->name('phaseFourConvertPray')
         ->type(StateType::GAME)
         ->action('stConvertPray')
+        ->updateGameProgression(true)  // Update progression after each round
         ->transitions([
             'phaseOneDraw' => ST_PHASE_ONE_DRAW,
             'gameOver'  => ST_END_GAME
