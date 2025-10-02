@@ -3292,15 +3292,7 @@ class Game extends \Table
         $this->reloadPlayersBasicInfos();
 
         // Init global values with their initial values.
-        $this->setGameStateInitialValue("roundLeader", 0);
-        $this->setGameStateInitialValue("saved_state", 0);
-        $this->setGameStateInitialValue("saved_active_player", 0);
-        $this->setGameStateInitialValue("current_global_disaster", 0);
-        $this->setGameStateInitialValue("round_leader_played_card", 0);
-        $this->setGameStateInitialValue("round_leader_continuing_play", 0);
-        $this->setGameStateInitialValue("discard_completed_for_card", 0);
-        $this->setGameStateInitialValue("dice_completed_for_card", 0);
-        $this->setGameStateInitialValue("convert_pray_requested", 0);
+        //$this->setGameStateInitialValue("Update_Count", 0);
 
         $disasterCards = array(
 
@@ -3377,11 +3369,6 @@ class Game extends \Table
         $this->initStat("player", "cards_played", 0);
         $this->initStat("player", "global_disasters_doubled", 0);
         $this->initStat("player", "global_disasters_avoided", 0);
-
-        // Initialize global atheist families pool
-        $player_count = count($players);
-        $initial_atheist_families = $player_count * 3; // 3 families per player start on the Kalua board
-        $this->DbQuery("INSERT INTO global (global_id, global_value) VALUES (101, $initial_atheist_families)");
 
         // TODO: Setup the initial game situation here.
         $initial_leader = $this->activeNextPlayer();

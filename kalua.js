@@ -74,9 +74,6 @@ function (dojo, declare,) {
             
             // Prediction panel settings
             this.predictionPanelEnabled = false;
-            
-            // Card resolution notification timing (in milliseconds)
-            this.cardResolutionDelay = 500;
         },
         
         setup: function(gamedatas) {
@@ -1419,21 +1416,6 @@ function (dojo, declare,) {
 
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
-            
-            // Add delays to card resolution notifications so players can follow along
-            // All delays controlled by this.cardResolutionDelay variable
-            this.notifqueue.setSynchronous('playerCountsChanged', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('familiesConverted', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('familiesDied', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('templeDestroyed', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('leaderRecovered', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('templeBuilt', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('amuletGained', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('cardResolved', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('cardBeingResolved', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('diceRolled', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('amuletUsed', this.cardResolutionDelay);
-            this.notifqueue.setSynchronous('amuletNotUsed', this.cardResolutionDelay);
             
             // Add tooltips to any cards that might have been missed
             setTimeout(() => {

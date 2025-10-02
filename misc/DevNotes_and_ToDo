@@ -27,7 +27,7 @@ FIXED: Single player card play issue - Added checks in stNextPlayerCards() and s
 
 -autopass playing card when no cards and < 5 prayer
 -warnings for: cards with no targets; when no atheists to convert/steal
--make pray/convert prediction a game option?
+-calculate number of families lost/gained during pray/convert for easier player decision making?
 -undo buttons
 -"play a card" - option to play w/onclick?
 -option to hide other players divs?
