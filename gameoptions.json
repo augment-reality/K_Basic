@@ -13,5 +13,20 @@
                 "tmdisplay": "With Quickstart Cards"
             }
         }
+    },
+    "101": {
+        "name": "Show End-Round Predictions",
+        "values": {
+            "1": {
+                "name": "Off",
+                "description": "End-Round Predictions are disabled",
+                "tmdisplay": ""
+            },
+            "2": {
+                "name": "On", 
+                "description": "Allow players to see end-round predictions",
+                "tmdisplay": "With End-Round Predictions"
+            }
+        }
     }
 }

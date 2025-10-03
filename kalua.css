@@ -285,91 +285,51 @@ border-radius: 5px; */
 
 /* Player color borders for played cards - clean and minimal */
 .player-card-blue {
-    border: 2px solid #4685FF !important;
+    border: 4px solid #4685FF !important;
     border-radius: 6px !important;
 }
 
 .player-card-red {
-    border: 2px solid #C22D2D !important;
+    border: 4px solid #C22D2D !important;
     border-radius: 6px !important;
 }
 
 .player-card-yellow {
-    border: 2px solid #C8CA25 !important;
+    border: 4px solid #C8CA25 !important;
     border-radius: 6px !important;
 }
 
 .player-card-green {
-    border: 2px solid #2EA232 !important;
+    border: 4px solid #2EA232 !important;
     border-radius: 6px !important;
 }
 
 .player-card-purple {
-    border: 2px solid #913CB3 !important;
+    border: 4px solid #913CB3 !important;
     border-radius: 6px !important;
 }
 
-/* Expandable section for other players */
-.other_players_expandable {
-    margin-top: 20px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background: #f8f9fa;
+/* Hide other players preference implementation */
+.kalua_hide_other_players .player_area:not([data-current-player="true"]) {
+    display: none !important;
 }
 
-.other_players_expandable .expandable_header {
-    padding: 10px 15px;
-    background: #e9ecef;
-    border-radius: 8px 8px 0 0;
-    cursor: pointer;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: background-color 0.2s ease;
-}
-
-.other_players_expandable .expandable_header:hover {
-    background: #dee2e6;
-}
-
-.other_players_expandable .expandable_toggle {
-    font-family: monospace;
-    font-size: 14px;
-    transition: transform 0.3s ease;
-}
-
-.other_players_expandable.collapsed .expandable_toggle {
-    transform: rotate(-90deg);
-}
-
-.other_players_expandable .expandable_title {
-    color: #495057;
-}
-
-.other_players_expandable .expandable_content {
-    padding: 15px;
-    border-radius: 0 0 8px 8px;
-}
-
-.other_players_expandable.collapsed .expandable_content {
-    display: none;
-}
-
-/* Adjust player areas inside expandable section */
-.other_players_expandable .player_area {
-    margin-bottom: 15px;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
+/* Notice when other players are hidden */
+.kalua_hide_other_players .hidden_players_notice {
+    display: block;
+    text-align: center;
     padding: 10px;
-    background: white;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin: 10px 0;
+    font-style: italic;
+    color: #666;
+    font-size: 14px;
 }
 
-.other_players_expandable .player_area:last-child {
-    margin-bottom: 0;
-}
-
-/* Hide other players preference support */
-.kalua_hide_other_players .other_players_expandable {
+.kalua_show_all_players .hidden_players_notice {
     display: none;
 }
+
+

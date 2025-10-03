@@ -28,20 +28,5 @@
       }
     },
     "default": 1
-  },
-  "102": {
-    "name": "Play cards confirmation",
-    "needReload": false,
-    "values": {
-      "1": {
-        "name": "Confirm before playing cards",
-        "cssPref": "kalua_confirm_cards"
-      },
-      "2": {
-        "name": "Play cards without confirmation",
-        "cssPref": "kalua_no_confirm_cards"
-      }
-    },
-    "default": 1
   }
 }

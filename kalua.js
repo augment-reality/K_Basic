@@ -21,7 +21,6 @@ define([
     "ebg/counter",
     "ebg/stock",
     "ebg/zone",
-    "ebg/expandablesection",
 
 ],
 
@@ -89,36 +88,57 @@ function (dojo, declare,) {
                 return parseInt(a.id) - parseInt(b.id);
             });
             
-            // Separate current player from other players
-            const currentPlayer = sortedPlayers.find(p => p.id == this.player_id);
-            const otherPlayers = sortedPlayers.filter(p => p.id != this.player_id);
-            
-            // Create current player area first
-            if (currentPlayer) {
-                this.createPlayerArea(currentPlayer);
-            }
-            
-            // Create expandable section for other players if there are any
-            if (otherPlayers.length > 0) {
-                // Create the expandable section container
+            sortedPlayers.forEach(player => {
+                console.log('Player color debug:', player.id, player.color); // Debug line
+                
+                // Fix truncated colors - ensure they have 6 hex digits
+                let fixedColor = player.color;
+                if (fixedColor && fixedColor.startsWith('#') && fixedColor.length === 6) {
+                    // Color is missing the last digit, add the appropriate digit based on pattern
+                    const colorMap = {
+                        '#4685F': '#4685FF', // Blue
+                        '#C22D2': '#C22D2D', // Red
+                        '#C8CA2': '#C8CA25', // Yellow
+                        '#2EA23': '#2EA232', // Green
+                        '#913CB': '#913CB3'  // Purple
+                    };
+                    fixedColor = colorMap[fixedColor] || fixedColor;
+                    console.log('Fixed color from', player.color, 'to', fixedColor);
+                }
+                
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
-                    <div id="other_players_section" class="other_players_expandable">
-                        <div id="other_players_header" class="expandable_header">
-                            <span class="expandable_toggle">▼</span>
-                            <span class="expandable_title">Other Players (${otherPlayers.length})</span>
-                        </div>
-                        <div id="other_players_content" class="expandable_content">
+                    <div id="player_area_${player.id}" class="player_area" ${player.id == this.player_id ? 'data-current-player="true"' : ''}>
+                        <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
+                        <div id="${player.id}_cards" class="player_cards"></div>
+                        <div id="${player.id}_families" class="player_families"></div>
+                        <div id="${player.id}_InPlay" class="player_kept_cards">
+                            Kept Cards:
+                            <div id="${player.id}_InPlayContent"></div>
                         </div>
                     </div>
                 `);
                 
-                // Create other players inside the expandable content
-                otherPlayers.forEach(player => {
-                    this.createPlayerArea(player, 'other_players_content');
-                });
-                
-                // Initialize the expandable section with simple click handler
-                this.setupExpandableSection();
+                // Additional color setting via JavaScript as backup
+                setTimeout(() => {
+                    const nameElement = document.getElementById(`player_name_${player.id}`);
+                    if (nameElement && fixedColor) {
+                        nameElement.style.color = fixedColor;
+                        nameElement.style.setProperty('color', fixedColor, 'important');
+                        console.log('Applied color to', player.name, ':', fixedColor);
+                    }
+                }, 100);
+            });
+
+            // Add notice for hidden players preference
+            if (this.prefs[100] && this.prefs[100].value == 1) {
+                const hiddenCount = Object.keys(gamedatas.players).length - 1;
+                if (hiddenCount > 0) {
+                    document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
+                        <div class="hidden_players_notice">
+                            ${hiddenCount} other player${hiddenCount > 1 ? 's' : ''} hidden (preference setting)
+                        </div>
+                    `);
+                }
             }
 
             // Set up players' side panels
@@ -525,8 +545,9 @@ function (dojo, declare,) {
             }
 
             // Add prediction toggle button to the bottom right of resolved cards div
+            // Only if 'Show End-Round Predictions' game option is enabled (option 101 == 2)
             const resolvedCardsDiv = document.getElementById('resolvedCards');
-            if (resolvedCardsDiv) {
+            if (resolvedCardsDiv && this.isPredictionsEnabled()) {
                 resolvedCardsDiv.insertAdjacentHTML('beforeend', `
                     <div id="prediction_toggle_panel" style="
                         position: absolute; 
@@ -572,71 +593,6 @@ function (dojo, declare,) {
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
 
-        },
-
-        setupExpandableSection: function() {
-            const header = document.getElementById('other_players_header');
-            const section = document.getElementById('other_players_section');
-            
-            if (header && section) {
-                header.addEventListener('click', () => {
-                    section.classList.toggle('collapsed');
-                    
-                    // Save the state in localStorage for persistence
-                    const isCollapsed = section.classList.contains('collapsed');
-                    localStorage.setItem('kalua_other_players_collapsed', isCollapsed);
-                });
-                
-                // Restore saved state
-                const savedState = localStorage.getItem('kalua_other_players_collapsed');
-                if (savedState === 'true') {
-                    section.classList.add('collapsed');
-                }
-            }
-        },
-
-        ///////////////////////////////////////////////////
-        //// Helper functions
-        
-        createPlayerArea: function(player, containerId = 'player-tables') {
-            console.log('Player color debug:', player.id, player.color); // Debug line
-            
-            // Fix truncated colors - ensure they have 6 hex digits
-            let fixedColor = player.color;
-            if (fixedColor && fixedColor.startsWith('#') && fixedColor.length === 6) {
-                // Color is missing the last digit, add the appropriate digit based on pattern
-                const colorMap = {
-                    '#4685F': '#4685FF', // Blue
-                    '#C22D2': '#C22D2D', // Red
-                    '#C8CA2': '#C8CA25', // Yellow
-                    '#2EA23': '#2EA232', // Green
-                    '#913CB': '#913CB3'  // Purple
-                };
-                fixedColor = colorMap[fixedColor] || fixedColor;
-                console.log('Fixed color from', player.color, 'to', fixedColor);
-            }
-            
-            document.getElementById(containerId).insertAdjacentHTML('beforeend', `
-                <div id="player_area_${player.id}" class="player_area">
-                    <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
-                    <div id="${player.id}_cards" class="player_cards"></div>
-                    <div id="${player.id}_families" class="player_families"></div>
-                    <div id="${player.id}_InPlay" class="player_kept_cards">
-                        Kept Cards:
-                        <div id="${player.id}_InPlayContent"></div>
-                    </div>
-                </div>
-            `);
-            
-            // Additional color setting via JavaScript as backup
-            setTimeout(() => {
-                const nameElement = document.getElementById(`player_name_${player.id}`);
-                if (nameElement && fixedColor) {
-                    nameElement.style.color = fixedColor;
-                    nameElement.style.setProperty('color', fixedColor, 'important');
-                    console.log('Applied color to', player.name, ':', fixedColor);
-                }
-            }, 100);
         },
 
         ///////////////////////////////////////////////////
@@ -856,7 +812,46 @@ function (dojo, declare,) {
 
                 case 'phaseThreeRollDice':
                     if (this.isCurrentPlayerActive()) {
-                        this.setupDiceRoll();
+                        // Check if auto-roll dice preference is enabled
+                        console.log('Checking auto-roll preference:', this.prefs);
+                        console.log('All available data:', Object.keys(this));
+                        console.log('Player prefs:', this.player_preferences);
+                        console.log('Gamedatas prefs:', this.gamedatas.playerdata && this.gamedatas.playerdata[this.player_id] ? this.gamedatas.playerdata[this.player_id].preferences : 'not found');
+                        console.log('Preference 101 value:', this.prefs && this.prefs[101] ? this.prefs[101].value : 'undefined');
+                        
+                        // Try multiple ways to access preferences
+                        let autoRollEnabled = false;
+                        
+                        if (this.prefs && this.prefs[101] && this.prefs[101].value == 2) {
+                            autoRollEnabled = true;
+                            console.log('Auto-roll enabled via this.prefs');
+                        } else if (this.player_preferences && this.player_preferences[101] && this.player_preferences[101].value == 2) {
+                            autoRollEnabled = true;
+                            console.log('Auto-roll enabled via this.player_preferences');
+                        } else {
+                            // Fallback: Check if there's a CSS class indicating auto-roll preference
+                            const hasAutoClass = document.body.classList.contains('kalua_auto_dice');
+                            if (hasAutoClass) {
+                                autoRollEnabled = true;
+                                console.log('Auto-roll enabled via CSS class');
+                            } else {
+                                console.log('Auto-roll not enabled - using manual mode');
+                            }
+                        }
+                        
+                        if (autoRollEnabled) {
+                            // Auto-roll dice preference is enabled
+                            console.log('Auto-rolling dice due to player preference');
+                            // Add a small delay to ensure the state is fully loaded
+                            setTimeout(() => {
+                                console.log('Executing auto-roll action');
+                                this.bgaPerformAction('actRollDie', {});
+                            }, 500);
+                        } else {
+                            // Manual dice rolling
+                            console.log('Manual dice rolling mode');
+                            this.setupDiceRoll();
+                        }
                     }
                     break;
 
@@ -869,8 +864,11 @@ function (dojo, declare,) {
                 case 'phaseThreePlayCard':
                     // Show predictions when players are making decisions about cards
                     // since the round might end and family redistribution will occur
-                    this.predictionPanelEnabled = true;
-                    this.showPredictionPanel();
+                    // Only if 'Show End-Round Predictions' game option is enabled
+                    if (this.isPredictionsEnabled()) {
+                        this.predictionPanelEnabled = true;
+                        this.showPredictionPanel();
+                    }
                     break;
 
                 case 'phaseFourConvertPray':
@@ -1092,22 +1090,59 @@ function (dojo, declare,) {
                         break;
                     case 'phaseThreeRollDice':
                         console.log("onUpdateActionButtons called for phaseThreeRollDice state");
-                        this.addActionButton('roll-dice-btn', _('Roll Dice'), () => {
-                            // Disable the button immediately to prevent double-clicks
+                        console.log("Preferences available:", this.prefs);
+                        console.log("Auto-roll preference (101):", this.prefs && this.prefs[101] ? this.prefs[101] : 'not found');
+                        
+                        // Check if auto-roll is enabled using multiple methods
+                        let isAutoRoll = false;
+                        if (this.prefs && this.prefs[101] && this.prefs[101].value == 2) {
+                            isAutoRoll = true;
+                        } else if (this.player_preferences && this.player_preferences[101] && this.player_preferences[101].value == 2) {
+                            isAutoRoll = true;
+                        } else if (document.body.classList.contains('kalua_auto_dice')) {
+                            isAutoRoll = true;
+                            console.log('Auto-roll detected via CSS class');
+                        }
+                        
+                        console.log("Is auto-roll enabled:", isAutoRoll);
+                        
+                        const buttonText = isAutoRoll ? _('Roll Dice (Auto)') : _('Roll Dice');
+                        
+                        this.addActionButton('roll-dice-btn', buttonText, () => {
+                            // Only allow manual rolling if auto-roll is disabled
+                            if (!isAutoRoll) {
+                                console.log("Manual dice roll button clicked");
+                                // Disable the button immediately to prevent double-clicks
+                                const rollBtn = document.getElementById('roll-dice-btn');
+                                if (rollBtn) {
+                                    rollBtn.disabled = true;
+                                    rollBtn.style.opacity = '0.5';
+                                }
+                                this.bgaPerformAction('actRollDie', {});
+                            } else {
+                                console.log("Auto-roll is enabled - manual click ignored");
+                            }
+                        });
+                        
+                        // If auto-roll is enabled, disable the button and style it as inactive
+                        if (isAutoRoll) {
+                            console.log("Styling button as auto-roll mode");
                             const rollBtn = document.getElementById('roll-dice-btn');
                             if (rollBtn) {
                                 rollBtn.disabled = true;
-                                rollBtn.style.opacity = '0.5';
+                                rollBtn.style.backgroundColor = '#cccccc';
+                                rollBtn.style.color = '#666666';
+                                rollBtn.style.opacity = '0.6';
+                                rollBtn.style.cursor = 'not-allowed';
+                                rollBtn.title = _('Dice will roll automatically (auto-roll enabled in preferences)');
                             }
-                            this.bgaPerformAction('actRollDie', {});
-                        });
+                        }
                         break;
                     case 'phaseThreeResolveAmulets':
                         console.log("onUpdateActionButtons called for phaseThreeResolveAmulets state");
                         
-                        // Set the description for amulet decision
-                        this.gamedatas.gamestate.descriptionmyturn = _('Do you want to use an amulet to avoid the disaster effects?');
-                        this.updatePageTitle();
+                        // Note: Do not call updatePageTitle() here as it causes infinite recursion
+                        // The page title will be updated by the BGA framework automatically
                         
                         // Check if current player has amulets
                         const currentPlayerId = this.player_id;
@@ -1127,8 +1162,8 @@ function (dojo, declare,) {
                             });
                         } else {
                             // Player has no amulets, just waiting
-                            this.gamedatas.gamestate.descriptionmyturn = _('Waiting for other players to decide on amulet usage...');
-                            this.updatePageTitle();
+                            // Note: Do not call updatePageTitle() here as it causes infinite recursion
+                            // The page title will be updated by the BGA framework automatically
                         }
                         break;
                 }
@@ -1604,7 +1639,8 @@ function (dojo, declare,) {
 
         // Update and show the prediction panel
         updatePredictionPanel: function() {
-            if (!this.predictionPanelEnabled) return;
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
             
             const predictions = this.calculatePrayConvertPredictions();
             const content = document.getElementById('prediction_content');
@@ -1646,9 +1682,34 @@ function (dojo, declare,) {
             panel.style.display = 'block';
         },
 
+        // Helper function to check if end-round predictions are enabled
+        isPredictionsEnabled: function() {
+            // Check game options (standard BGA pattern)
+            if (this.gamedatas.game_options && this.gamedatas.game_options[101]) {
+                return this.gamedatas.game_options[101] == 2;
+            }
+            
+            // Fallback: check if options are stored differently
+            if (this.gamedatas.options && this.gamedatas.options[101]) {
+                return this.gamedatas.options[101] == 2;
+            }
+            
+            // Another fallback: check gameinfos (some BGA games store it here)
+            if (this.gamedatas.gameinfos && this.gamedatas.gameinfos.game_options && this.gamedatas.gameinfos.game_options[101]) {
+                return this.gamedatas.gameinfos.game_options[101] == 2;
+            }
+            
+            console.log('Warning: Could not find Show End-Round Predictions game option, defaulting to disabled');
+            console.log('Available gamedatas keys:', Object.keys(this.gamedatas));
+            
+            // Default to disabled if option not found
+            return false;
+        },
+
         // Show prediction panel if appropriate game state
         showPredictionPanel: function() {
-            if (!this.predictionPanelEnabled) return;
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
             
             const panel = document.getElementById('prediction_panel');
             if (panel) {
@@ -1667,6 +1728,9 @@ function (dojo, declare,) {
 
         // Toggle prediction panel visibility
         togglePredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled()) return;
+            
             this.predictionPanelEnabled = !this.predictionPanelEnabled;
             const toggleButton = document.getElementById('prediction_toggle_btn');
             
