@@ -26,19 +26,7 @@ $machinestates = [
 
     // The initial state. Please do not modify.
 
-    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_QUICK_DRAW)->build(),
-
-        /* Quickstart setup */
-    ST_QUICK_DRAW => GameStateBuilder::create()
-        ->name('quickDraw')
-        ->description(clienttranslate('Dealing quickstart cards to all players'))
-        ->type(StateType::GAME)
-        ->action('stQuickDraw')
-        ->transitions([
-            'drawToFive' => ST_PHASE_ONE_DRAW,
-            'normalDraw' => ST_INITIAL_DRAW
-        ])
-        ->build(),
+    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_INITIAL_DRAW)->build(),
 
     /* Initial setup */
     ST_INITIAL_DRAW => GameStateBuilder::create()
@@ -167,7 +155,6 @@ $machinestates = [
         ->name('phaseThreeResolveCard')
         ->type(StateType::GAME)
         ->action('stResolveCard')
-        ->updateGameProgression(true)  // Update progression during card resolution
         ->transitions([
             'continueCardPhase' => ST_PHASE_THREE_PLAY_CARD, // Return to card playing after resolving cards
             'selectTargets' => ST_PHASE_THREE_SELECT_TARGETS,
@@ -185,7 +172,6 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must select a target'))
         ->type(StateType::ACTIVE_PLAYER)
         ->action('stSelectTarget')
-        ->args('argSelectTarget')
         ->possibleactions([
             'actSelectPlayer',
             'actGoToBuyCardReflex' // Action to enter reflexive state
@@ -250,7 +236,6 @@ $machinestates = [
         ->name('phaseFourConvertPray')
         ->type(StateType::GAME)
         ->action('stConvertPray')
-        ->updateGameProgression(true)  // Update progression after each round
         ->transitions([
             'phaseOneDraw' => ST_PHASE_ONE_DRAW,
             'gameOver'  => ST_END_GAME

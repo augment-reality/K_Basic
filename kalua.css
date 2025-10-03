@@ -88,7 +88,7 @@ border-radius: 5px; */
 
 #playedCards {
     width: 650px; /* needs to hold five cards */
-    height: 210px; /* Match card height plus header */
+    height: 190px; /* Match card height */
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -101,7 +101,7 @@ border-radius: 5px; */
 
 #resolvedCards {
     width: 650px; /* needs to hold five cards */
-    height: 210px; /* Match card height plus header */
+    height: 190px; /* Match card height */
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -245,8 +245,9 @@ border-radius: 5px; */
 
 
 .player_kept_cards {
+    min-width: 650px; /* same as card div */
     width: auto;
-    height: auto;
+    min-width: 120px;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -281,55 +282,6 @@ border-radius: 5px; */
     border-radius: 5px;
     margin: 5px;
     display: inline-block;
-}
-
-/* Player color borders for played cards - clean and minimal */
-.player-card-blue {
-    border: 4px solid #4685FF !important;
-    border-radius: 6px !important;
-}
-
-.player-card-red {
-    border: 4px solid #C22D2D !important;
-    border-radius: 6px !important;
-}
-
-.player-card-yellow {
-    border: 4px solid #C8CA25 !important;
-    border-radius: 6px !important;
-}
-
-.player-card-green {
-    border: 4px solid #2EA232 !important;
-    border-radius: 6px !important;
-}
-
-.player-card-purple {
-    border: 4px solid #913CB3 !important;
-    border-radius: 6px !important;
-}
-
-/* Hide other players preference implementation */
-.kalua_hide_other_players .player_area:not([data-current-player="true"]) {
-    display: none !important;
-}
-
-/* Notice when other players are hidden */
-.kalua_hide_other_players .hidden_players_notice {
-    display: block;
-    text-align: center;
-    padding: 10px;
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    margin: 10px 0;
-    font-style: italic;
-    color: #666;
-    font-size: 14px;
-}
-
-.kalua_show_all_players .hidden_players_notice {
-    display: none;
 }
 
 

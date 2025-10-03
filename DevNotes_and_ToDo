@@ -1,0 +1,110 @@
+This directory can contain any extra source and text files,
+which are not required to run the game.
+
+The files won't be committed into source control repository and
+won't be packaged for deployment.
+It can contains notes, docs, tools, tests, data files, etc...
+
+----------------------------To do----------------------------------------
+-move intial game setup from .js to game.php (underneath where cards are setup; also says TODO...)
+-make utility method in php to update tokens as according to sql, when game is loaded
+-Figure out sprites
+-Card imgs
+-Make a die
+-sql deck info: make two decks (bonus and global/local)
+-decide how to handle combined deck types in same areas
+-if card requires a die roll, make value 7, and replace with die roll when checked
+-keep track of held (face up) player cards for amulets/temples
+-implement sequence for avoiding/doubling global effects (apply card twice?)
+-make family tokens and zone
+-handle php case for "zombie" player: remove families from game?
+-Fill out "States.inc.php"
+-game log data
+-player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl and therefore into the stars location on the player board. This occurs sometime after the game setup() function. However this score must be updated as the game progresses using notifications.
+
+
+------------------------------   Setup   ------------------------------
+local/global disaster deck; bonus deck
+get 10 fams, 1 leader, 5 prayer, 5 happiness (marker on board)
+Kalua main board has 3 families per player 3*playerc 
+
+players draw 5 (can draw from both decks)
+
+random starting player
+
+------------------------------  possible utility functions   --------------------------------------------------
+
+-draw five cards
+-draw more cards, paying 5 prayer per card
+-play (select) a card (and check if player has resources to do so)
+-card effects
+-Happiness distribution
+
+------------------------------------   Game States   ----------------------------------------------------
+
+1. Active player checks if <5 cards in hand, draw to 5. Otherwise draw 1.
+
+2. Starting with active player, choose 1:
+
+    a) Give a speech: Increase happiness by 1.
+        h = h+1
+
+    b) Convert atheists: Take 2 families from the Kalua board.
+        if k>1, player +2; if k=1, player +1, else nothing
+
+    c) Convert believers: Take 1 family from another God.
+        limit selection to players > 0: player -1, player current +1
+
+    d) Sacrifice Leader: Remove your Leader from play and add up to 5 Families to your religion from the Kalua board.
+        set player leader = 0, player families +5
+
+3. active player selects card or passes (Convert)
+
+4. everyone else can play card and pay cost (global player has option to escape effect, or double it; save family count when global disaster occurs to break tie)
+
+5. card effects happen in order (local - need to choose player at time it is resolved, can target self)
+
+6. repeat from 3. until state until convert is chosen
+
+7. Automatic reallocation of families:
+    Check distribution of happiness. Find lowest happiness score (var happy_value_low) and check for highest happiness score (var happy_value_high). If low=high, skip to step 8. 
+
+Families are sent to temporary group (var converted_pool) for redistribution: if player happiness = var happy_value_low sends 2 families/  if player happiness != var happy_value_low or var happy_value_high, sends 1 families
+
+Count # of players in group 2 (var happy_value_high)
+If count of var converted_pool >= 3* count of var happy_value_high, each player gets three and remainder to Kalua (hkboard)
+Else var converted_pool / count of var happy_value_high, remainder to kalua (hk board)
+
+8. Players receive 1 prayer for every 5 families, plus some extra
+    if player happiness = var happy_value_low, get 4 extra
+    if player happiness != var happy_value_low or var happy_value_high, get 2 extra
+
+------------------------- Check End Game -----------------------------------------
+
+9. If all families/leaders gone, player eliminated.
+
+10. If only one religion remaining, they win. Skip to step 13.
+
+11. If no religions remaining, check tie breaker
+
+12. Active player changes
+
+13. End Game. Determine Winner. Skip to step 13.
+
+
+
+Summarized for game states as:
+
+1. Active_Draw
+2. Free_Action
+3. Active_Turn
+4. Non-active_Turn
+5. Card_Effect
+6. Continue_Turn
+7. Convert
+8. Gain_Prayer
+9. Eliminate_Players
+10. Check_Winner
+11. Check_Tie
+12. Active_Player_Increment
+13. End_Game
