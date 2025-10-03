@@ -72,53 +72,24 @@ class Game extends \Table
             // Auto-deal quickstart cards to all players
             $players = $this->getCollectionFromDb("SELECT player_id FROM player ORDER BY player_no");
             
-            // Define quickstart card sets (3 disaster + 2 bonus cards per player)
-            $quickstart_disaster_cards = [
-                LocalDisasterCard::Tornado->value,
-                LocalDisasterCard::Earthquake->value, 
-                LocalDisasterCard::BadWeather->value
-            ];
-            
-            $quickstart_bonus_cards = [
-                BonusCard::GoodWeather->value,
-                BonusCard::Fertility->value
-            ];
-            
-            foreach ($players as $player) {
-                $player_id = $player['player_id'];
+            foreach($players as $player) {
+                $player_id = (int)$player['player_id']; // Cast to integer
                 
-                // Deal 3 specific disaster cards
-                foreach ($quickstart_disaster_cards as $card_type_arg) {
-                    $cards = $this->disasterCards->getCardsOfTypeInLocation(
-                        CardType::LocalDisaster->value, 
-                        $card_type_arg, 
-                        'deck'
-                    );
-                    if (!empty($cards)) {
-                        $card = array_shift($cards);
-                        $this->disasterCards->moveCard($card['id'], 'hand', $player_id);
-                    }
+                // Draw 3 disaster cards for each player
+                for ($i = 0; $i < 3; $i++) {
+                    $this->drawCard_private(STR_CARD_TYPE_DISASTER, $player_id, true);
                 }
                 
-                // Deal 2 specific bonus cards
-                foreach ($quickstart_bonus_cards as $card_type_arg) {
-                    $cards = $this->bonusCards->getCardsOfTypeInLocation(
-                        CardType::Bonus->value,
-                        $card_type_arg,
-                        'deck'
-                    );
-                    if (!empty($cards)) {
-                        $card = array_shift($cards);
-                        $this->bonusCards->moveCard($card['id'], 'hand', $player_id);
-                    }
+                // Draw 2 bonus cards for each player
+                for ($i = 0; $i < 2; $i++) {
+                    $this->drawCard_private(STR_CARD_TYPE_BONUS, $player_id, true);
                 }
             }
             
-            // Notify all players about quickstart cards being dealt
-            $this->notifyAllPlayers('quickstartCardsDealt', 
-                clienttranslate('Quickstart cards have been automatically dealt to all players'), 
-                []
-            );
+            // Notify all players about the quickstart setup
+            $this->notifyAllPlayers('quickstartCardsDealt', clienttranslate('Quickstart: Each player has been dealt 3 disaster cards and 2 bonus cards'), [
+                'players' => array_keys($players)
+            ]);
             
             // Skip ahead to the drawToFive phase (Phase One Draw)
             $this->gamestate->nextState('drawToFive');
@@ -1596,10 +1567,10 @@ class Game extends \Table
             );
 
             if ($eliminated == 1) {
-            $this->notifyAllPlayers('playerEliminated', clienttranslate('${player_name} has been eliminated!'), [
-                'player_id' => $player_id,
-                'player_name' => $this->getPlayerNameById($player_id)
-            ]);
+                $this->notifyAllPlayers('playerEliminated', clienttranslate('${player_name} has been eliminated!'), [
+                    'player_id' => $player_id,
+                    'player_name' => $this->getPlayerNameById($player_id)
+                ]);
             }
         }
 

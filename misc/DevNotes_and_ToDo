@@ -15,17 +15,13 @@ FIXED: Single player card play issue - Added checks in stNextPlayerCards() and s
 
 ----------------------------    To do   -------------------------------------------
 
--tooltips not staying aligned with cards
 -test buy-for-5 in all states
 -handle php case for "zombie" player: remove families from game and pass all options to play card
 
--autopass playing card when no cards and < 5 prayer
 -warnings for: cards with no targets; when no atheists to convert/steal
--make pray/convert prediction a game option?
 -undo buttons
 -"play a card" - option to play w/onclick?
 -option to hide other players divs?
--quickstart (draw 3 disaster and 2 bonus cards?)
 -automatic dice rolls? 
 
 

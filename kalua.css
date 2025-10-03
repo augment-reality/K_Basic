@@ -309,4 +309,67 @@ border-radius: 5px; */
     border-radius: 6px !important;
 }
 
+/* Expandable section for other players */
+.other_players_expandable {
+    margin-top: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
 
+.other_players_expandable .expandable_header {
+    padding: 10px 15px;
+    background: #e9ecef;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.other_players_expandable .expandable_header:hover {
+    background: #dee2e6;
+}
+
+.other_players_expandable .expandable_toggle {
+    font-family: monospace;
+    font-size: 14px;
+    transition: transform 0.3s ease;
+}
+
+.other_players_expandable.collapsed .expandable_toggle {
+    transform: rotate(-90deg);
+}
+
+.other_players_expandable .expandable_title {
+    color: #495057;
+}
+
+.other_players_expandable .expandable_content {
+    padding: 15px;
+    border-radius: 0 0 8px 8px;
+}
+
+.other_players_expandable.collapsed .expandable_content {
+    display: none;
+}
+
+/* Adjust player areas inside expandable section */
+.other_players_expandable .player_area {
+    margin-bottom: 15px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 10px;
+    background: white;
+}
+
+.other_players_expandable .player_area:last-child {
+    margin-bottom: 0;
+}
+
+/* Hide other players preference support */
+.kalua_hide_other_players .other_players_expandable {
+    display: none;
+}

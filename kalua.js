@@ -21,6 +21,7 @@ define([
     "ebg/counter",
     "ebg/stock",
     "ebg/zone",
+    "ebg/expandablesection",
 
 ],
 
@@ -78,10 +79,6 @@ function (dojo, declare,) {
         
         setup: function(gamedatas) {
             console.log("Starting game setup");
-
-            // Declare hexadecimal color maping for player tokens (default red/green/blue/orange/brown)
-            
-
             
             // Create player areas - current player first, then others
             const sortedPlayers = Object.values(gamedatas.players).sort((a, b) => {
@@ -92,46 +89,37 @@ function (dojo, declare,) {
                 return parseInt(a.id) - parseInt(b.id);
             });
             
-            sortedPlayers.forEach(player => {
-                console.log('Player color debug:', player.id, player.color); // Debug line
-                
-                // Fix truncated colors - ensure they have 6 hex digits
-                let fixedColor = player.color;
-                if (fixedColor && fixedColor.startsWith('#') && fixedColor.length === 6) {
-                    // Color is missing the last digit, add the appropriate digit based on pattern
-                    const colorMap = {
-                        '#4685F': '#4685FF', // Blue
-                        '#C22D2': '#C22D2D', // Red
-                        '#C8CA2': '#C8CA25', // Yellow
-                        '#2EA23': '#2EA232', // Green
-                        '#913CB': '#913CB3'  // Purple
-                    };
-                    fixedColor = colorMap[fixedColor] || fixedColor;
-                    console.log('Fixed color from', player.color, 'to', fixedColor);
-                }
-                
+            // Separate current player from other players
+            const currentPlayer = sortedPlayers.find(p => p.id == this.player_id);
+            const otherPlayers = sortedPlayers.filter(p => p.id != this.player_id);
+            
+            // Create current player area first
+            if (currentPlayer) {
+                this.createPlayerArea(currentPlayer);
+            }
+            
+            // Create expandable section for other players if there are any
+            if (otherPlayers.length > 0) {
+                // Create the expandable section container
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
-                    <div id="player_area_${player.id}" class="player_area">
-                        <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
-                        <div id="${player.id}_cards" class="player_cards"></div>
-                        <div id="${player.id}_families" class="player_families"></div>
-                        <div id="${player.id}_InPlay" class="player_kept_cards">
-                            Kept Cards:
-                            <div id="${player.id}_InPlayContent"></div>
+                    <div id="other_players_section" class="other_players_expandable">
+                        <div id="other_players_header" class="expandable_header">
+                            <span class="expandable_toggle">▼</span>
+                            <span class="expandable_title">Other Players (${otherPlayers.length})</span>
+                        </div>
+                        <div id="other_players_content" class="expandable_content">
                         </div>
                     </div>
                 `);
                 
-                // Additional color setting via JavaScript as backup
-                setTimeout(() => {
-                    const nameElement = document.getElementById(`player_name_${player.id}`);
-                    if (nameElement && fixedColor) {
-                        nameElement.style.color = fixedColor;
-                        nameElement.style.setProperty('color', fixedColor, 'important');
-                        console.log('Applied color to', player.name, ':', fixedColor);
-                    }
-                }, 100);
-            });
+                // Create other players inside the expandable content
+                otherPlayers.forEach(player => {
+                    this.createPlayerArea(player, 'other_players_content');
+                });
+                
+                // Initialize the expandable section with simple click handler
+                this.setupExpandableSection();
+            }
 
             // Set up players' side panels
             Object.values(gamedatas.players).forEach(player => {
@@ -584,6 +572,71 @@ function (dojo, declare,) {
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
 
+        },
+
+        setupExpandableSection: function() {
+            const header = document.getElementById('other_players_header');
+            const section = document.getElementById('other_players_section');
+            
+            if (header && section) {
+                header.addEventListener('click', () => {
+                    section.classList.toggle('collapsed');
+                    
+                    // Save the state in localStorage for persistence
+                    const isCollapsed = section.classList.contains('collapsed');
+                    localStorage.setItem('kalua_other_players_collapsed', isCollapsed);
+                });
+                
+                // Restore saved state
+                const savedState = localStorage.getItem('kalua_other_players_collapsed');
+                if (savedState === 'true') {
+                    section.classList.add('collapsed');
+                }
+            }
+        },
+
+        ///////////////////////////////////////////////////
+        //// Helper functions
+        
+        createPlayerArea: function(player, containerId = 'player-tables') {
+            console.log('Player color debug:', player.id, player.color); // Debug line
+            
+            // Fix truncated colors - ensure they have 6 hex digits
+            let fixedColor = player.color;
+            if (fixedColor && fixedColor.startsWith('#') && fixedColor.length === 6) {
+                // Color is missing the last digit, add the appropriate digit based on pattern
+                const colorMap = {
+                    '#4685F': '#4685FF', // Blue
+                    '#C22D2': '#C22D2D', // Red
+                    '#C8CA2': '#C8CA25', // Yellow
+                    '#2EA23': '#2EA232', // Green
+                    '#913CB': '#913CB3'  // Purple
+                };
+                fixedColor = colorMap[fixedColor] || fixedColor;
+                console.log('Fixed color from', player.color, 'to', fixedColor);
+            }
+            
+            document.getElementById(containerId).insertAdjacentHTML('beforeend', `
+                <div id="player_area_${player.id}" class="player_area">
+                    <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
+                    <div id="${player.id}_cards" class="player_cards"></div>
+                    <div id="${player.id}_families" class="player_families"></div>
+                    <div id="${player.id}_InPlay" class="player_kept_cards">
+                        Kept Cards:
+                        <div id="${player.id}_InPlayContent"></div>
+                    </div>
+                </div>
+            `);
+            
+            // Additional color setting via JavaScript as backup
+            setTimeout(() => {
+                const nameElement = document.getElementById(`player_name_${player.id}`);
+                if (nameElement && fixedColor) {
+                    nameElement.style.color = fixedColor;
+                    nameElement.style.setProperty('color', fixedColor, 'important');
+                    console.log('Applied color to', player.name, ':', fixedColor);
+                }
+            }, 100);
         },
 
         ///////////////////////////////////////////////////
@@ -1814,6 +1867,20 @@ function (dojo, declare,) {
             if (this.cardCounters[player_id]) {
                 const currentValue = this.cardCounters[player_id].getValue();
                 this.cardCounters[player_id].setValue(Math.max(0, currentValue + 1));
+            }
+        },
+
+        notif_quickstartCardsDealt: async function( args )
+        {
+            console.log('Quickstart cards dealt to all players');
+            
+            // Force refresh all player hands to show the newly dealt cards
+            const players = args.players;
+            for (let player_id of players) {
+                if (player_id == this.player_id) {
+                    // For current player, trigger a full hand refresh
+                    this.updateDisplay();
+                }
             }
         },
 
