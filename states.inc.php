@@ -26,7 +26,19 @@ $machinestates = [
 
     // The initial state. Please do not modify.
 
-    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_INITIAL_DRAW)->build(),
+    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_QUICK_DRAW)->build(),
+
+        /* Quickstart setup */
+    ST_QUICK_DRAW => GameStateBuilder::create()
+        ->name('quickDraw')
+        ->description(clienttranslate('Dealing quickstart cards to all players'))
+        ->type(StateType::GAME)
+        ->action('stQuickDraw')
+        ->transitions([
+            'drawToFive' => ST_PHASE_ONE_DRAW,
+            'normalDraw' => ST_INITIAL_DRAW
+        ])
+        ->build(),
 
     /* Initial setup */
     ST_INITIAL_DRAW => GameStateBuilder::create()

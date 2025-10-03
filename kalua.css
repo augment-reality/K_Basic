@@ -283,4 +283,30 @@ border-radius: 5px; */
     display: inline-block;
 }
 
+/* Player color borders for played cards - clean and minimal */
+.player-card-blue {
+    border: 2px solid #4685FF !important;
+    border-radius: 6px !important;
+}
+
+.player-card-red {
+    border: 2px solid #C22D2D !important;
+    border-radius: 6px !important;
+}
+
+.player-card-yellow {
+    border: 2px solid #C8CA25 !important;
+    border-radius: 6px !important;
+}
+
+.player-card-green {
+    border: 2px solid #2EA232 !important;
+    border-radius: 6px !important;
+}
+
+.player-card-purple {
+    border: 2px solid #913CB3 !important;
+    border-radius: 6px !important;
+}
+
 

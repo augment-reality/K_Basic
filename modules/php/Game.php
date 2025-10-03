@@ -63,8 +63,75 @@ class Game extends \Table
 
 ////////////Game State Actions /////////////////////
 
+    public function stQuickDraw(): void
+    {
+        // Check if quickstart cards option is enabled
+        $quickstart_enabled = $this->tableOptions->get(100) == 2;
+        
+        if ($quickstart_enabled) {
+            // Auto-deal quickstart cards to all players
+            $players = $this->getCollectionFromDb("SELECT player_id FROM player ORDER BY player_no");
+            
+            // Define quickstart card sets (3 disaster + 2 bonus cards per player)
+            $quickstart_disaster_cards = [
+                LocalDisasterCard::Tornado->value,
+                LocalDisasterCard::Earthquake->value, 
+                LocalDisasterCard::BadWeather->value
+            ];
+            
+            $quickstart_bonus_cards = [
+                BonusCard::GoodWeather->value,
+                BonusCard::Fertility->value
+            ];
+            
+            foreach ($players as $player) {
+                $player_id = $player['player_id'];
+                
+                // Deal 3 specific disaster cards
+                foreach ($quickstart_disaster_cards as $card_type_arg) {
+                    $cards = $this->disasterCards->getCardsOfTypeInLocation(
+                        CardType::LocalDisaster->value, 
+                        $card_type_arg, 
+                        'deck'
+                    );
+                    if (!empty($cards)) {
+                        $card = array_shift($cards);
+                        $this->disasterCards->moveCard($card['id'], 'hand', $player_id);
+                    }
+                }
+                
+                // Deal 2 specific bonus cards
+                foreach ($quickstart_bonus_cards as $card_type_arg) {
+                    $cards = $this->bonusCards->getCardsOfTypeInLocation(
+                        CardType::Bonus->value,
+                        $card_type_arg,
+                        'deck'
+                    );
+                    if (!empty($cards)) {
+                        $card = array_shift($cards);
+                        $this->bonusCards->moveCard($card['id'], 'hand', $player_id);
+                    }
+                }
+            }
+            
+            // Notify all players about quickstart cards being dealt
+            $this->notifyAllPlayers('quickstartCardsDealt', 
+                clienttranslate('Quickstart cards have been automatically dealt to all players'), 
+                []
+            );
+            
+            // Skip ahead to the drawToFive phase (Phase One Draw)
+            $this->gamestate->nextState('drawToFive');
+        } else {
+            // Route to normal initial draw where players choose their own cards
+            $this->gamestate->setAllPlayersMultiactive();
+            $this->gamestate->nextState('normalDraw');
+        }
+    }
+
     public function stInitialDraw(): void
     {
+        // Normal game: players choose their own cards
         $this->gamestate->setAllPlayersMultiactive();
     }
 
@@ -1442,6 +1509,10 @@ class Game extends \Table
                 if ($was_eliminated == 0) {
                     // Track statistics: player eliminated (only count when first eliminated)
                     $this->incStat(1, 'players_eliminated');
+                    
+                    // Increment score for all remaining (non-eliminated) players
+                    self::DbQuery("UPDATE player SET player_score = player_score + 1 WHERE player_eliminated = 0 AND player_id != $player_id");
+                    
                 }
                 self::DbQuery("UPDATE player SET player_eliminated = 1 WHERE player_id = $player_id");
             }
@@ -1896,6 +1967,26 @@ class Game extends \Table
         // Clear the continuing play flag since the player is passing
         $this->setGameStateValue("round_leader_continuing_play", 0);
         
+        // Check if this should be treated as an automatic pass
+        $player_id = $this->getActivePlayerId();
+        $players = $this->loadPlayersBasicInfos();
+        $player = $players[$player_id];
+        
+        // Count cards in hand
+        $disaster_cards = $this->getObjectFromDB("SELECT COUNT(*) as count FROM disaster_card WHERE card_location = 'hand' AND card_location_arg = $player_id");
+        $bonus_cards = $this->getObjectFromDB("SELECT COUNT(*) as count FROM bonus_card WHERE card_location = 'hand' AND card_location_arg = $player_id");
+        $total_cards = ($disaster_cards['count'] ?? 0) + ($bonus_cards['count'] ?? 0);
+        
+        // Check if player has no cards and insufficient prayer for auto-pass
+        if ($total_cards == 0 && $player['player_prayer'] < 5) {
+            $player_name = $player['player_name'];
+            $this->notifyAllPlayers('message', 
+                clienttranslate('${player_name} was automatically passed (no cards and insufficient prayer to buy more)'), 
+                [
+                    'player_name' => $player_name
+                ]
+            );
+        }
 
         $this->gamestate->nextState('nextPlayerThree');
     }
@@ -3239,10 +3330,11 @@ class Game extends \Table
         $result["handBonus"] = $this->bonusCards->getPlayerHand($current_player_id);
 
         /* Get played and resolved cards for all players to display in the common areas */
-        $result["playedDisaster"] = $this->disasterCards->getCardsInLocation("played");
-        $result["playedBonus"] = $this->bonusCards->getCardsInLocation("played");
-        $result["resolvedDisaster"] = $this->disasterCards->getCardsInLocation("resolved");
-        $result["resolvedBonus"] = $this->bonusCards->getCardsInLocation("resolved");
+        // Use custom queries to include played_by information
+        $result["playedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'played'");
+        $result["playedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'played'");
+        $result["resolvedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'resolved'");
+        $result["resolvedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'resolved'");
 
         /* TODO get size of each players hand */
 
@@ -3292,7 +3384,15 @@ class Game extends \Table
         $this->reloadPlayersBasicInfos();
 
         // Init global values with their initial values.
-        //$this->setGameStateInitialValue("Update_Count", 0);
+        $this->setGameStateInitialValue("roundLeader", 0);
+        $this->setGameStateInitialValue("saved_state", 0);
+        $this->setGameStateInitialValue("saved_active_player", 0);
+        $this->setGameStateInitialValue("current_global_disaster", 0);
+        $this->setGameStateInitialValue("round_leader_played_card", 0);
+        $this->setGameStateInitialValue("round_leader_continuing_play", 0);
+        $this->setGameStateInitialValue("discard_completed_for_card", 0);
+        $this->setGameStateInitialValue("dice_completed_for_card", 0);
+        $this->setGameStateInitialValue("convert_pray_requested", 0);
 
         $disasterCards = array(
 
@@ -3341,7 +3441,6 @@ class Game extends \Table
 
         // Initialize atheist families (e.g., 3 per player, stored in a global table or variable)
         $atheist_start = count($players) * 3;
-        $this->DbQuery("INSERT INTO global (global_id, global_value) VALUES (101, $atheist_start)");
 
         // Init game statistics.
 
@@ -3369,6 +3468,14 @@ class Game extends \Table
         $this->initStat("player", "cards_played", 0);
         $this->initStat("player", "global_disasters_doubled", 0);
         $this->initStat("player", "global_disasters_avoided", 0);
+
+        // Initialize global atheist families pool
+        $player_count = count($players);
+        $initial_atheist_families = $player_count * 3; // 3 families per player start on the Kalua board
+        
+        // Use direct database insert for custom global variable
+        $this->DbQuery("INSERT INTO global (global_id, global_value) VALUES (101, $initial_atheist_families) 
+                       ON DUPLICATE KEY UPDATE global_value = VALUES(global_value)");
 
         // TODO: Setup the initial game situation here.
         $initial_leader = $this->activeNextPlayer();

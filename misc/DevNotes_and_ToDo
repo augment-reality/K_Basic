@@ -17,17 +17,11 @@ FIXED: Single player card play issue - Added checks in stNextPlayerCards() and s
 
 -tooltips not staying aligned with cards
 -test buy-for-5 in all states
--sidebars names not color coded?
--player color preferences: https://en.doc.boardgamearena.com/Main_game_logic:_Game.php#Player_color_preferences
 -handle php case for "zombie" player: remove families from game and pass all options to play card
--player scores? The column player_score from the player table is automatically loaded into this.scoreCtrl
-    and therefore into the stars location on the player board. This occurs sometime after the game setup() function.
-    However this score must be updated as the game progresses using notifications.
-
 
 -autopass playing card when no cards and < 5 prayer
 -warnings for: cards with no targets; when no atheists to convert/steal
--calculate number of families lost/gained during pray/convert for easier player decision making?
+-make pray/convert prediction a game option?
 -undo buttons
 -"play a card" - option to play w/onclick?
 -option to hide other players divs?

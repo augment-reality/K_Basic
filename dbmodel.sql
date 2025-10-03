@@ -9,20 +9,11 @@
 
 -- dbmodel.sql
 
--- This is the file where you are describing the database schema of your game
--- Basically, you just have to export from PhpMyAdmin your table structure and copy/paste
--- this export here.
 -- Note that the database itself and the standard tables ("global", "stats", "gamelog" and "player") are
 -- already created and must not be created here
 
 -- Note: The database schema is created from this file when the game starts. If you modify this file,
 --       you have to restart a game to see your changes in database.
-
--- Create a "card" table to be used with the "Deck" tools:
--- card_type (global/local/bonus) 21 Bonus, 19 Local Disaster, 10 Global Disaster
--- card_type_arg(1,2,3)
--- card_location (deck, hand, discard, played, resolved)
--- card_location_arg (player id)
 
 CREATE TABLE IF NOT EXISTS `disaster_card` (
   `card_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -70,4 +61,7 @@ CREATE TABLE IF NOT EXISTS `global_disaster_choice` (
   PRIMARY KEY (`card_id`, `player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-
+-- Initialize global variables
+-- Note: This will only insert if the global_id doesn't already exist
+-- The value will be properly set during game setup based on player count
+INSERT IGNORE INTO `global` (global_id, global_value) VALUES (101, 0);

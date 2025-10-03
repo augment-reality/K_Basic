@@ -83,8 +83,16 @@ function (dojo, declare,) {
             
 
             
-            // Create player areas
-            Object.values(gamedatas.players).forEach(player => {
+            // Create player areas - current player first, then others
+            const sortedPlayers = Object.values(gamedatas.players).sort((a, b) => {
+                // Current player goes first
+                if (a.id == this.player_id) return -1;
+                if (b.id == this.player_id) return 1;
+                // Other players maintain their original order
+                return parseInt(a.id) - parseInt(b.id);
+            });
+            
+            sortedPlayers.forEach(player => {
                 console.log('Player color debug:', player.id, player.color); // Debug line
                 
                 // Fix truncated colors - ensure they have 6 hex digits
@@ -93,9 +101,9 @@ function (dojo, declare,) {
                     // Color is missing the last digit, add the appropriate digit based on pattern
                     const colorMap = {
                         '#4685F': '#4685FF', // Blue
-                        '#2EA23': '#2EA232', // Green  
                         '#C22D2': '#C22D2D', // Red
                         '#C8CA2': '#C8CA25', // Yellow
+                        '#2EA23': '#2EA232', // Green
                         '#913CB': '#913CB3'  // Purple
                     };
                     fixedColor = colorMap[fixedColor] || fixedColor;
@@ -430,16 +438,34 @@ function (dojo, declare,) {
             })
 
             /* Populate played cards from database */
+            console.log(`DEBUG: gamedatas.playedDisaster:`, gamedatas.playedDisaster);
             Object.values(gamedatas.playedDisaster).forEach(card => {
+                console.log(`DEBUG: Processing disaster card:`, card);
+                console.log(`DEBUG: card.played_by = ${card.played_by} (type: ${typeof card.played_by})`);
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['played'].addToStockWithId(uniqueId, card.id);
-                this.addCardTooltipByUniqueId('played', uniqueId);
+                
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[card.id]) {
+                    this['played'].items[card.id].played_by = card.played_by;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by);
+                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
 
+            console.log(`DEBUG: gamedatas.playedBonus:`, gamedatas.playedBonus);
             Object.values(gamedatas.playedBonus).forEach(card => {
+                console.log(`DEBUG: Processing bonus card:`, card);
+                console.log(`DEBUG: card.played_by = ${card.played_by} (type: ${typeof card.played_by})`);
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['played'].addToStockWithId(uniqueId, card.id);
-                this.addCardTooltipByUniqueId('played', uniqueId);
+                
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[card.id]) {
+                    this['played'].items[card.id].played_by = card.played_by;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by);
+                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
 
             /* Populate resolved cards from database */
@@ -590,7 +616,7 @@ function (dojo, declare,) {
             return null;
         },
         
-        addCardTooltip: function(elementId, cardType, cardId) {
+        addCardTooltip: function(elementId, cardType, cardId, playerId = null) {
             // Calculate image position for the larger image
             let imagePosition = 0;
             
@@ -605,46 +631,71 @@ function (dojo, declare,) {
                 imagePosition = cardId + 14;
             }
             
-            // Remove the +1 adjustment since it's causing the offset
-            
             // Calculate X,Y position in sprite grid
-            // Sprite: 1200×1774 pixels, 5 cards per row, 5 rows
-            // Each card: 240×354.8 pixels
             const cardsPerRow = 5;
-            const cardWidth = 240;   // 1200 ÷ 5 = 240px per card
-            const cardHeight = 354.8; // 1774 ÷ 5 = 354.8px per card
+            const cardWidth = 240;   
+            const cardHeight = 354.8; 
             
-            const col = imagePosition % cardsPerRow;  // Column (0-4)
-            const row = Math.floor(imagePosition / cardsPerRow);  // Row (0-4)
+            const col = imagePosition % cardsPerRow;
+            const row = Math.floor(imagePosition / cardsPerRow);
             
             const bgPositionX = -(col * cardWidth);
             const bgPositionY = -(row * cardHeight);
             
-            // Create image tooltip
+            // Create clean image tooltip without player-specific styling
             const imageUrl = g_gamethemeurl + 'img/Cards_All_1200_1774.png';
             
-            // Use img tag approach with correct card dimensions and positioning
             const imgTooltip = `<img src="${imageUrl}" style="width: 240px; height: 354.8px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
             
             // Add image tooltip
             this.addTooltipHtml(elementId, imgTooltip, 300);
         },
         
-        addCardTooltipByUniqueId: function(stockName, uniqueId) {
+        addCardTooltipByUniqueId: function(stockName, uniqueId, playerId = null) {
+            console.log(`DEBUG: addCardTooltipByUniqueId called with stockName=${stockName}, uniqueId=${uniqueId}, playerId=${playerId}`);
+            
             const cardType = this.getCardTypeFromUniqueId(uniqueId);
             const cardId = this.getCardIdFromUniqueId(uniqueId);
             
             if (cardType && cardId !== null) {
                 console.log(`Tooltip request: uniqueId=${uniqueId}, cardType=${cardType}, cardId=${cardId} for ${stockName}`);
                 
-                // Use setTimeout to ensure the element exists in DOM before adding tooltip
+                // Use BGA stock system's built-in tooltip functionality if available
                 setTimeout(() => {
-                    this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardId);
+                    // Use provided playerId or try to find it from stored data
+                    let finalPlayerId = playerId;
+                    
+                    if (this[stockName] && this[stockName].getAllItems) {
+                        // Find the stock item with this uniqueId
+                        const stockItems = this[stockName].getAllItems();
+                        const targetItem = stockItems.find(item => item.type == uniqueId);
+                        
+                        if (targetItem) {
+                            const elementId = this[stockName].getItemDivId(targetItem.id);
+                            
+                            // Try to get player ID from stored data if not provided
+                            if (!finalPlayerId && this[stockName].items && this[stockName].items[targetItem.id] && this[stockName].items[targetItem.id].played_by) {
+                                finalPlayerId = this[stockName].items[targetItem.id].played_by;
+                                console.log(`DEBUG: Found stored playerId=${finalPlayerId} for card ${targetItem.id}`);
+                            }
+                            
+                            if (elementId) {
+                                this.addCardTooltip(elementId, cardType, cardId, finalPlayerId);
+                                console.log(`Added tooltip to stock item ${targetItem.id} with element ID ${elementId}, playerId=${finalPlayerId}`);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Fallback to previous method
+                    this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardId, finalPlayerId);
                 }, 300);
             }
         },
         
-        addTooltipToLatestCard: function(stockName, uniqueId, cardType, cardId) {
+        addTooltipToLatestCard: function(stockName, uniqueId, cardType, cardId, playerId = null) {
+            console.log(`DEBUG: addTooltipToLatestCard called with playerId=${playerId}`);
+            
             // Find elements based on stock type
             let allElements;
             
@@ -678,11 +729,14 @@ function (dojo, declare,) {
             
             if (targetElement) {
                 const elementId = targetElement.id || `${stockName}_${uniqueId}`;
-                console.log(`Adding tooltip to latest element: ${elementId} -> uniqueId=${uniqueId}`);
+                console.log(`Adding tooltip to latest element: ${elementId} -> uniqueId=${uniqueId}, playerId=${playerId}`);
                 
-                this.addCardTooltip(elementId, cardType, cardId);
+                this.addCardTooltip(elementId, cardType, cardId, playerId);
                 targetElement.setAttribute('data-tooltip-added', 'true');
                 targetElement.setAttribute('data-unique-id', uniqueId);
+                if (playerId) {
+                    targetElement.setAttribute('data-played-by', playerId);
+                }
             } else {
                 console.log(`No available element found for tooltip in ${stockName}`);
             }
@@ -863,6 +917,33 @@ function (dojo, declare,) {
                         }
                         break;
                     case 'phaseThreePlayCard':
+                        // Check if player should be automatically passed
+                        const cardsInHand = this[`${this.player_id}_cards`].count();
+                        const currentPrayer = this.prayerCounters[this.player_id].getValue();
+                        
+                        if (cardsInHand === 0 && currentPrayer < 5) {
+                            // Player has no cards and insufficient prayer to buy more - automatically pass
+                            this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
+                            
+                            // Automatically trigger the pass action after a brief delay to show the message
+                            setTimeout(() => {
+                                this.bgaPerformAction('actPlayCardPass', {});
+                            }, 2000);
+                            
+                            // Still show buttons but disable them to indicate automatic pass
+                            this.addActionButton('playCard-btn', _('Play Card'), () => {}, 'red');
+                            dojo.addClass('playCard-btn', 'disabled');
+                            
+                            this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => {}, 'red');
+                            dojo.addClass('buyCardReflex-btn', 'disabled');
+                            
+                            this.addActionButton('pass-btn', _('Passing Automatically...'), () => {}, 'gray');
+                            dojo.addClass('pass-btn', 'disabled');
+                            
+                            console.log(`Auto-passing for player ${this.player_id}: ${cardsInHand} cards, ${currentPrayer} prayer`);
+                            return; // Skip normal button setup
+                        }
+                        
                         this.addActionButton('playCard-btn', _('Play Card'), () => {
                             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
                             if (selectedCards.length > 0) {
@@ -1026,6 +1107,9 @@ function (dojo, declare,) {
         },
 
         playCardOnTable : function(player_id, color, value, card_id) {
+            console.log(`DEBUG: playCardOnTable called - player_id=${player_id}, card_id=${card_id}`);
+            console.log(`DEBUG: Available players in gamedatas:`, this.gamedatas ? Object.keys(this.gamedatas.players || {}) : 'no gamedatas');
+            
                 // You played a card. If it exists in your hand, move card from there and remove
                 // corresponding item
                     this[`${player_id}_cards`].removeFromStockById(card_id);
@@ -1038,9 +1122,246 @@ function (dojo, declare,) {
             const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
             console.log("playing unique ID " + uniqueId)
             this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
-            this.addCardTooltipByUniqueId('played', uniqueId); // Add tooltip
+            
+            // Store player info for this card for future reference
+            if (this['played'] && this['played'].items && this['played'].items[card_id]) {
+                this['played'].items[card_id].played_by = player_id;
+                console.log(`DEBUG: Stored played_by=${player_id} on card ${card_id}`);
+            }
+
+            // Add tooltip with player information
+            setTimeout(() => {
+                console.log(`DEBUG: Setting up tooltip for card ${card_id} played by player ${player_id}`);
+                
+                const cardType = this.getCardTypeFromUniqueId(uniqueId);
+                const cardIdFromUnique = this.getCardIdFromUniqueId(uniqueId);
+                
+                console.log(`DEBUG: Card details - uniqueId=${uniqueId}, cardType=${cardType}, cardIdFromUnique=${cardIdFromUnique}`);
+                
+                if (cardType && cardIdFromUnique !== null) {
+                    // Find the DOM element for this card
+                    const stockItems = this['played'].getAllItems();
+                    console.log(`DEBUG: Found ${Object.keys(stockItems).length} items in played stock`);
+                    
+                    const targetItem = Object.values(stockItems).find(item => item.type == uniqueId);
+                    console.log(`DEBUG: Target item found:`, targetItem);
+                    
+                    if (targetItem) {
+                        const elementId = this['played'].getItemDivId(targetItem.id);
+                        console.log(`DEBUG: Element ID from stock: ${elementId}`);
+                        
+                        if (elementId) {
+                            // Add tooltip with player information
+                            this.addCardTooltip(elementId, cardType, cardIdFromUnique, player_id);
+                            console.log(`DEBUG: Called addCardTooltip with player_id=${player_id}`);
+                        } else {
+                            console.warn(`DEBUG: Could not get element ID for target item`);
+                        }
+                    } else {
+                        console.warn(`DEBUG: Could not find target item with uniqueId ${uniqueId}`);
+                        // Try alternative approach - find by card_id directly
+                        const fallbackElementId = `played_item_${card_id}`;
+                        console.log(`DEBUG: Trying fallback element ID: ${fallbackElementId}`);
+                        this.addCardTooltip(fallbackElementId, cardType, cardIdFromUnique, player_id);
+                    }
+                } else {
+                    console.warn(`DEBUG: Invalid card type or ID - cardType=${cardType}, cardIdFromUnique=${cardIdFromUnique}`);
+                }
+                
+                // Add visual player indicator
+                this.addPlayerIndicator(card_id, player_id, 'played');
+            }, 200);
 
             console.log(`Card ${card_id} played by player ${player_id}`);
+        },
+
+        // Add a simple colored indicator next to the card
+        addPlayerIndicator: function(card_id, player_id, stock_name) {
+            try {
+                // Get player color
+                let playerColor = '#4685FF'; // default blue
+                let playerName = 'Unknown';
+                
+                if (this.gamedatas && this.gamedatas.players && this.gamedatas.players[player_id]) {
+                    playerColor = this.gamedatas.players[player_id].color;
+                    playerName = this.gamedatas.players[player_id].name;
+                }
+                
+                setTimeout(() => {
+                    // Find the card element
+                    const selectors = [
+                        `#${stock_name}_item_${card_id}`,
+                        `[id="${stock_name}_item_${card_id}"]`,
+                        `[id*="${stock_name}"][id*="item_${card_id}"]`
+                    ];
+                    
+                    let cardElement = null;
+                    for (let selector of selectors) {
+                        cardElement = document.querySelector(selector);
+                        if (cardElement) break;
+                    }
+                    
+                    if (cardElement) {
+                        // Remove any existing indicator
+                        const existingIndicator = cardElement.querySelector('.player-indicator');
+                        if (existingIndicator) {
+                            existingIndicator.remove();
+                        }
+                        
+                        // Create player indicator
+                        const indicator = document.createElement('div');
+                        indicator.className = 'player-indicator';
+                        indicator.style.cssText = `
+                            position: absolute;
+                            top: -5px;
+                            right: -5px;
+                            width: 20px;
+                            height: 20px;
+                            background-color: ${playerColor};
+                            border: 2px solid white;
+                            border-radius: 50%;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                            z-index: 10;
+                            cursor: help;
+                        `;
+                        indicator.title = `Played by ${playerName}`;
+                        
+                        // Ensure the card element has relative positioning
+                        if (getComputedStyle(cardElement).position === 'static') {
+                            cardElement.style.position = 'relative';
+                        }
+                        
+                        cardElement.appendChild(indicator);
+                        console.log(`Added player indicator for ${playerName} (${playerColor}) to card ${card_id}`);
+                    } else {
+                        console.warn(`Could not find card element for ${stock_name}_item_${card_id}`);
+                    }
+                }, 150);
+                
+            } catch (error) {
+                console.error('Error in addPlayerIndicator:', error);
+            }
+        },
+
+        // Helper function to add player color border to cards
+        addPlayerBorderToCard: function(card_id, player_id, stock_name) {
+            console.log(`DEBUG: Adding border for card ${card_id}, player ${player_id}, stock ${stock_name}`);
+            
+            if (!player_id || !this.gamedatas.players[player_id]) {
+                console.warn(`No player data found for player ${player_id}`);
+                return;
+            }
+            
+            // Get player's fixed color using same logic as setup
+            let fixedColor = this.gamedatas.players[player_id].color;
+            console.log(`Player ${player_id} color from gamedatas: ${fixedColor}`);
+            
+            if (fixedColor && fixedColor.startsWith('#') && fixedColor.length === 6) {
+                const colorMap = {
+                    '#4685F': '#4685FF', // Blue
+                    '#C22D2': '#C22D2D', // Red
+                    '#C8CA2': '#C8CA25', // Yellow
+                    '#2EA23': '#2EA232', // Green
+                    '#913CB': '#913CB3'  // Purple
+                };
+                fixedColor = colorMap[fixedColor] || fixedColor;
+            }
+            
+            // Apply CSS class using BGA Stock extraClasses functionality
+            const colorClass = this.getPlayerColorClass(fixedColor);
+            console.log(`Color class for player ${player_id}: ${colorClass}`);
+            
+            if (!colorClass) {
+                console.warn(`No color class found for color ${fixedColor}`);
+                return;
+            }
+            
+            if (this[stock_name]) {
+                // Use setTimeout to ensure the stock item exists, with retry logic
+                const attemptBorderApplication = (attempt = 1, maxAttempts = 5) => {
+                    setTimeout(() => {
+                        let applied = false;
+                        
+                        // Method 1: Try BGA Stock addExtraClass method
+                        try {
+                            if (this[stock_name].addExtraClass) {
+                                this[stock_name].addExtraClass(card_id, colorClass);
+                                console.log(`Applied ${colorClass} via addExtraClass to card ${card_id} (attempt ${attempt})`);
+                                applied = true;
+                            }
+                        } catch (e) {
+                            console.warn('addExtraClass method failed:', e);
+                        }
+                        
+                        // Method 2: Try multiple DOM selector approaches
+                        if (!applied) {
+                            const selectors = [
+                                `#${stock_name}_item_${card_id}`,
+                                `[id="${stock_name}_item_${card_id}"]`,
+                                `[id*="${stock_name}"][id*="item_${card_id}"]`,
+                                `[id*="${card_id}"]`
+                            ];
+                            
+                            for (let selector of selectors) {
+                                const cardElement = document.querySelector(selector);
+                                if (cardElement) {
+                                    cardElement.classList.add(colorClass);
+                                    console.log(`Applied ${colorClass} via selector "${selector}" to card ${card_id} (attempt ${attempt})`);
+                                    console.log(`Card element classes now: ${cardElement.className}`);
+                                    applied = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Method 3: Try finding by stock item class and data attributes
+                        if (!applied) {
+                            const stockElements = document.querySelectorAll(`.stockitem[data-card-id="${card_id}"], .stockitem[id*="${card_id}"]`);
+                            if (stockElements.length > 0) {
+                                stockElements.forEach(element => {
+                                    element.classList.add(colorClass);
+                                    console.log(`Applied ${colorClass} via stockitem class to card ${card_id} (attempt ${attempt})`);
+                                });
+                                applied = true;
+                            }
+                        }
+                        
+                        if (!applied && attempt < maxAttempts) {
+                            console.log(`Border application failed for card ${card_id}, retrying (attempt ${attempt + 1}/${maxAttempts})`);
+                            attemptBorderApplication(attempt + 1, maxAttempts);
+                        } else if (!applied) {
+                            console.error(`Could not find or apply color class to card ${card_id} in stock ${stock_name} after ${maxAttempts} attempts`);
+                            // Log all possible elements for debugging
+                            const allElements = document.querySelectorAll(`[id*="${card_id}"]`);
+                            console.log(`Found ${allElements.length} elements with card_id ${card_id}:`, allElements);
+                        }
+                    }, attempt * 100); // Increase delay with each attempt
+                };
+                
+                attemptBorderApplication();
+            } else {
+                console.warn(`Stock ${stock_name} not found`);
+            }
+        },
+
+        // Helper function to get CSS class name based on player color
+        getPlayerColorClass: function(color) {
+            const colorClassMap = {
+                '#4685FF': 'player-card-blue',
+                '#C22D2D': 'player-card-red',
+                '#C8CA25': 'player-card-yellow',
+                '#2EA232': 'player-card-green',
+                '#913CB3': 'player-card-purple'
+            };
+            return colorClassMap[color] || null;
+        },
+
+        // Helper function to convert hex color to rgba
+        hexToRgba: function(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         },
 
         drawCard: function(player, card_id, card_type, card_type_arg) {
@@ -1417,6 +1738,20 @@ function (dojo, declare,) {
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
             
+            // Add 0.5 second delays to card resolution notifications so players can follow along
+            this.notifqueue.setSynchronous('playerCountsChanged', 500);
+            this.notifqueue.setSynchronous('familiesConverted', 500);
+            this.notifqueue.setSynchronous('familiesDied', 500);
+            this.notifqueue.setSynchronous('templeDestroyed', 500);
+            this.notifqueue.setSynchronous('leaderRecovered', 500);
+            this.notifqueue.setSynchronous('templeBuilt', 500);
+            this.notifqueue.setSynchronous('amuletGained', 500);
+            this.notifqueue.setSynchronous('cardResolved', 500);
+            this.notifqueue.setSynchronous('cardBeingResolved', 500);
+            this.notifqueue.setSynchronous('diceRolled', 500);
+            this.notifqueue.setSynchronous('amuletUsed', 500);
+            this.notifqueue.setSynchronous('amuletNotUsed', 500);
+            
             // Add tooltips to any cards that might have been missed
             setTimeout(() => {
                 this.refreshAllCardTooltips();
@@ -1547,7 +1882,15 @@ function (dojo, declare,) {
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
                 this['played'].addToStockWithId(uniqueId, args.card_id);
-                this.addCardTooltipByUniqueId('played', uniqueId);
+                
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[args.card_id]) {
+                    this['played'].items[args.card_id].played_by = args.player_id;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, args.player_id);
+                
+                // Add player color border to the played card
+                this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
             }
 
             // Update prayer counter if prayer was spent

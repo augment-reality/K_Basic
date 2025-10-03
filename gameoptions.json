@@ -1,1 +1,24 @@
-{}
+{
+  "102": {
+    "name": "Scenarios",
+    "values": {
+      "1": {
+        "name": "Off",
+        "nobeginner": false
+      },
+      "2": {
+        "name": "On",
+        "tmdisplay": "Scenarios",
+        "nobeginner": true
+      }
+    },
+    "displaycondition": [
+      {
+        "type": "otheroptionisnot",
+        "id": 100,
+        "value": 1
+      }
+    ],
+    "notdisplayedmessage": "Scenarios variant is not available if Learning variant is chosen"
+  }
+}

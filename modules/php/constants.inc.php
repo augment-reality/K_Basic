@@ -6,8 +6,9 @@
 const ST_BGA_GAME_SETUP = 1;
 
 /* Game setup states */
-const ST_INITIAL_DRAW = 10;
-const ST_INITIAL_FINISH = 11;
+const ST_QUICK_DRAW = 10;
+const ST_INITIAL_DRAW = 11;
+const ST_INITIAL_FINISH = 12;
 
 /* Phase one - drawing */
 const ST_PHASE_ONE_DRAW = 20;
