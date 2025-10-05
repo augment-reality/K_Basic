@@ -1,1 +1,32 @@
-{}
+{
+    "100": {
+        "name": "Quickstart Cards",
+        "values": {
+            "1": {
+                "name": "Off",
+                "description": "Players draw starting cards individually",
+                "tmdisplay": ""
+            },
+            "2": {
+                "name": "On",
+                "description": "Players draw 3 disaster and 2 bonus cards automatically",
+                "tmdisplay": "With Quickstart Cards"
+            }
+        }
+    },
+    "101": {
+        "name": "Show End-Round Predictions",
+        "values": {
+            "1": {
+                "name": "Off",
+                "description": "End-Round Predictions are disabled",
+                "tmdisplay": ""
+            },
+            "2": {
+                "name": "On", 
+                "description": "Allow players to see end-round predictions",
+                "tmdisplay": "With End-Round Predictions"
+            }
+        }
+    }
+}

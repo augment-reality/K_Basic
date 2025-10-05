@@ -16,7 +16,7 @@
  */
 
 define([
-    "dojo","dojo/_base/declare",
+    "dojo","dojo/_base/declare","dijit/Tooltip",
     "ebg/core/gamegui",
     "ebg/counter",
     "ebg/stock",
@@ -39,14 +39,45 @@ function (dojo, declare,) {
 
                 <div id="card_areas">
                 
-                    <div id="playedCards"><div class="played_resolved">Played Cards:</div>
+                    <div id="playedCards">
+                        <div class="played_resolved">Played Cards:</div>
+                        <div id="playedCardsContent"></div>
                     </div>
-                    <div id="resolvedCards"><div class="played_resolved">Resolved Cards:</div>
+                    <div id="resolvedCards" style="position: relative;">
+                        <div class="played_resolved">Resolved Cards:</div>
+                        <div id="resolvedCardsContent"></div>
+                        <div id="prediction_panel" style="display: none; position: absolute; top: 0; left: 100%; margin-left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000; max-width: 250px; min-width: 200px;">
+                            <div id="prediction_panel_header" style="font-weight: bold; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                                ⭐ Convert/Pray Predictions ✖
+                            </div>
+                            <div id="prediction_content"></div>
+                            <div style="font-size: 10px; margin-top: 5px; opacity: 0.7;">
+                                Based on current happiness & temples
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-
                 <div id="player-tables" class="zone-container"></div>
+                
+                <!-- Dev Statistics Display -->
+                <div id="dev_stats_panel" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.9); color: white; padding: 15px; border-radius: 8px; font-size: 11px; z-index: 2000; max-width: 300px; max-height: 400px; overflow-y: auto; display: none;">
+                    <div style="font-weight: bold; margin-bottom: 10px; cursor: pointer; user-select: none;" onclick="this.parentElement.style.display='none'">
+                        📊 Live Game Statistics ✖
+                    </div>
+                    <div style="font-weight: bold; color: #4CAF50; margin-bottom: 5px;">Table Statistics:</div>
+                    <div id="table_stats_content"></div>
+                    <div style="font-weight: bold; color: #2196F3; margin: 10px 0 5px 0;">Player Statistics:</div>
+                    <div id="player_stats_content"></div>
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #444; font-size: 10px; opacity: 0.7;">
+                        Updates automatically • For development only
+                    </div>
+                </div>
+                
+                <!-- Dev Statistics Toggle Button -->
+                <div id="dev_stats_toggle" style="position: fixed; top: 10px; right: 10px; background: #FF9800; color: white; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: bold; z-index: 1999;" onclick="document.getElementById('dev_stats_panel').style.display='block'; this.style.display='none';">
+                    📊 Stats
+                </div>
             `);
 
             this.ID_GLOBAL_DISASTER = 1;
@@ -59,37 +90,93 @@ function (dojo, declare,) {
             this.templeCounters = {};
             this.amuletCounters = {};
             this.familyCounters = {};
+            
+            // Prediction panel settings
+            this.predictionPanelEnabled = false;
+            
+            // Auto-roll tracking to prevent multiple attempts
+            this.autoRollAttempted = false;
         },
         
         setup: function(gamedatas) {
             console.log("Starting game setup");
-
-            // Declare hexadecimal color maping for player tokens (default red/green/blue/orange/brown)
             
-
+            // Create player areas - current player first, then others
+            const sortedPlayers = Object.values(gamedatas.players).sort((a, b) => {
+                // Current player goes first
+                if (a.id == this.player_id) return -1;
+                if (b.id == this.player_id) return 1;
+                // Other players maintain their original order
+                return parseInt(a.id) - parseInt(b.id);
+            });
             
-            // Create player areas
-            Object.values(gamedatas.players).forEach(player => {
+            sortedPlayers.forEach(player => {
+                console.log('Player color debug:', player.id, player.color); // Debug line
+                
+                // Fix player color using helper function
+                let fixedColor = this.fixPlayerColor(player.color);
+                if (fixedColor !== player.color) {
+                    console.log('Fixed truncated color from', player.color, 'to', fixedColor);
+                } else {
+                    console.log('Color already complete:', fixedColor);
+                }
+                
                 document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
-                    <div id="player_area_${player.id}" class="player_area">
-                        <div class="player_name">${player.name}</div>
+                    <div id="player_area_${player.id}" class="player_area" ${player.id == this.player_id ? 'data-current-player="true"' : ''}>
+                        <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
                         <div id="${player.id}_cards" class="player_cards"></div>
                         <div id="${player.id}_families" class="player_families"></div>
-                        <div id="${player.id}_InPlay" class="player_kept_cards">Kept Cards:</div>
+                        <div id="${player.id}_InPlay" class="player_kept_cards">
+                            Kept Cards:
+                            <div id="${player.id}_InPlayContent"></div>
+                        </div>
                     </div>
                 `);
+                
+                // Additional color setting via JavaScript as backup with enhanced safety
+                setTimeout(() => {
+                    const nameElement = document.getElementById(`player_name_${player.id}`);
+                    if (nameElement && fixedColor) {
+                        // Apply player color as background with black text
+                        nameElement.style.backgroundColor = fixedColor;
+                        nameElement.style.color = '#000000';
+                        nameElement.style.setProperty('background-color', fixedColor, 'important');
+                        nameElement.style.setProperty('color', '#000000', 'important');
+                        nameElement.setAttribute('data-player-color', fixedColor);
+                        // Also add a CSS class for the color if available
+                        const colorClass = this.getPlayerColorClass(fixedColor);
+                        if (colorClass) {
+                            nameElement.classList.add('player-name-colored');
+                        }
+                        console.log('Applied background color to', player.name, ':', fixedColor);
+                    } else {
+                        console.warn('Could not apply color - nameElement:', !!nameElement, 'fixedColor:', fixedColor);
+                    }
+                }, 100);
             });
+
+            // Add notice for hidden players preference
+            if (this.prefs[100] && this.prefs[100].value == 1) {
+                const hiddenCount = Object.keys(gamedatas.players).length - 1;
+                if (hiddenCount > 0) {
+                    document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
+                        <div class="hidden_players_notice">
+                            ${hiddenCount} other player${hiddenCount > 1 ? 's' : ''} hidden (preference setting)
+                        </div>
+                    `);
+                }
+            }
 
             // Set up players' side panels
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
-                        <span>Prayer: <span id="panel_p_${player.id}"></span> <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span><br>
-                        <span>Happiness: <span id="panel_h_${player.id}"></span> <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span></span><br>
-                        <span>Families: <span id="panel_f_${player.id}"></span> <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span></span>
+                        <span id="icon_p_${player.id}" class="icon_p" style="display:inline-block;vertical-align:middle;"></span></span> <span>Prayer: <span id="panel_p_${player.id}"></span><br>
+                        <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span> <span>Happiness: <span id="panel_h_${player.id}"></span> </span><br>
+                        <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span> <span>Family: <span id="panel_f_${player.id}"></span> </span>
                         <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
-                        <span>Temples: <span id="panel_t_${player.id}"></span></span><br>
+                        <span>Temples: <span id="panel_t_${player.id}"></span></span>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
 
                     </div>
@@ -233,13 +320,13 @@ function (dojo, declare,) {
 
             // Create stock for played cards
             this['played'] = new ebg.stock();  
-            this['played'].create(this, document.getElementById('playedCards'), 120, 177.4);
+            this['played'].create(this, document.getElementById('playedCardsContent'), 120, 177.4);
             this['played'].image_items_per_row = 5;
             this['played'].setSelectionMode(0);
 
             // Create stock for resolved cards
             this['resolved'] = new ebg.stock();
-            this['resolved'].create(this, document.getElementById('resolvedCards'), 120, 177.4);
+            this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 177.4);
             this['resolved'].image_items_per_row = 5;
             this['resolved'].setSelectionMode(0);
 
@@ -263,6 +350,17 @@ function (dojo, declare,) {
                     // Add card backs to stock
                     this[`${player.id}_cardbacks`].addItemType(card_id, card_id, g_gamethemeurl + 'img/Cards_Backs_240_174.png', card_id);
                 }
+
+                //create amulet/temple stock 1 = amulet, 2 = temple
+                this[`${player.id}_kept`] = new ebg.stock();
+                this[`${player.id}_kept`].create(this, $(`${player.id}_InPlayContent`), 118.5, 76);
+                this[`${player.id}_kept`].image_items_per_row = 2;
+                this[`${player.id}_kept`].setSelectionMode(0);
+                for (let kept_id = 1; kept_id <= 2; kept_id++)
+                {
+                    this[`${player.id}_kept`].addItemType(kept_id, kept_id, g_gamethemeurl + 'img/temple_amulet_237_76.png', kept_id);
+                }
+                console.log('Created kept stock for player', player.id, ':', this[`${player.id}_kept`]);
 
             });
 
@@ -335,6 +433,23 @@ function (dojo, declare,) {
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
+                
+                // Initialize kept cards based on temple and amulet counts
+                if (this[`${player.id}_kept`]) {
+                    console.log(`Initializing kept cards for player ${player.id}: amulets=${player.amulet}, temples=${player.temple}`);
+                    // Add amulet cards (kept_id = 1)
+                    for (let i = 0; i < player.amulet; i++) {
+                        this[`${player.id}_kept`].addToStock(1);
+                    }
+                    // Add temple cards (kept_id = 2)
+                    for (let i = 0; i < player.temple; i++) {
+                        this[`${player.id}_kept`].addToStock(2);
+                    }
+                    console.log('Initialized kept stock items:', this[`${player.id}_kept`].getAllItems());
+                } else {
+                    console.error('No kept stock found during initialization for player', player.id);
+                }
+                
                 /* TODO get each player's hand length to update counters */
                 element = $(`panel_l_${player.id}`);
                 if (player.chief == 1)
@@ -357,25 +472,47 @@ function (dojo, declare,) {
             })
 
             /* Populate played cards from database */
+            console.log(`DEBUG: gamedatas.playedDisaster:`, gamedatas.playedDisaster);
             Object.values(gamedatas.playedDisaster).forEach(card => {
+                console.log(`DEBUG: Processing disaster card:`, card);
+                console.log(`DEBUG: card.played_by = ${card.played_by} (type: ${typeof card.played_by})`);
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['played'].addToStockWithId(uniqueId, card.id);
+                
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[card.id]) {
+                    this['played'].items[card.id].played_by = card.played_by;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by);
+                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
 
+            console.log(`DEBUG: gamedatas.playedBonus:`, gamedatas.playedBonus);
             Object.values(gamedatas.playedBonus).forEach(card => {
+                console.log(`DEBUG: Processing bonus card:`, card);
+                console.log(`DEBUG: card.played_by = ${card.played_by} (type: ${typeof card.played_by})`);
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['played'].addToStockWithId(uniqueId, card.id);
+                
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[card.id]) {
+                    this['played'].items[card.id].played_by = card.played_by;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by);
+                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
 
             /* Populate resolved cards from database */
             Object.values(gamedatas.resolvedDisaster).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['resolved'].addToStockWithId(uniqueId, card.id);
+                this.addCardTooltipByUniqueId('resolved', uniqueId);
             });
 
             Object.values(gamedatas.resolvedBonus).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['resolved'].addToStockWithId(uniqueId, card.id);
+                this.addCardTooltipByUniqueId('resolved', uniqueId);
             });
 
             /* Add cardbacks for other players' cards */
@@ -410,6 +547,22 @@ function (dojo, declare,) {
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
+                
+                // Initialize kept cards based on temple and amulet counts
+                if (this[`${player.id}_kept`]) {
+                    console.log(`Re-initializing kept cards for player ${player.id}: amulets=${player.amulet}, temples=${player.temple}`);
+                    // Add amulet cards (kept_id = 1)
+                    for (let i = 0; i < player.amulet; i++) {
+                        this[`${player.id}_kept`].addToStock(1);
+                    }
+                    // Add temple cards (kept_id = 2)
+                    for (let i = 0; i < player.temple; i++) {
+                        this[`${player.id}_kept`].addToStock(2);
+                    }
+                    console.log('Re-initialized kept stock items:', this[`${player.id}_kept`].getAllItems());
+                } else {
+                    console.error('No kept stock found during re-initialization for player', player.id);
+                }
             });
 
             // Set initial round leader prayer icon to grayed version
@@ -417,12 +570,320 @@ function (dojo, declare,) {
                 this.updateRoundLeaderIcons(null, gamedatas.round_leader);
             }
 
+            // Add prediction toggle button to the bottom right of resolved cards div
+            // Only if 'Show End-Round Predictions' game option is enabled (option 101 == 2)
+            const resolvedCardsDiv = document.getElementById('resolvedCards');
+            if (resolvedCardsDiv && this.isPredictionsEnabled()) {
+                resolvedCardsDiv.insertAdjacentHTML('beforeend', `
+                    <div id="prediction_toggle_panel" style="
+                        position: absolute; 
+                        bottom: 5px; 
+                        right: 5px; 
+                        background: rgba(240,240,240,0.95); 
+                        border-radius: 5px; 
+                        padding: 5px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    ">
+                        <button id="prediction_toggle_btn" style="
+                            padding: 4px 8px; 
+                            background: #4a90e2; 
+                            color: white; 
+                            border: none; 
+                            border-radius: 3px; 
+                            cursor: pointer; 
+                            font-size: 11px;
+                            white-space: nowrap;
+                        ">
+                            📊 Predictions
+                        </button>
+                    </div>
+                `);
+                
+                // Add click event listener after creating the button
+                const toggleBtn = document.getElementById('prediction_toggle_btn');
+                if (toggleBtn) {
+                    toggleBtn.addEventListener('click', () => {
+                        this.togglePredictionPanel();
+                    });
+                }
+            }
+            
+            // Add click event listener for prediction panel close button
+            const panelHeader = document.getElementById('prediction_panel_header');
+            if (panelHeader) {
+                panelHeader.addEventListener('click', () => {
+                    this.togglePredictionPanel();
+                });
+            }
+
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
+            
+            // Initialize dev statistics display
+            this.updateDevStatsDisplay();
+            
+            // Set up periodic refresh for dev stats (every 5 seconds)
+            setInterval(() => {
+                this.updateDevStatsDisplay();
+            }, 5000);
 
         },
 
-       
+        ///////////////////////////////////////////////////
+        //// Development Statistics Display
+        
+        updateDevStatsDisplay: function() {
+            // Only update if the stats panel exists and is visible
+            const statsPanel = document.getElementById('dev_stats_panel');
+            if (!statsPanel) return;
+            
+            try {
+                // Get current game data
+                const players = this.gamedatas.players || {};
+                
+                // Try to get real statistics from server (for development)
+                // Note: In a real implementation, you'd make an AJAX call to get actual stats
+                // For now, we'll show the current game state as a proxy for statistics
+                
+                // Calculate some basic statistics from current game state
+                let totalCards = 0;
+                let totalFamilies = 0;
+                let totalTemples = 0;
+                let totalAmulets = 0;
+                let playersWithLeaders = 0;
+                
+                Object.values(players).forEach(player => {
+                    totalCards += parseInt(player.cards) || 0;
+                    totalFamilies += parseInt(player.family) || 0;
+                    totalTemples += parseInt(player.temple) || 0;
+                    totalAmulets += parseInt(player.amulet) || 0;
+                    if (player.chief) playersWithLeaders++;
+                });
+                
+                // Get atheist count from game state (if available)
+                const atheistCount = this.atheists ? this.atheists.count() : '?';
+                
+                // Update table statistics 
+                const tableStatsHtml = `
+                    <div style="margin-bottom: 3px;">🌍 Total Players: <span style="color: #FFF;">${Object.keys(players).length}</span></div>
+                    <div style="margin-bottom: 3px;">� Total Families: <span style="color: #FFF;">${totalFamilies}</span></div>
+                    <div style="margin-bottom: 3px;">😈 Atheist Pool: <span style="color: #FFF;">${atheistCount}</span></div>
+                    <div style="margin-bottom: 3px;">�️ Total Temples: <span style="color: #FFF;">${totalTemples}</span></div>
+                    <div style="margin-bottom: 3px;">🧿 Total Amulets: <span style="color: #FFF;">${totalAmulets}</span></div>
+                    <div style="margin-bottom: 3px;">👑 Players w/ Leaders: <span style="color: #FFF;">${playersWithLeaders}</span></div>
+                    <div style="margin-bottom: 3px;">🃏 Total Cards in Hands: <span style="color: #FFF;">${totalCards}</span></div>
+                `;
+                document.getElementById('table_stats_content').innerHTML = tableStatsHtml;
+                
+                // Update player statistics
+                let playerStatsHtml = '';
+                Object.values(players).forEach(player => {
+                    const playerColor = this.fixPlayerColor(player.color);
+                    const isEliminated = (player.family === 0 && !player.chief);
+                    const statusIcon = isEliminated ? '💀' : (player.chief ? '👑' : '👤');
+                    
+                    playerStatsHtml += `
+                        <div style="margin-bottom: 8px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; ${isEliminated ? 'opacity: 0.6;' : ''}">
+                            <div style="font-weight: bold; color: ${playerColor}; margin-bottom: 3px;">${statusIcon} ${player.name}</div>
+                            <div style="font-size: 10px; line-height: 1.3;">
+                                👥 Families: <span style="color: ${player.family > 0 ? '#4CAF50' : '#F44336'}">${player.family || 0}</span> | 
+                                🙏 Prayer: <span style="color: ${player.prayer > 5 ? '#4CAF50' : player.prayer > 2 ? '#FF9800' : '#F44336'}">${player.prayer || 0}</span><br>
+                                😊 Happiness: <span style="color: ${player.happiness > 6 ? '#4CAF50' : player.happiness > 3 ? '#FF9800' : '#F44336'}">${player.happiness || 0}/10</span> | 
+                                🏛️ Temples: <span style="color: #2196F3">${player.temple || 0}</span><br>
+                                🧿 Amulets: <span style="color: #9C27B0">${player.amulet || 0}</span> | 
+                                👑 Leader: <span style="color: ${player.chief ? '#4CAF50' : '#F44336'}">${player.chief ? 'Yes' : 'No'}</span><br>
+                                🃏 Cards: <span style="color: ${player.cards > 3 ? '#4CAF50' : player.cards > 1 ? '#FF9800' : '#F44336'}">${player.cards || 0}</span>
+                                ${isEliminated ? '<br><span style="color: #F44336; font-weight: bold;">❌ ELIMINATED</span>' : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                document.getElementById('player_stats_content').innerHTML = playerStatsHtml;
+                
+            } catch (error) {
+                console.log('Error updating dev stats display:', error);
+                // Show error in stats panel
+                document.getElementById('table_stats_content').innerHTML = '<div style="color: #F44336;">Error loading stats</div>';
+                document.getElementById('player_stats_content').innerHTML = '<div style="color: #F44336;">Check console for details</div>';
+            }
+        },
+
+        ///////////////////////////////////////////////////
+        //// Card tooltip functions
+        
+        getCardTypeFromUniqueId: function(uniqueId) {
+            // Based on getCardUniqueId logic:
+            // Global Disaster: uniqueId = type_id (1-10)
+            // Local Disaster: uniqueId = 10 + type_id (11-15)  
+            // Bonus: uniqueId = 15 + type_id (16-22)
+            if (uniqueId >= 1 && uniqueId <= 10) {
+                return this.ID_GLOBAL_DISASTER; // 1
+            } else if (uniqueId >= 11 && uniqueId <= 15) {
+                return this.ID_LOCAL_DISASTER; // 2
+            } else if (uniqueId >= 16 && uniqueId <= 22) {
+                return this.ID_BONUS; // 3
+            }
+            return null;
+        },
+        
+        getCardIdFromUniqueId: function(uniqueId) {
+            // Reverse the getCardUniqueId calculation
+            if (uniqueId >= 1 && uniqueId <= 10) {
+                return uniqueId; // Global disaster type_id
+            } else if (uniqueId >= 11 && uniqueId <= 15) {
+                return uniqueId - 10; // Local disaster type_id
+            } else if (uniqueId >= 16 && uniqueId <= 22) {
+                return uniqueId - 15; // Bonus type_id
+            }
+            return null;
+        },
+        
+        addCardTooltip: function(elementId, cardType, cardId, playerId = null) {
+            // Calculate image position for the larger image
+            let imagePosition = 0;
+            
+            if (cardType === this.ID_LOCAL_DISASTER) {
+                // Local Disaster cards: positions 0-4 (cardId 1-5 maps to positions 0-4)
+                imagePosition = cardId - 1;
+            } else if (cardType === this.ID_GLOBAL_DISASTER) {
+                // Global Disaster cards: positions 5-14 (cardId 1-10 maps to positions 5-14)  
+                imagePosition = cardId + 4;
+            } else if (cardType === this.ID_BONUS) {
+                // Bonus cards: positions 15-21 (cardId 1-7 maps to positions 15-21)
+                imagePosition = cardId + 14;
+            }
+            
+            // Calculate X,Y position in sprite grid
+            const cardsPerRow = 5;
+            const cardWidth = 240;   
+            const cardHeight = 354.8; 
+            
+            const col = imagePosition % cardsPerRow;
+            const row = Math.floor(imagePosition / cardsPerRow);
+            
+            const bgPositionX = -(col * cardWidth);
+            const bgPositionY = -(row * cardHeight);
+            
+            // Create clean image tooltip without player-specific styling
+            const imageUrl = g_gamethemeurl + 'img/Cards_All_1200_1774.png';
+            
+            const imgTooltip = `<img src="${imageUrl}" style="width: 240px; height: 354.8px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
+            
+            // Add image tooltip
+            this.addTooltipHtml(elementId, imgTooltip, 300);
+        },
+        
+        addCardTooltipByUniqueId: function(stockName, uniqueId, playerId = null) {
+            console.log(`DEBUG: addCardTooltipByUniqueId called with stockName=${stockName}, uniqueId=${uniqueId}, playerId=${playerId}`);
+            
+            const cardType = this.getCardTypeFromUniqueId(uniqueId);
+            const cardId = this.getCardIdFromUniqueId(uniqueId);
+            
+            if (cardType && cardId !== null) {
+                console.log(`Tooltip request: uniqueId=${uniqueId}, cardType=${cardType}, cardId=${cardId} for ${stockName}`);
+                
+                // Use BGA stock system's built-in tooltip functionality if available
+                setTimeout(() => {
+                    // Use provided playerId or try to find it from stored data
+                    let finalPlayerId = playerId;
+                    
+                    if (this[stockName] && this[stockName].getAllItems) {
+                        // Find the stock item with this uniqueId
+                        const stockItems = this[stockName].getAllItems();
+                        const targetItem = stockItems.find(item => item.type == uniqueId);
+                        
+                        if (targetItem) {
+                            const elementId = this[stockName].getItemDivId(targetItem.id);
+                            
+                            // Try to get player ID from stored data if not provided
+                            if (!finalPlayerId && this[stockName].items && this[stockName].items[targetItem.id] && this[stockName].items[targetItem.id].played_by) {
+                                finalPlayerId = this[stockName].items[targetItem.id].played_by;
+                                console.log(`DEBUG: Found stored playerId=${finalPlayerId} for card ${targetItem.id}`);
+                            }
+                            
+                            if (elementId) {
+                                this.addCardTooltip(elementId, cardType, cardId, finalPlayerId);
+                                console.log(`Added tooltip to stock item ${targetItem.id} with element ID ${elementId}, playerId=${finalPlayerId}`);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Fallback to previous method
+                    this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardId, finalPlayerId);
+                }, 300);
+            }
+        },
+        
+        addTooltipToLatestCard: function(stockName, uniqueId, cardType, cardId, playerId = null) {
+            console.log(`DEBUG: addTooltipToLatestCard called with playerId=${playerId}`);
+            
+            // Find elements based on stock type
+            let allElements;
+            
+            if (stockName.includes('_cards')) {
+                // Player card stocks use the standard pattern
+                allElements = document.querySelectorAll(`[id^="${stockName}_item_"]`);
+            } else if (stockName === 'played' || stockName === 'resolved') {
+                // Played/resolved stocks use different patterns
+                allElements = document.querySelectorAll(`[id*="${stockName}"] .stockitem, .${stockName} .stockitem, [class*="${stockName}"] .stockitem`);
+                
+                if (allElements.length === 0) {
+                    // Try broader patterns
+                    allElements = document.querySelectorAll(`[id*="${stockName}"][id*="item"], [class*="${stockName}"][class*="item"]`);
+                }
+            } else {
+                // Fallback to standard pattern
+                allElements = document.querySelectorAll(`[id^="${stockName}_item_"]`);
+            }
+            
+            console.log(`Found ${allElements.length} elements in ${stockName}`);
+            
+            // Find the latest element that doesn't have a tooltip yet
+            let targetElement = null;
+            for (let i = allElements.length - 1; i >= 0; i--) {
+                const element = allElements[i];
+                if (!element.hasAttribute('data-tooltip-added')) {
+                    targetElement = element;
+                    break;
+                }
+            }
+            
+            if (targetElement) {
+                const elementId = targetElement.id || `${stockName}_${uniqueId}`;
+                console.log(`Adding tooltip to latest element: ${elementId} -> uniqueId=${uniqueId}, playerId=${playerId}`);
+                
+                this.addCardTooltip(elementId, cardType, cardId, playerId);
+                targetElement.setAttribute('data-tooltip-added', 'true');
+                targetElement.setAttribute('data-unique-id', uniqueId);
+                if (playerId) {
+                    targetElement.setAttribute('data-played-by', playerId);
+                }
+            } else {
+                console.log(`No available element found for tooltip in ${stockName}`);
+            }
+        },
+        
+        // Function to manually refresh tooltips for all visible cards
+        refreshAllCardTooltips: function() {
+            console.log("Refreshing all card tooltips...");
+            
+            // Find all player card areas
+            const playerCardAreas = document.querySelectorAll('[id$="_cards_item_"]');
+            const playedCardsArea = document.querySelectorAll('[id^="played_item_"]');
+            
+            // For each card element, try to determine what it should be
+            const allCardElements = [...playerCardAreas, ...playedCardsArea];
+            
+            allCardElements.forEach((element) => {
+                if (!element.hasAttribute('data-tooltip-added')) {
+                    // Add a generic "Card" tooltip for now - better than nothing
+                    this.addTooltip(element.id, "Card", "");
+                    element.setAttribute('data-tooltip-added', 'true');
+                }
+            });
+        },
+
         ///////////////////////////////////////////////////
         //// Game & client states
 
@@ -459,14 +920,72 @@ function (dojo, declare,) {
                     break;
 
                 case 'phaseThreeResolveAmulets':
-                    if (this.isCurrentPlayerActive()) {
-                        this.setupAmuletDecision();
-                    }
+                    // Button setup is handled by onUpdateActionButtons
                     break;
 
                 case 'phaseThreeRollDice':
                     if (this.isCurrentPlayerActive()) {
-                        this.setupDiceRoll();
+                        // Reset auto-roll tracking for this new state
+                        this.autoRollAttempted = false;
+                        
+                        // Check if auto-roll dice preference is enabled
+                        console.log('=== AUTO-ROLL DEBUG START (onEnteringState) ===');
+                        console.log('Current state:', this.gamedatas.gamestate.name);
+                        console.log('Current player active:', this.isCurrentPlayerActive());
+                        console.log('Document body classes:', document.body.className);
+                        
+                        // Primary method: Check CSS class (BGA preference system)
+                        let autoRollEnabled = document.body.classList.contains('kalua_auto_dice');
+                        console.log('CSS class kalua_auto_dice found:', autoRollEnabled);
+                        
+                        if (!autoRollEnabled) {
+                            // Fallback: Check preference objects (for debugging)
+                            console.log('Checking preference objects as fallback');
+                            console.log('this.prefs:', this.prefs);
+                            console.log('this.player_preferences:', this.player_preferences);
+                            
+                            if (this.prefs && this.prefs[101]) {
+                                console.log('Found prefs[101]:', this.prefs[101]);
+                                if (this.prefs[101].value == 2) {
+                                    autoRollEnabled = true;
+                                    console.log('Auto-roll enabled via this.prefs fallback');
+                                }
+                            } else if (this.player_preferences && this.player_preferences[101]) {
+                                console.log('Found player_preferences[101]:', this.player_preferences[101]);
+                                if (this.player_preferences[101].value == 2) {
+                                    autoRollEnabled = true;
+                                    console.log('Auto-roll enabled via this.player_preferences fallback');
+                                }
+                            }
+                        }
+                        
+                        console.log('Final auto-roll decision:', autoRollEnabled);
+                        console.log('=== AUTO-ROLL DEBUG END (onEnteringState) ===');
+                        
+                        if (autoRollEnabled && !this.autoRollAttempted) {
+                            // Auto-roll dice preference is enabled
+                            console.log('Attempting auto-roll from onEnteringState');
+                            this.autoRollAttempted = true;
+                            
+                            // Use immediate execution
+                            try {
+                                console.log('Executing auto-roll action immediately from onEnteringState');
+                                this.bgaPerformAction('actRollDie', {});
+                            } catch (error) {
+                                console.error('Auto-roll action failed:', error);
+                                // Reset flag so onUpdateActionButtons can try
+                                this.autoRollAttempted = false;
+                                // Fall back to manual mode
+                                console.log('Falling back to manual dice rolling mode');
+                                this.setupDiceRoll();
+                            }
+                        } else if (!autoRollEnabled) {
+                            // Manual dice rolling
+                            console.log('Manual dice rolling mode');
+                            this.setupDiceRoll();
+                        } else {
+                            console.log('Auto-roll already attempted, skipping onEnteringState trigger');
+                        }
                     }
                     break;
 
@@ -474,6 +993,21 @@ function (dojo, declare,) {
                     if (this.isCurrentPlayerActive()) {
                         this.setupDiscard();
                     }
+                    break;
+
+                case 'phaseThreePlayCard':
+                    // Show predictions when players are making decisions about cards
+                    // since the round might end and family redistribution will occur
+                    // Only if 'Show End-Round Predictions' game option is enabled
+                    if (this.isPredictionsEnabled()) {
+                        this.predictionPanelEnabled = true;
+                        this.showPredictionPanel();
+                    }
+                    break;
+
+                case 'phaseFourConvertPray':
+                    // Hide predictions during the actual family redistribution
+                    this.hidePredictionPanel();
                     break;
 
                 default:
@@ -568,6 +1102,33 @@ function (dojo, declare,) {
                         }
                         break;
                     case 'phaseThreePlayCard':
+                        // Check if player should be automatically passed
+                        const cardsInHand = this[`${this.player_id}_cards`].count();
+                        const currentPrayer = this.prayerCounters[this.player_id].getValue();
+                        
+                        if (cardsInHand === 0 && currentPrayer < 5) {
+                            // Player has no cards and insufficient prayer to buy more - automatically pass
+                            this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
+                            
+                            // Automatically trigger the pass action after a brief delay to show the message
+                            setTimeout(() => {
+                                this.bgaPerformAction('actPlayCardPass', {});
+                            }, 2000);
+                            
+                            // Still show buttons but disable them to indicate automatic pass
+                            this.addActionButton('playCard-btn', _('Play Card'), () => {}, 'red');
+                            dojo.addClass('playCard-btn', 'disabled');
+                            
+                            this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => {}, 'red');
+                            dojo.addClass('buyCardReflex-btn', 'disabled');
+                            
+                            this.addActionButton('pass-btn', _('Passing Automatically...'), () => {}, 'gray');
+                            dojo.addClass('pass-btn', 'disabled');
+                            
+                            console.log(`Auto-passing for player ${this.player_id}: ${cardsInHand} cards, ${currentPrayer} prayer`);
+                            return; // Skip normal button setup
+                        }
+                        
                         this.addActionButton('playCard-btn', _('Play Card'), () => {
                             const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
                             if (selectedCards.length > 0) {
@@ -663,18 +1224,109 @@ function (dojo, declare,) {
                         break;
                     case 'phaseThreeRollDice':
                         console.log("onUpdateActionButtons called for phaseThreeRollDice state");
-                        this.addActionButton('roll-dice-btn', _('Roll Dice'), () => {
-                            // Disable the button immediately to prevent double-clicks
+                        
+                        // Check if auto-roll is enabled using CSS class (primary method)
+                        let isAutoRoll = document.body.classList.contains('kalua_auto_dice');
+                        
+                        if (!isAutoRoll) {
+                            // Fallback: Check preference objects
+                            console.log("CSS class not found, checking preference objects");
+                            console.log("Preferences available:", this.prefs);
+                            console.log("Auto-roll preference (101):", this.prefs && this.prefs[101] ? this.prefs[101] : 'not found');
+                            
+                            if (this.prefs && this.prefs[101] && this.prefs[101].value == 2) {
+                                isAutoRoll = true;
+                            } else if (this.player_preferences && this.player_preferences[101] && this.player_preferences[101].value == 2) {
+                                isAutoRoll = true;
+                            }
+                        }
+                        
+                        console.log("Is auto-roll enabled:", isAutoRoll);
+                        console.log("Auto-roll already attempted:", this.autoRollAttempted);
+                        
+                        // TRIGGER AUTO-ROLL HERE (when UI is fully ready) if not already attempted
+                        if (isAutoRoll && this.isCurrentPlayerActive() && !this.autoRollAttempted) {
+                            console.log("Triggering auto-roll from onUpdateActionButtons");
+                            this.autoRollAttempted = true;
+                            
+                            // Use a small delay to ensure the action buttons are fully setup
+                            setTimeout(() => {
+                                if (this.gamedatas.gamestate.name === 'phaseThreeRollDice' && this.isCurrentPlayerActive()) {
+                                    console.log('Executing auto-roll action from onUpdateActionButtons');
+                                    try {
+                                        this.bgaPerformAction('actRollDie', {});
+                                    } catch (error) {
+                                        console.error('Auto-roll action failed in onUpdateActionButtons:', error);
+                                    }
+                                } else {
+                                    console.log('Auto-roll cancelled - state changed before execution');
+                                }
+                            }, 50); // Very short delay just to ensure buttons are ready
+                        } else if (isAutoRoll && this.autoRollAttempted) {
+                            console.log("Auto-roll enabled but already attempted, skipping onUpdateActionButtons trigger");
+                        } else if (!isAutoRoll && this.isCurrentPlayerActive() && !this.autoRollAttempted) {
+                            // Set up a backup checker for auto-roll in case preferences load later
+                            console.log("Auto-roll not detected yet, setting up backup checker");
+                            let checkCount = 0;
+                            const maxChecks = 10;
+                            const checkInterval = setInterval(() => {
+                                checkCount++;
+                                const hasAutoClass = document.body.classList.contains('kalua_auto_dice');
+                                console.log(`Auto-roll backup check ${checkCount}/${maxChecks}: CSS class found = ${hasAutoClass}`);
+                                
+                                if (hasAutoClass && !this.autoRollAttempted && this.gamedatas.gamestate.name === 'phaseThreeRollDice' && this.isCurrentPlayerActive()) {
+                                    console.log('Auto-roll CSS class detected by backup checker - triggering auto-roll');
+                                    this.autoRollAttempted = true;
+                                    clearInterval(checkInterval);
+                                    try {
+                                        this.bgaPerformAction('actRollDie', {});
+                                    } catch (error) {
+                                        console.error('Auto-roll action failed in backup checker:', error);
+                                    }
+                                } else if (checkCount >= maxChecks || this.gamedatas.gamestate.name !== 'phaseThreeRollDice' || !this.isCurrentPlayerActive()) {
+                                    console.log('Auto-roll backup checker stopping');
+                                    clearInterval(checkInterval);
+                                }
+                            }, 200); // Check every 200ms
+                        }
+                        
+                        const buttonText = isAutoRoll ? _('Roll Dice (Auto)') : _('Roll Dice');
+                        
+                        this.addActionButton('roll-dice-btn', buttonText, () => {
+                            // Only allow manual rolling if auto-roll is disabled
+                            if (!isAutoRoll) {
+                                console.log("Manual dice roll button clicked");
+                                // Disable the button immediately to prevent double-clicks
+                                const rollBtn = document.getElementById('roll-dice-btn');
+                                if (rollBtn) {
+                                    rollBtn.disabled = true;
+                                    rollBtn.style.opacity = '0.5';
+                                }
+                                this.bgaPerformAction('actRollDie', {});
+                            } else {
+                                console.log("Auto-roll is enabled - manual click ignored");
+                            }
+                        });
+                        
+                        // If auto-roll is enabled, disable the button and style it as inactive
+                        if (isAutoRoll) {
+                            console.log("Styling button as auto-roll mode");
                             const rollBtn = document.getElementById('roll-dice-btn');
                             if (rollBtn) {
                                 rollBtn.disabled = true;
-                                rollBtn.style.opacity = '0.5';
+                                rollBtn.style.backgroundColor = '#cccccc';
+                                rollBtn.style.color = '#666666';
+                                rollBtn.style.opacity = '0.6';
+                                rollBtn.style.cursor = 'not-allowed';
+                                rollBtn.title = _('Dice will roll automatically (auto-roll enabled in preferences)');
                             }
-                            this.bgaPerformAction('actRollDie', {});
-                        });
+                        }
                         break;
                     case 'phaseThreeResolveAmulets':
                         console.log("onUpdateActionButtons called for phaseThreeResolveAmulets state");
+                        
+                        // Note: Do not call updatePageTitle() here as it causes infinite recursion
+                        // The page title will be updated by the BGA framework automatically
                         
                         // Check if current player has amulets
                         const currentPlayerId = this.player_id;
@@ -692,8 +1344,11 @@ function (dojo, declare,) {
                                 this.disableAmuletButtons();
                                 this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
                             });
+                        } else {
+                            // Player has no amulets, just waiting
+                            // Note: Do not call updatePageTitle() here as it causes infinite recursion
+                            // The page title will be updated by the BGA framework automatically
                         }
-                        // If player has no amulets, no buttons are shown (they just wait)
                         break;
                 }
             }
@@ -724,6 +1379,9 @@ function (dojo, declare,) {
         },
 
         playCardOnTable : function(player_id, color, value, card_id) {
+            console.log(`DEBUG: playCardOnTable called - player_id=${player_id}, card_id=${card_id}`);
+            console.log(`DEBUG: Available players in gamedatas:`, this.gamedatas ? Object.keys(this.gamedatas.players || {}) : 'no gamedatas');
+            
                 // You played a card. If it exists in your hand, move card from there and remove
                 // corresponding item
                     this[`${player_id}_cards`].removeFromStockById(card_id);
@@ -736,8 +1394,288 @@ function (dojo, declare,) {
             const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
             console.log("playing unique ID " + uniqueId)
             this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
+            
+            // Store player info for this card for future reference
+            if (this['played'] && this['played'].items && this['played'].items[card_id]) {
+                this['played'].items[card_id].played_by = player_id;
+                console.log(`DEBUG: Stored played_by=${player_id} on card ${card_id}`);
+            }
+
+            // Add tooltip with player information
+            setTimeout(() => {
+                console.log(`DEBUG: Setting up tooltip for card ${card_id} played by player ${player_id}`);
+                
+                const cardType = this.getCardTypeFromUniqueId(uniqueId);
+                const cardIdFromUnique = this.getCardIdFromUniqueId(uniqueId);
+                
+                console.log(`DEBUG: Card details - uniqueId=${uniqueId}, cardType=${cardType}, cardIdFromUnique=${cardIdFromUnique}`);
+                
+                if (cardType && cardIdFromUnique !== null) {
+                    // Find the DOM element for this card
+                    const stockItems = this['played'].getAllItems();
+                    console.log(`DEBUG: Found ${Object.keys(stockItems).length} items in played stock`);
+                    
+                    const targetItem = Object.values(stockItems).find(item => item.type == uniqueId);
+                    console.log(`DEBUG: Target item found:`, targetItem);
+                    
+                    if (targetItem) {
+                        const elementId = this['played'].getItemDivId(targetItem.id);
+                        console.log(`DEBUG: Element ID from stock: ${elementId}`);
+                        
+                        if (elementId) {
+                            // Add tooltip with player information
+                            this.addCardTooltip(elementId, cardType, cardIdFromUnique, player_id);
+                            console.log(`DEBUG: Called addCardTooltip with player_id=${player_id}`);
+                        } else {
+                            console.warn(`DEBUG: Could not get element ID for target item`);
+                        }
+                    } else {
+                        console.warn(`DEBUG: Could not find target item with uniqueId ${uniqueId}`);
+                        // Try alternative approach - find by card_id directly
+                        const fallbackElementId = `played_item_${card_id}`;
+                        console.log(`DEBUG: Trying fallback element ID: ${fallbackElementId}`);
+                        this.addCardTooltip(fallbackElementId, cardType, cardIdFromUnique, player_id);
+                    }
+                } else {
+                    console.warn(`DEBUG: Invalid card type or ID - cardType=${cardType}, cardIdFromUnique=${cardIdFromUnique}`);
+                }
+                
+                // Add visual player indicator
+                this.addPlayerIndicator(card_id, player_id, 'played');
+            }, 200);
 
             console.log(`Card ${card_id} played by player ${player_id}`);
+        },
+
+        // Add a simple colored indicator next to the card
+        addPlayerIndicator: function(card_id, player_id, stock_name) {
+            try {
+                // Get player color
+                let playerColor = '#4685FF'; // default blue
+                let playerName = 'Unknown';
+                
+                if (this.gamedatas && this.gamedatas.players && this.gamedatas.players[player_id]) {
+                    playerColor = this.gamedatas.players[player_id].color;
+                    playerName = this.gamedatas.players[player_id].name;
+                    
+                    // Apply the same color fixing logic using helper function
+                    const originalColor = playerColor;
+                    playerColor = this.fixPlayerColor(playerColor);
+                    if (playerColor !== originalColor) {
+                        console.log(`Fixed player indicator color from ${originalColor} to ${playerColor}`);
+                    }
+                }
+                
+                setTimeout(() => {
+                    // Find the card element
+                    const selectors = [
+                        `#${stock_name}_item_${card_id}`,
+                        `[id="${stock_name}_item_${card_id}"]`,
+                        `[id*="${stock_name}"][id*="item_${card_id}"]`
+                    ];
+                    
+                    let cardElement = null;
+                    for (let selector of selectors) {
+                        cardElement = document.querySelector(selector);
+                        if (cardElement) break;
+                    }
+                    
+                    if (cardElement) {
+                        // Remove any existing indicator
+                        const existingIndicator = cardElement.querySelector('.player-indicator');
+                        if (existingIndicator) {
+                            existingIndicator.remove();
+                        }
+                        
+                        // Create player indicator
+                        const indicator = document.createElement('div');
+                        indicator.className = 'player-indicator';
+                        indicator.style.cssText = `
+                            position: absolute;
+                            top: -5px;
+                            right: -5px;
+                            width: 20px;
+                            height: 20px;
+                            background-color: ${playerColor};
+                            border: 2px solid white;
+                            border-radius: 50%;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                            z-index: 10;
+                            cursor: help;
+                        `;
+                        indicator.title = `Played by ${playerName}`;
+                        
+                        // Ensure the card element has relative positioning
+                        if (getComputedStyle(cardElement).position === 'static') {
+                            cardElement.style.position = 'relative';
+                        }
+                        
+                        cardElement.appendChild(indicator);
+                        console.log(`Added player indicator for ${playerName} (${playerColor}) to card ${card_id}`);
+                    } else {
+                        console.warn(`Could not find card element for ${stock_name}_item_${card_id}`);
+                    }
+                }, 150);
+                
+            } catch (error) {
+                console.error('Error in addPlayerIndicator:', error);
+            }
+        },
+
+        // Helper function to add player color border to cards
+        addPlayerBorderToCard: function(card_id, player_id, stock_name) {
+            console.log(`DEBUG: Adding border for card ${card_id}, player ${player_id}, stock ${stock_name}`);
+            
+            if (!player_id || !this.gamedatas.players[player_id]) {
+                console.warn(`No player data found for player ${player_id}`);
+                return;
+            }
+            
+            // Get player's fixed color using helper function
+            let fixedColor = this.gamedatas.players[player_id].color;
+            console.log(`Player ${player_id} color from gamedatas: ${fixedColor}`);
+            
+            const originalColor = fixedColor;
+            fixedColor = this.fixPlayerColor(fixedColor);
+            if (fixedColor !== originalColor) {
+                console.log(`Fixed card border color from ${originalColor} to ${fixedColor}`);
+            } else {
+                console.log(`Card border color already complete: ${fixedColor}`);
+            }
+            
+            // Apply CSS class using BGA Stock extraClasses functionality
+            const colorClass = this.getPlayerColorClass(fixedColor);
+            console.log(`Color class for player ${player_id}: ${colorClass}`);
+            
+            if (!colorClass) {
+                console.warn(`No color class found for color ${fixedColor}`);
+                return;
+            }
+            
+            if (this[stock_name]) {
+                // Use setTimeout to ensure the stock item exists, with retry logic
+                const attemptBorderApplication = (attempt = 1, maxAttempts = 5) => {
+                    setTimeout(() => {
+                        let applied = false;
+                        
+                        // Method 1: Try BGA Stock addExtraClass method
+                        try {
+                            if (this[stock_name].addExtraClass) {
+                                this[stock_name].addExtraClass(card_id, colorClass);
+                                console.log(`Applied ${colorClass} via addExtraClass to card ${card_id} (attempt ${attempt})`);
+                                applied = true;
+                            }
+                        } catch (e) {
+                            console.warn('addExtraClass method failed:', e);
+                        }
+                        
+                        // Method 2: Try multiple DOM selector approaches
+                        if (!applied) {
+                            const selectors = [
+                                `#${stock_name}_item_${card_id}`,
+                                `[id="${stock_name}_item_${card_id}"]`,
+                                `[id*="${stock_name}"][id*="item_${card_id}"]`,
+                                `[id*="${card_id}"]`
+                            ];
+                            
+                            for (let selector of selectors) {
+                                const cardElement = document.querySelector(selector);
+                                if (cardElement) {
+                                    cardElement.classList.add(colorClass);
+                                    console.log(`Applied ${colorClass} via selector "${selector}" to card ${card_id} (attempt ${attempt})`);
+                                    console.log(`Card element classes now: ${cardElement.className}`);
+                                    applied = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Method 3: Try finding by stock item class and data attributes
+                        if (!applied) {
+                            const stockElements = document.querySelectorAll(`.stockitem[data-card-id="${card_id}"], .stockitem[id*="${card_id}"]`);
+                            if (stockElements.length > 0) {
+                                stockElements.forEach(element => {
+                                    element.classList.add(colorClass);
+                                    console.log(`Applied ${colorClass} via stockitem class to card ${card_id} (attempt ${attempt})`);
+                                });
+                                applied = true;
+                            }
+                        }
+                        
+                        if (!applied && attempt < maxAttempts) {
+                            console.log(`Border application failed for card ${card_id}, retrying (attempt ${attempt + 1}/${maxAttempts})`);
+                            attemptBorderApplication(attempt + 1, maxAttempts);
+                        } else if (!applied) {
+                            console.error(`Could not find or apply color class to card ${card_id} in stock ${stock_name} after ${maxAttempts} attempts`);
+                            // Log all possible elements for debugging
+                            const allElements = document.querySelectorAll(`[id*="${card_id}"]`);
+                            console.log(`Found ${allElements.length} elements with card_id ${card_id}:`, allElements);
+                        }
+                    }, attempt * 100); // Increase delay with each attempt
+                };
+                
+                attemptBorderApplication();
+            } else {
+                console.warn(`Stock ${stock_name} not found`);
+            }
+        },
+
+        // Helper function to get CSS class name based on player color
+        getPlayerColorClass: function(color) {
+            const colorClassMap = {
+                '#4685FF': 'player-card-blue',
+                '#C22D2D': 'player-card-red',
+                '#C8CA25': 'player-card-yellow',
+                '#2EA232': 'player-card-green',
+                '#913CB3': 'player-card-purple'
+            };
+            return colorClassMap[color] || null;
+        },
+
+        // Helper function to fix truncated player colors consistently
+        fixPlayerColor: function(color) {
+            if (!color) {
+                return '#4685FF'; // Default to blue if no color
+            }
+            
+            // Ensure it starts with #
+            if (!color.startsWith('#')) {
+                color = '#' + color;
+            }
+            
+            // If color is truncated (length 6), fix it
+            if (color.length === 6) {
+                const colorMap = {
+                    '#4685F': '#4685FF', // Blue
+                    '#C22D2': '#C22D2D', // Red
+                    '#C8CA2': '#C8CA25', // Yellow
+                    '#2EA23': '#2EA232', // Green
+                    '#913CB': '#913CB3'  // Purple
+                };
+                const fixedColor = colorMap[color];
+                if (fixedColor) {
+                    console.log(`Fixed truncated color: ${color} -> ${fixedColor}`);
+                    return fixedColor;
+                }
+            }
+            
+            // If color is already complete (length 7), just return it
+            if (color.length === 7) {
+                return color;
+            }
+            
+            // For any other case, try to map it to a known color
+            const allColors = ['#4685FF', '#C22D2D', '#C8CA25', '#2EA232', '#913CB3'];
+            console.warn(`Unknown color format: ${color}, defaulting to blue`);
+            return '#4685FF'; // Default to blue
+        },
+
+        // Helper function to convert hex color to rgba
+        hexToRgba: function(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         },
 
         drawCard: function(player, card_id, card_type, card_type_arg) {
@@ -747,6 +1685,7 @@ function (dojo, declare,) {
             console.log("drawing unique ID " + uniqueId)
 
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
+            this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId); // Add tooltip
             console.log(`Card ${card_id} added to player ${player}'s hand`);            
         },
 
@@ -777,6 +1716,9 @@ function (dojo, declare,) {
             // Use the player's sprite value from gamedatas to move the correct token
             const sprite = this.gamedatas.players[player_id].sprite;
             this.movetokens(sprite-1, 1);
+            
+            // Update prediction panel if active
+            this.refreshPredictionPanelIfActive();
         },
 
         convertAtheists: function(player_id, num_atheists) {
@@ -830,6 +1772,207 @@ function (dojo, declare,) {
 
             this.familyCounters[player_id].incValue(1);
             this.familyCounters[target_player_id].incValue(-1);
+        },
+
+        // Calculate predicted family and happiness changes during convert/pray phase
+        calculatePrayConvertPredictions: function() {
+            const predictions = {};
+            const allPlayers = Object.values(this.gamedatas.players);
+            const happinessScores = {};
+            
+            // Collect current happiness scores (including temple bonuses)
+            allPlayers.forEach(player => {
+                const currentHappiness = this.happinessCounters[player.id].getValue();
+                const templeCount = this.templeCounters[player.id].getValue();
+                // Happiness with temple bonus (clamped 0-10)
+                happinessScores[player.id] = Math.max(0, Math.min(10, currentHappiness + templeCount));
+            });
+
+            // Find lowest and highest happiness scores
+            const happinessValues = Object.values(happinessScores);
+            const happy_value_low = Math.min(...happinessValues);
+            const happy_value_high = Math.max(...happinessValues);
+
+            // Get high happiness players
+            const high_happiness_players = allPlayers.filter(player => 
+                happinessScores[player.id] === happy_value_high
+            );
+            const high_players = high_happiness_players.length;
+
+            // Calculate predictions for each player
+            allPlayers.forEach(player => {
+                const player_id = player.id;
+                const currentFamilies = this.familyCounters[player_id].getValue();
+                const currentPrayer = this.prayerCounters[player_id].getValue();
+                const currentHappiness = happinessScores[player_id]; // Already includes temple bonus
+                const templeCount = this.templeCounters[player_id].getValue();
+                
+                let predictedFamilies = currentFamilies;
+                let predictedPrayer = currentPrayer;
+                let predictedHappiness = currentHappiness; // Already includes temple bonus
+
+                // Family redistribution (only if not everyone has same happiness)
+                if (happy_value_low !== happy_value_high) {
+                    if (happinessScores[player_id] === happy_value_low) {
+                        // Lose 2 families (or all if less than 2)
+                        const to_lose = Math.min(2, currentFamilies);
+                        predictedFamilies -= to_lose;
+                    } else if (happinessScores[player_id] !== happy_value_high) {
+                        // Lose 1 family (middle happiness)
+                        if (currentFamilies > 0) {
+                            predictedFamilies -= 1;
+                        }
+                    } else {
+                        // High happiness: receive families from the pool
+                        // Calculate total converted pool
+                        let converted_pool = 0;
+                        allPlayers.forEach(p => {
+                            const p_families = this.familyCounters[p.id].getValue();
+                            if (happinessScores[p.id] === happy_value_low) {
+                                converted_pool += Math.min(2, p_families);
+                            } else if (happinessScores[p.id] !== happy_value_high && p_families > 0) {
+                                converted_pool += 1;
+                            }
+                        });
+                        
+                        // Divide families among high happiness players
+                        const fams_to_happy = Math.floor(converted_pool / high_players);
+                        predictedFamilies += fams_to_happy;
+                    }
+                }
+
+                // Prayer calculation: 1 per 5 families + bonuses + temples
+                predictedPrayer += Math.floor(predictedFamilies / 5);
+                if (happinessScores[player_id] === happy_value_low) {
+                    predictedPrayer += 4;
+                } else if (happinessScores[player_id] !== happy_value_high) {
+                    predictedPrayer += 2;
+                }
+                predictedPrayer += templeCount; // Temple prayer bonus
+
+                predictions[player_id] = {
+                    familyChange: predictedFamilies - currentFamilies,
+                    prayerChange: predictedPrayer - currentPrayer,
+                    happinessChange: predictedHappiness - this.happinessCounters[player_id].getValue(), // Temple bonus effect
+                    predictedFamilies: predictedFamilies,
+                    predictedPrayer: predictedPrayer,
+                    predictedHappiness: predictedHappiness
+                };
+            });
+
+            return predictions;
+        },
+
+        // Update and show the prediction panel
+        updatePredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
+            
+            const predictions = this.calculatePrayConvertPredictions();
+            const content = document.getElementById('prediction_content');
+            const panel = document.getElementById('prediction_panel');
+            
+            if (!content || !panel) return;
+
+            let html = '';
+            Object.values(this.gamedatas.players).forEach(player => {
+                const prediction = predictions[player.id];
+                const playerName = player.name;
+                const isMe = player.id == this.player_id;
+                
+                html += `<div style="margin-bottom: 3px; ${isMe ? 'font-weight: bold; color: #ffff80;' : ''}">`;
+                html += `<span style="color: ${this.fixPlayerColor(player.color)};">●</span> ${playerName}:<br>`;
+                
+                // Family change
+                if (prediction.familyChange !== 0) {
+                    const familyColor = prediction.familyChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;👨‍👩‍👧‍👦 ${prediction.familyChange > 0 ? '+' : ''}${prediction.familyChange}<br>`;
+                }
+                
+                // Prayer change
+                if (prediction.prayerChange !== 0) {
+                    const prayerColor = prediction.prayerChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;🙏 ${prediction.prayerChange > 0 ? '+' : ''}${prediction.prayerChange}<br>`;
+                }
+                
+                // Happiness change
+                if (prediction.happinessChange !== 0) {
+                    const happinessColor = prediction.happinessChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;😊 ${prediction.happinessChange > 0 ? '+' : ''}${prediction.happinessChange}<br>`;
+                }
+                
+                html += `</div>`;
+            });
+            
+            content.innerHTML = html;
+            panel.style.display = 'block';
+        },
+
+        // Helper function to check if end-round predictions are enabled
+        isPredictionsEnabled: function() {
+            // Check game options (standard BGA pattern)
+            if (this.gamedatas.game_options && this.gamedatas.game_options[101]) {
+                return this.gamedatas.game_options[101] == 2;
+            }
+            
+            // Fallback: check if options are stored differently
+            if (this.gamedatas.options && this.gamedatas.options[101]) {
+                return this.gamedatas.options[101] == 2;
+            }
+            
+            // Another fallback: check gameinfos (some BGA games store it here)
+            if (this.gamedatas.gameinfos && this.gamedatas.gameinfos.game_options && this.gamedatas.gameinfos.game_options[101]) {
+                return this.gamedatas.gameinfos.game_options[101] == 2;
+            }
+            
+            console.log('Warning: Could not find Show End-Round Predictions game option, defaulting to disabled');
+            console.log('Available gamedatas keys:', Object.keys(this.gamedatas));
+            
+            // Default to disabled if option not found
+            return false;
+        },
+
+        // Show prediction panel if appropriate game state
+        showPredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
+            
+            const panel = document.getElementById('prediction_panel');
+            if (panel) {
+                this.updatePredictionPanel();
+                panel.style.display = 'block';
+            }
+        },
+
+        // Hide prediction panel
+        hidePredictionPanel: function() {
+            const panel = document.getElementById('prediction_panel');
+            if (panel) {
+                panel.style.display = 'none';
+            }
+        },
+
+        // Toggle prediction panel visibility
+        togglePredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled()) return;
+            
+            this.predictionPanelEnabled = !this.predictionPanelEnabled;
+            const toggleButton = document.getElementById('prediction_toggle_btn');
+            
+            if (this.predictionPanelEnabled) {
+                this.showPredictionPanel();
+                if (toggleButton) {
+                    toggleButton.style.background = '#28a745';
+                    toggleButton.innerHTML = '📊 Hide';
+                }
+            } else {
+                this.hidePredictionPanel();
+                if (toggleButton) {
+                    toggleButton.style.background = '#4a90e2';
+                    toggleButton.innerHTML = '📊 Predictions';
+                }
+            }
         },
 
         setupAmuletDecision: function() {
@@ -937,6 +2080,25 @@ function (dojo, declare,) {
 
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
+            
+            // Add 0.5 second delays to card resolution notifications so players can follow along
+            this.notifqueue.setSynchronous('playerCountsChanged', 500);
+            this.notifqueue.setSynchronous('familiesConverted', 500);
+            this.notifqueue.setSynchronous('familiesDied', 500);
+            this.notifqueue.setSynchronous('templeDestroyed', 500);
+            this.notifqueue.setSynchronous('leaderRecovered', 500);
+            this.notifqueue.setSynchronous('templeBuilt', 500);
+            this.notifqueue.setSynchronous('amuletGained', 500);
+            this.notifqueue.setSynchronous('cardResolved', 500);
+            this.notifqueue.setSynchronous('cardBeingResolved', 500);
+            this.notifqueue.setSynchronous('diceRolled', 500);
+            this.notifqueue.setSynchronous('amuletUsed', 500);
+            this.notifqueue.setSynchronous('amuletNotUsed', 500);
+            
+            // Add tooltips to any cards that might have been missed
+            setTimeout(() => {
+                this.refreshAllCardTooltips();
+            }, 1000);
         },
 
         onPlayerHandSelectionChanged: function () {
@@ -950,6 +2112,9 @@ function (dojo, declare,) {
                 if ($('discard-btn')) {
                     dojo.removeClass('discard-btn', 'disabled');
                 }
+                
+                // Check for warnings if warnings preference is enabled
+                this.checkCardWarnings(selectedCards[0]);
             } else {
                 if ($('playCard-btn')) {
                     dojo.addClass('playCard-btn', 'disabled');
@@ -958,6 +2123,98 @@ function (dojo, declare,) {
                     dojo.addClass('discard-btn', 'disabled');
                 }
             }
+        },
+
+        // Check if the selected card would be ineffective and show warnings
+        checkCardWarnings: function(card) {
+            // Only show warnings if the preference is enabled
+            if (!this.isWarningsEnabled()) {
+                return;
+            }
+            
+            const cardType = parseInt(card.type);
+            const cardTypeArg = parseInt(card.type_arg);
+            
+            // Check for Recover Leader card when player already has a leader
+            if (cardType === this.ID_BONUS && cardTypeArg === 4) { // BonusCard::NewLeader = 4
+                const currentPlayer = this.gamedatas.players[this.player_id];
+                if (currentPlayer && currentPlayer.chief > 0) {
+                    this.showMessage(_('Warning: You already have a leader. This Recover Leader card will have no effect.'), 'info');
+                    return;
+                }
+            }
+            
+            // Check for Temple Destroyed card when no temples exist
+            if (cardType === this.ID_LOCAL_DISASTER && cardTypeArg === 5) { // LocalDisasterCard::TempleDestroyed = 5
+                let anyPlayerHasTemples = false;
+                Object.values(this.gamedatas.players).forEach(player => {
+                    if (player.temple > 0) {
+                        anyPlayerHasTemples = true;
+                    }
+                });
+                
+                // Also check if temple cards are in play (played or resolving)
+                let templeCardsInPlay = false;
+                if (this['played'] && this['played'].items) {
+                    Object.values(this['played'].items).forEach(item => {
+                        const uniqueId = parseInt(item.type);
+                        const cardInfo = this.getCardInfoFromUniqueId(uniqueId);
+                        if (cardInfo.type === this.ID_BONUS && cardInfo.type_arg === 7) { // BonusCard::Temple = 7
+                            templeCardsInPlay = true;
+                        }
+                    });
+                }
+                if (this['resolved'] && this['resolved'].items) {
+                    Object.values(this['resolved'].items).forEach(item => {
+                        const uniqueId = parseInt(item.type);
+                        const cardInfo = this.getCardInfoFromUniqueId(uniqueId);
+                        if (cardInfo.type === this.ID_BONUS && cardInfo.type_arg === 7) { // BonusCard::Temple = 7
+                            templeCardsInPlay = true;
+                        }
+                    });
+                }
+                
+                if (!anyPlayerHasTemples && !templeCardsInPlay) {
+                    this.showMessage(_('Warning: No player has temples and no temple cards are in play. This Temple Destroyed card will have no effect.'), 'info');
+                    return;
+                }
+            }
+            
+            // Additional warning for global disasters with no targets
+            if (cardType === this.ID_GLOBAL_DISASTER) {
+                let anyPlayerHasFamilies = false;
+                Object.values(this.gamedatas.players).forEach(player => {
+                    if (player.family > 0) {
+                        anyPlayerHasFamilies = true;
+                    }
+                });
+                
+                // Check specific global disasters that affect families
+                const familyAffectingCards = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // Most global disasters affect families
+                if (familyAffectingCards.includes(cardTypeArg) && !anyPlayerHasFamilies) {
+                    this.showMessage(_('Warning: No players have families. This global disaster will have reduced impact.'), 'info');
+                    return;
+                }
+            }
+        },
+
+        // Check if warnings preference is enabled
+        isWarningsEnabled: function() {
+            // Check if warnings are enabled via CSS class (preference system)
+            return dojo.hasClass('ebd-body', 'kalua_warnings_on');
+        },
+
+        // Helper function to get card info from unique ID
+        getCardInfoFromUniqueId: function(uniqueId) {
+            // Reverse the logic from getCardUniqueId
+            if (uniqueId >= 3001 && uniqueId <= 3007) {
+                return { type: this.ID_BONUS, type_arg: uniqueId - 3000 };
+            } else if (uniqueId >= 2001 && uniqueId <= 2005) {
+                return { type: this.ID_LOCAL_DISASTER, type_arg: uniqueId - 2000 };
+            } else if (uniqueId >= 1001 && uniqueId <= 1010) {
+                return { type: this.ID_GLOBAL_DISASTER, type_arg: uniqueId - 1000 };
+            }
+            return { type: 0, type_arg: 0 };
         },
 
         notif_playerDrewCard: async function( args )
@@ -995,6 +2252,20 @@ function (dojo, declare,) {
             if (this.cardCounters[player_id]) {
                 const currentValue = this.cardCounters[player_id].getValue();
                 this.cardCounters[player_id].setValue(Math.max(0, currentValue + 1));
+            }
+        },
+
+        notif_quickstartCardsDealt: async function( args )
+        {
+            console.log('Quickstart cards dealt to all players');
+            
+            // Force refresh all player hands to show the newly dealt cards
+            const players = args.players;
+            for (let player_id of players) {
+                if (player_id == this.player_id) {
+                    // For current player, trigger a full hand refresh
+                    this.updateDisplay();
+                }
             }
         },
 
@@ -1063,6 +2334,15 @@ function (dojo, declare,) {
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
                 this['played'].addToStockWithId(uniqueId, args.card_id);
+                
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[args.card_id]) {
+                    this['played'].items[args.card_id].played_by = args.player_id;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, args.player_id);
+                
+                // Add player color border to the played card
+                this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
             }
 
             // Update prayer counter if prayer was spent
@@ -1090,6 +2370,7 @@ function (dojo, declare,) {
                 const playerCardsStock = this[`${this.player_id}_cards`];
                 if (playerCardsStock) {
                     playerCardsStock.addToStockWithId(uniqueId, card.id);
+                    this.addCardTooltipByUniqueId(`${this.player_id}_cards`, uniqueId);
                 }
             }
         },
@@ -1103,6 +2384,9 @@ function (dojo, declare,) {
         },
 
         notif_roundLeaderChanged: function(args) {
+            // Update the round leader in gamedatas
+            this.gamedatas.round_leader = args.player_id;
+            
             // Update prayer icons when round leader changes
             this.updateRoundLeaderIcons(args.old_leader, args.player_id);
             
@@ -1236,6 +2520,15 @@ function (dojo, declare,) {
             // Visual feedback could be added here
         },
 
+        notif_amuletProtection: function(args) {
+            console.log('Player protected by amulet:', args);
+            const player_name = args.player_name;
+            const player_id = args.player_id;
+            
+            // Visual feedback could be added here to show amulet protection
+            // For example, a brief animation or highlighting of the player's board
+        },
+
         notif_diceRollRequired: function(args) {
             console.log('Dice roll required:', args);
             // Players who need to roll dice will be prompted in the setupDiceRoll method
@@ -1246,6 +2539,13 @@ function (dojo, declare,) {
             const player_name = args.player_name;
             const player_id = args.player_id;
             const result = args.result;
+            
+            // Reset auto-roll flag when any player rolls dice
+            // This allows auto-roll to work again if we return to dice rolling state
+            if (player_id == this.player_id) {
+                console.log('Resetting auto-roll flag after own dice roll');
+                this.autoRollAttempted = false;
+            }
             
             // Update only the specific player's die
             if (player_id && this.gamedatas.players[player_id]) {
@@ -1270,6 +2570,18 @@ function (dojo, declare,) {
                     this.templeCounters[player_id].incValue(1);
                 }
             }
+            
+            // Add temple card to kept area (kept_id = 2 for temple, based on comment in setup)
+            const keptStock = this[`${player_id}_kept`];
+            console.log('Kept stock for player', player_id, ':', keptStock);
+            if (keptStock) {
+                console.log('Attempting to add temple (kept_id=2) to stock...');
+                keptStock.addToStock(2);
+                console.log('Added temple to kept stock for player', player_id);
+                console.log('Stock items after adding:', keptStock.getAllItems());
+            } else {
+                console.error('No kept stock found for player', player_id);
+            }
         },
 
         notif_amuletIncremented: function(args) {
@@ -1278,6 +2590,42 @@ function (dojo, declare,) {
             // Update amulet counter
             if (this.amuletCounters[player_id]) {
                 this.amuletCounters[player_id].incValue(1);
+            }
+            
+            // Add amulet card to kept area (kept_id = 1 for amulet, based on comment in setup)
+            const keptStock = this[`${player_id}_kept`];
+            console.log('Kept stock for player', player_id, ':', keptStock);
+            if (keptStock) {
+                console.log('Attempting to add amulet (kept_id=1) to stock...');
+                keptStock.addToStock(1);
+                console.log('Added amulet to kept stock for player', player_id);
+                console.log('Stock items after adding:', keptStock.getAllItems());
+            } else {
+                console.error('No kept stock found for player', player_id);
+            }
+        },
+
+        notif_templeDestroyed: function(args) {
+            console.log('Temple destroyed for player:', args);
+            const player_id = args.player_id;
+            const temples_destroyed = args.temples_count;
+            
+            // Update temple counter
+            if (this.templeCounters[player_id] && args.temples_remaining !== undefined) {
+                this.templeCounters[player_id].setValue(args.temples_remaining);
+            }
+            
+            // Remove temple cards from kept area (kept_id = 2 for temple)
+            const keptStock = this[`${player_id}_kept`];
+            if (keptStock && temples_destroyed > 0) {
+                for (let i = 0; i < temples_destroyed; i++) {
+                    // Remove one temple item from stock
+                    const templeItems = keptStock.getAllItems().filter(item => item.type == 2);
+                    if (templeItems.length > 0) {
+                        keptStock.removeFromStockById(templeItems[0].id);
+                    }
+                }
+                console.log('Removed', temples_destroyed, 'temple(s) from kept stock for player', player_id);
             }
         },
 
@@ -1337,6 +2685,12 @@ function (dojo, declare,) {
             if (this.templeCounters[player_id] && args.temple_count !== undefined) {
                 this.templeCounters[player_id].setValue(args.temple_count);
             }
+            
+            // Update prediction panel if active
+            this.refreshPredictionPanelIfActive();
+            
+            // Update dev statistics display
+            this.updateDevStatsDisplay();
         },
 
         notif_leaderRecovered: function(args) {
@@ -1400,6 +2754,7 @@ function (dojo, declare,) {
             // Add to resolved stock
             if (this['resolved']) {
                 this['resolved'].addToStockWithId(uniqueId, card_id);
+                this.addCardTooltipByUniqueId('resolved', uniqueId);
             }
             
             console.log(`Card ${card_id} (${args.card_name}) moved to resolved`);
@@ -1453,6 +2808,17 @@ function (dojo, declare,) {
             // Update family counter for the affected player
             if (this.familyCounters[args.player_id]) {
                 this.familyCounters[args.player_id].setValue(args.families_remaining);
+            }
+        },
+
+        ///////////////////////////////////////////////////
+        //// Utility Notifications
+
+        // Helper function to refresh prediction panel after counter updates
+        refreshPredictionPanelIfActive: function() {
+            if (this.predictionPanelEnabled && document.getElementById('prediction_panel') && 
+                document.getElementById('prediction_panel').style.display !== 'none') {
+                this.updatePredictionPanel();
             }
         },
 

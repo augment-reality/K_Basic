@@ -6,8 +6,9 @@
 const ST_BGA_GAME_SETUP = 1;
 
 /* Game setup states */
-const ST_INITIAL_DRAW = 10;
-const ST_INITIAL_FINISH = 11;
+const ST_QUICK_DRAW = 10;
+const ST_INITIAL_DRAW = 11;
+const ST_INITIAL_FINISH = 12;
 
 /* Phase one - drawing */
 const ST_PHASE_ONE_DRAW = 20;
@@ -40,7 +41,8 @@ const ST_END_GAME = 99;
 const STR_CARD_TYPE_DISASTER = "disaster";
 const STR_CARD_TYPE_BONUS = "bonus";
 
-const HAND_SIZE = 2;
+//quicker debugging with smaller hand size
+const HAND_SIZE = 5;
 
 enum CardType: int
 {
@@ -255,6 +257,8 @@ $CARD_EFFECTS = [
             'recover_leader' => false,
             'discard' => 0,
             'keep_card' => 0,
+            'temple_destroyed' => 1, // Special effect: destroys 1 temple from target
+            'requires_temple_target' => true, // Requires targeting a player with temples
         ],
     ],
     CardType::Bonus->value => [
