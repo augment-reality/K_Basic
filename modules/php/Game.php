@@ -2867,6 +2867,23 @@ class Game extends \Table
         $this->gamestate->nextState('continueResolve');
     }
 
+    /**
+     * Action method to retrieve development statistics via AJAX
+     * This is used by the development statistics panel
+     */
+    public function actGetDevStatistics(): void
+    {
+        // No permission check needed for development statistics
+        // Get the statistics using existing method
+        $stats = $this->getDevStatistics();
+        
+        // Send notification to the player with the statistics data
+        $player_id = $this->getCurrentPlayerId();
+        $this->notifyPlayer($player_id, 'devStatisticsRefreshed', '', [
+            'statistics' => $stats
+        ]);
+    }
+
     /******************************/
 
     /**
