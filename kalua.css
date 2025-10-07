@@ -245,13 +245,35 @@ border-radius: 5px; */
 
 
 .player_kept_cards {
-    width: auto;
+    width: 480px;
     height: auto;
+    min-height: 95px; /* Minimum height to accommodate temple/amulet items + padding */
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 5px;
     text-align: center;
+    flex: 0 0 480px; /* Fixed width of 480px */
+}
+
+.player_bottom_section {
+    display: flex;
+    gap: 10px;
+    align-items: stretch; /* Make both sections same height */
+    margin-top: 5px;
+}
+
+.player_prayer_tokens {
+    width: auto;
+    height: auto;
+    min-height: 95px; /* Same minimum height as kept cards */
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
+    text-align: center;
+    flex: 1; /* Take remaining space */
+    margin-top: 0; /* Remove top margin since they're side by side */
 }
 
 .family_item {

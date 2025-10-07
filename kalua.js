@@ -126,9 +126,15 @@ function (dojo, declare,) {
                         <div id="player_name_${player.id}" class="player_name" style="color: ${fixedColor} !important;">${player.name}</div>
                         <div id="${player.id}_cards" class="player_cards"></div>
                         <div id="${player.id}_families" class="player_families"></div>
-                        <div id="${player.id}_InPlay" class="player_kept_cards">
-                            Kept Cards:
-                            <div id="${player.id}_InPlayContent"></div>
+                        <div class="player_bottom_section">
+                            <div id="${player.id}_InPlay" class="player_kept_cards">
+                                Kept Cards:
+                                <div id="${player.id}_InPlayContent"></div>
+                            </div>
+                            <div id="${player.id}_player_prayer" class="player_prayer_tokens">
+                                Prayer:
+                                <div id="${player.id}_PrayerContent"></div>
+                            </div>
                         </div>
                     </div>
                 `);
@@ -320,13 +326,13 @@ function (dojo, declare,) {
 
             // Create stock for played cards
             this['played'] = new ebg.stock();  
-            this['played'].create(this, document.getElementById('playedCardsContent'), 120, 177.4);
+            this['played'].create(this, document.getElementById('playedCardsContent'), 120, 181.3);
             this['played'].image_items_per_row = 5;
             this['played'].setSelectionMode(0);
 
             // Create stock for resolved cards
             this['resolved'] = new ebg.stock();
-            this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 177.4);
+            this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 181.3);
             this['resolved'].image_items_per_row = 5;
             this['resolved'].setSelectionMode(0);
 
@@ -334,13 +340,13 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 // Create cardbacks stock using the cardbacks div
                 this[`${player.id}_cardbacks`] = new ebg.stock();
-                this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 174);
+                this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 181.3);
                 this[`${player.id}_cardbacks`].image_items_per_row = 2;
                 this[`${player.id}_cardbacks`].setSelectionMode(0);
 
                 // Create cards stock using the cards div
                 this[`${player.id}_cards`] = new ebg.stock();
-                this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 181.4);
+                this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 181.3);
                 this[`${player.id}_cards`].image_items_per_row = 5;
                 this[`${player.id}_cards`].setSelectionMode(1); // single selection
                 dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
@@ -362,6 +368,22 @@ function (dojo, declare,) {
                 }
                 console.log('Created kept stock for player', player.id, ':', this[`${player.id}_kept`]);
 
+                //create prayer token stock 1 = single prayer token, 2 = five prayer token
+                this[`${player.id}_ptokens`] = new ebg.stock();
+                this[`${player.id}_ptokens`].create(this, $(`${player.id}_PrayerContent`), 30, 30);
+                this[`${player.id}_ptokens`].image_items_per_row = 2;
+                this[`${player.id}_ptokens`].setSelectionMode(0);
+                for (let ptoken_id = 1; ptoken_id <= 2; ptoken_id++)
+                {
+                    this[`${player.id}_ptokens`].addItemType(ptoken_id, ptoken_id, g_gamethemeurl + 'img/30_30_prayertokens.png', ptoken_id - 1);
+                }
+                console.log('Created prayer token stock for player', player.id, ':', this[`${player.id}_ptokens`]);
+
+                // Initialize with 5 prayer tokens using optimized representation
+                // Note: This will be optimized again in the setup phase with actual player.prayer value
+                this.optimizePrayerTokens(player.id, 5);
+                console.log('Initialized prayer tokens for player', player.id);
+
             });
 
 
@@ -375,7 +397,7 @@ function (dojo, declare,) {
 
                 
                 // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id - 1);
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', card_id - 1);
                 
                 // Add to resolved cards stock
                 this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id - 1);
@@ -389,19 +411,31 @@ function (dojo, declare,) {
             /* Add global disaster cards */
             const card_type_global_disaster = this.ID_GLOBAL_DISASTER;
             const num_global_disaster_cards = 10;
+            
+            // Global disaster card image position mappings
+            // Normal: positions 5-14, Avoid: positions 25-34, Double: positions 35-44
+            this.globalDisasterImageMappings = {
+                'normal': (card_id) => card_id + 4,    // Original positions 5-14
+                'avoid': (card_id) => card_id + 24,    // Avoid positions 25-34  
+                'double': (card_id) => card_id + 34    // Double positions 35-44
+            };
+            
             for (let card_id = 1; card_id <= num_global_disaster_cards; card_id++)
             {
                 const uniqueId = this.getCardUniqueId(card_type_global_disaster, card_id);
                 
-                // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 4);
+                // Start with normal image positions (will be updated when multiplier is selected)
+                const normalImagePos = this.globalDisasterImageMappings.normal(card_id);
                 
-                // Add to resolved cards stock
-                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 4);
+                // Add to played cards stock
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
+                
+                // Add to resolved cards stock  
+                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
                 
                 Object.values(gamedatas.players).forEach(player => {
-                    /* Note: image ID 5 - 14 for global disaster cards */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 4);
+                    /* Note: image ID 5 - 14 for normal global disaster cards, will be updated for avoid/double */
+                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
                 });
             } 
 
@@ -428,11 +462,14 @@ function (dojo, declare,) {
 
             /* Update counters */
             Object.values(gamedatas.players).forEach(player => {
-                this.prayerCounters[player.id].setValue(player.prayer);
+                this.updatePlayerPrayer(player.id, player.prayer);
                 this.happinessCounters[player.id].setValue(Math.max(0, Math.min(10, player.happiness || 0)));
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
+                
+                // Optimize prayer token display for each player's current prayer count
+                this.optimizePrayerTokens(player.id, player.prayer);
                 
                 // Initialize kept cards based on temple and amulet counts
                 if (this[`${player.id}_kept`]) {
@@ -541,12 +578,15 @@ function (dojo, declare,) {
 
             // Update sidebar counters based on gamedata
             Object.values(gamedatas.players).forEach(player => {
-                this.prayerCounters[player.id].setValue(player.prayer);
+                this.updatePlayerPrayer(player.id, player.prayer);
                 this.happinessCounters[player.id].setValue(Math.max(0, Math.min(10, player.happiness || 0)));
                 this.cardCounters[player.id].setValue(player.cards);
                 this.templeCounters[player.id].setValue(player.temple);
                 this.amuletCounters[player.id].setValue(player.amulet);
                 this.familyCounters[player.id].setValue(player.family);
+                
+                // Optimize prayer token display for each player's current prayer count (redundant but safe)
+                this.optimizePrayerTokens(player.id, player.prayer);
                 
                 // Initialize kept cards based on temple and amulet counts
                 if (this[`${player.id}_kept`]) {
@@ -782,8 +822,12 @@ function (dojo, declare,) {
                 // Local Disaster cards: positions 0-4 (cardId 1-5 maps to positions 0-4)
                 imagePosition = cardId - 1;
             } else if (cardType === this.ID_GLOBAL_DISASTER) {
-                // Global Disaster cards: positions 5-14 (cardId 1-10 maps to positions 5-14)  
-                imagePosition = cardId + 4;
+                // Global Disaster cards: check if card has been modified for avoid/double
+                // Default to normal position, but this could be updated based on current game state
+                imagePosition = cardId + 4; // Normal positions 5-14
+                
+                // Note: For tooltips, we'll always show the normal version for consistency
+                // The actual played card will show the avoid/double version if selected
             } else if (cardType === this.ID_BONUS) {
                 // Bonus cards: positions 15-21 (cardId 1-7 maps to positions 15-21)
                 imagePosition = cardId + 14;
@@ -1392,6 +1436,103 @@ function (dojo, declare,) {
 
         ///////////////////////////////////////////////////
         //// Utility methods
+
+        ///////////////////////////////////////////////////
+        //// Prayer token management helper function
+        
+        updatePlayerPrayer: function(playerId, newPrayerValue) {
+            if (this.prayerCounters[playerId]) {
+                this.prayerCounters[playerId].setValue(newPrayerValue);
+                this.optimizePrayerTokens(playerId, newPrayerValue);
+                console.log(`Updated player ${playerId} prayer to ${newPrayerValue}`);
+            } else {
+                console.warn(`No prayer counter found for player ${playerId}`);
+            }
+        },
+
+        ///////////////////////////////////////////////////
+        //// Prayer token optimization helper
+        
+        optimizePrayerTokens: function(playerId, targetCount) {
+            const playerStock = this[`${playerId}_ptokens`];
+            if (!playerStock) {
+                console.warn(`No prayer token stock found for player ${playerId}`);
+                return;
+            }
+            
+            // Clear all current tokens
+            playerStock.removeAll();
+            
+            // Use individual tokens (type 1) when less than 6 exist
+            if (targetCount < 6) {
+                // Add individual single tokens (type 1)
+                for (let i = 0; i < targetCount; i++) {
+                    playerStock.addToStock(1); // Type 1 = single prayer token
+                }
+                console.log(`Prayer tokens for player ${playerId}: ${targetCount} individual tokens (less than 6)`);
+            } else {
+                // Calculate optimal representation: use type 2 (five-tokens) when 6 or more
+                const fiveTokens = Math.floor(targetCount / 5);
+                const singleTokens = targetCount % 5;
+                
+                // Add five-token representations (type 2)
+                for (let i = 0; i < fiveTokens; i++) {
+                    playerStock.addToStock(2); // Type 2 = five prayer tokens
+                }
+                
+                // Add remaining single tokens (type 1)
+                for (let i = 0; i < singleTokens; i++) {
+                    playerStock.addToStock(1); // Type 1 = single prayer token
+                }
+                
+                console.log(`Optimized prayer tokens for player ${playerId}: ${fiveTokens} five-tokens + ${singleTokens} single-tokens = ${targetCount} total`);
+            }
+        },
+
+        ///////////////////////////////////////////////////
+        //// Global disaster card image switching
+        
+        updateGlobalDisasterCardImage: function(cardId, cardTypeArg, multiplierChoice) {
+            // Get the unique ID for this global disaster card
+            const uniqueId = this.getCardUniqueId(this.ID_GLOBAL_DISASTER, cardTypeArg);
+            
+            // Determine the new image position based on multiplier choice
+            let newImagePos;
+            switch(multiplierChoice) {
+                case 'avoid':
+                    newImagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);
+                    break;
+                case 'double':
+                    newImagePos = this.globalDisasterImageMappings.double(cardTypeArg);
+                    break;
+                case 'normal':
+                default:
+                    newImagePos = this.globalDisasterImageMappings.normal(cardTypeArg);
+                    break;
+            }
+            
+            console.log(`Updating global disaster card ${cardId} (type_arg ${cardTypeArg}) to ${multiplierChoice} - image position ${newImagePos}`);
+            
+            // Update the card image in the played cards stock
+            if (this['played'] && this['played'].item_type && this['played'].item_type[uniqueId]) {
+                this['played'].item_type[uniqueId].image_position = newImagePos;
+                
+                // Force a visual update of the specific card if it exists in the played stock
+                const playedItems = this['played'].getAllItems();
+                const targetItem = playedItems.find(item => item.id == cardId);
+                if (targetItem) {
+                    // Remove and re-add the item to force visual update
+                    this['played'].removeFromStockById(cardId);
+                    this['played'].addToStockWithId(uniqueId, cardId);
+                    console.log(`Visually updated played card ${cardId} with new image`);
+                }
+            }
+            
+            // Update in resolved cards stock as well (in case it moves there later)
+            if (this['resolved'] && this['resolved'].item_type && this['resolved'].item_type[uniqueId]) {
+                this['resolved'].item_type[uniqueId].image_position = newImagePos;
+            }
+        },
 
         /* Maps card type (bonus, local disaster, global disaster) and type_id 
          * (which of those type cards it is) to a unique number*/
@@ -2322,6 +2463,11 @@ function (dojo, declare,) {
 
             console.log(player_name + ' converted ' + num_atheists + ' atheists');
             this.convertAtheists(player_id, num_atheists);
+            
+            // Update prayer token display if prayer value is provided
+            if (args.prayer !== undefined) {
+                this.updatePlayerPrayer(args.player_id, args.prayer);
+            }
         },
 
         notif_sacrificeLeader: async function(args)
@@ -2346,6 +2492,14 @@ function (dojo, declare,) {
 
             console.log(player_name + ' converted a believer from ' + target_name);
             this.convertBelievers(player_id, target_id);
+            
+            // Update prayer token display if prayer value is provided for either player
+            if (args.prayer !== undefined) {
+                this.updatePlayerPrayer(args.player_id, args.prayer);
+            }
+            if (args.target_prayer !== undefined) {
+                this.updatePlayerPrayer(args.target_id, args.target_prayer);
+            }
         },
 
         notif_cardPlayed: function(args) {
@@ -2412,11 +2566,22 @@ function (dojo, declare,) {
         },
 
         notif_prayerSpent: function(args) {
-            // Update prayer counter for the player who spent prayer points
-            if (this.prayerCounters[args.player_id]) {
-                this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
+            // Update prayer counter and tokens for the player who spent prayer points
+            this.updatePlayerPrayer(args.player_id, args.new_prayer_total);
+            
+            console.log(`Player ${args.player_id} spent ${args.prayer_spent} prayer points, new total: ${args.new_prayer_total}`);
+        },
+
+        notif_globalDisasterChoice: function(args) {
+            // Update the global disaster card image based on the multiplier choice
+            console.log('Global disaster choice made:', args);
+            
+            if (args.card_id && args.card_type_arg && args.choice) {
+                this.updateGlobalDisasterCardImage(args.card_id, args.card_type_arg, args.choice);
             }
-            console.log(`Player ${args.player_id} spent ${args.prayer_spent} prayer points`);
+            
+            // Log the choice for reference
+            console.log(`Global disaster ${args.card_id} choice: ${args.choice} by player ${args.player_id}`);
         },
 
         notif_roundLeaderChanged: function(args) {
@@ -2668,6 +2833,10 @@ function (dojo, declare,) {
         notif_templeBonus: function(args) {
             console.log('Temple bonus notification:', args);
             // Just a notification message - the prayer counter will be updated by playerCountsChanged
+            // Update prayer token display if prayer value is provided
+            if (args.prayer !== undefined && args.player_id) {
+                this.updatePlayerPrayer(args.player_id, args.prayer);
+            }
         },
 
         notif_playerCountsChanged: function(args) {
@@ -2703,7 +2872,7 @@ function (dojo, declare,) {
                 }
             }
             if (this.prayerCounters[player_id]) {
-                this.prayerCounters[player_id].setValue(args.prayer);
+                this.updatePlayerPrayer(player_id, args.prayer);
             }
             if (this.happinessCounters[player_id] && args.happiness !== undefined) {
                 const currentHappiness = this.happinessCounters[player_id].getValue();
@@ -2835,6 +3004,11 @@ function (dojo, declare,) {
             // Add converted families to atheist stock
             for (let i = 0; i < args.families_count; i++) {
                 this['atheists'].addToStock(this.ID_AHTHIEST_STOCK); // 5 = atheist meeple
+            }
+            
+            // Update prayer token display if prayer value is provided
+            if (args.prayer !== undefined) {
+                this.updatePlayerPrayer(args.player_id, args.prayer);
             }
         },
 
