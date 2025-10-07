@@ -340,7 +340,7 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 // Create cardbacks stock using the cardbacks div
                 this[`${player.id}_cardbacks`] = new ebg.stock();
-                this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 181.3);
+                this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 174);
                 this[`${player.id}_cardbacks`].image_items_per_row = 2;
                 this[`${player.id}_cardbacks`].setSelectionMode(0);
 
