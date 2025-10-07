@@ -274,6 +274,26 @@ border-radius: 5px; */
     text-align: center;
     flex: 1; /* Take remaining space */
     margin-top: 0; /* Remove top margin since they're side by side */
+    position: relative; /* Allow absolute positioning of tokens */
+    overflow: visible; /* Allow tokens to slightly overflow for organic effect */
+}
+
+/* Prayer token organic pile styling */
+.prayer_token {
+    display: inline-block;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2); /* Add subtle shadow for depth */
+}
+
+/* Prayer content container for zone */
+[id$="_PrayerContent"] {
+    position: relative;
+    min-height: 80px;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
 }
 
 .family_item {
@@ -371,5 +391,41 @@ border-radius: 5px; */
     /* Additional styling for colored player names */
     background-color: #969696;
     border: 2px solid rgba(0,0,0,0.3);
+}
+
+/* Lower opacity of prayer token items - more specific selectors */
+[id$="_PrayerContent"] > * {
+    opacity: 0.6 !important;
+}
+
+[id$="_PrayerContent"] .stockitem {
+    opacity: 0.6 !important;
+}
+
+[id$="_PrayerContent"] div {
+    opacity: 0.6 !important;
+}
+
+/* Alternative selector for prayer token items */
+.player_prayer_tokens .stockitem {
+    opacity: 0.6 !important;
+}
+
+.player_prayer_tokens > div > * {
+    opacity: 0.6 !important;
+}
+
+/* Ensure prayer token images have reduced opacity */
+[id$="_PrayerContent"] img {
+    opacity: 0.6 !important;
+}
+
+/* Target any div with ptokens in its ID */
+[id*="_ptokens"] {
+    opacity: 0.6 !important;
+}
+
+[id*="_ptokens"] * {
+    opacity: 0.6 !important;
 }
 

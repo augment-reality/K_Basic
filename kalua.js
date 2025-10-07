@@ -368,16 +368,21 @@ function (dojo, declare,) {
                 }
                 console.log('Created kept stock for player', player.id, ':', this[`${player.id}_kept`]);
 
-                //create prayer token stock 1 = single prayer token, 2 = five prayer token
-                this[`${player.id}_ptokens`] = new ebg.stock();
-                this[`${player.id}_ptokens`].create(this, $(`${player.id}_PrayerContent`), 30, 30);
-                this[`${player.id}_ptokens`].image_items_per_row = 2;
-                this[`${player.id}_ptokens`].setSelectionMode(0);
-                for (let ptoken_id = 1; ptoken_id <= 2; ptoken_id++)
-                {
-                    this[`${player.id}_ptokens`].addItemType(ptoken_id, ptoken_id, g_gamethemeurl + 'img/30_30_prayertokens.png', ptoken_id - 1);
-                }
-                console.log('Created prayer token stock for player', player.id, ':', this[`${player.id}_ptokens`]);
+                //create prayer token zone for organic pile arrangement
+                this[`${player.id}_prayer_zone`] = new ebg.zone();
+                this[`${player.id}_prayer_zone`].create(this, `${player.id}_PrayerContent`, 30, 30);
+                
+                // Configure zone for organic pile-like arrangement
+                this[`${player.id}_prayer_zone`].item_margin = 2;
+                this[`${player.id}_prayer_zone`].instantaneous = false; // Enable animations
+                this[`${player.id}_prayer_zone`].control_name = 'prayer_tokens';
+                
+                // Override the default positioning for more organic feel
+                this[`${player.id}_prayer_zone`].getAllItems = function() {
+                    return this.items;
+                };
+                
+                console.log('Created prayer token zone for player', player.id, ':', this[`${player.id}_prayer_zone`]);
 
                 // Initialize with 5 prayer tokens using optimized representation
                 // Note: This will be optimized again in the setup phase with actual player.prayer value
@@ -428,7 +433,7 @@ function (dojo, declare,) {
                 const normalImagePos = this.globalDisasterImageMappings.normal(card_id);
                 
                 // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', normalImagePos);
                 
                 // Add to resolved cards stock  
                 this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
@@ -447,7 +452,7 @@ function (dojo, declare,) {
                 const uniqueId = this.getCardUniqueId(card_type_bonus, card_id);
                 
                 // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 14);
+                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', card_id + 14);
                 
                 // Add to resolved cards stock
                 this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 14);
@@ -835,7 +840,7 @@ function (dojo, declare,) {
             
             // Calculate X,Y position in sprite grid
             const cardsPerRow = 5;
-            const cardWidth = 264;   
+            const cardWidth = 264.6;   
             const cardHeight = 400; 
             
             const col = imagePosition % cardsPerRow;
@@ -847,7 +852,7 @@ function (dojo, declare,) {
             // Create clean image tooltip without player-specific styling
             const imageUrl = g_gamethemeurl + 'img/Cards_1323_2000_compressed.png';
             
-            const imgTooltip = `<img src="${imageUrl}" style="width: 240px; height: 354.8px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
+            const imgTooltip = `<img src="${imageUrl}" style="width: 262px; height: 400px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
             
             // Add image tooltip
             this.addTooltipHtml(elementId, imgTooltip, 300);
@@ -1450,43 +1455,106 @@ function (dojo, declare,) {
             }
         },
 
+
         ///////////////////////////////////////////////////
         //// Prayer token optimization helper
         
         optimizePrayerTokens: function(playerId, targetCount) {
-            const playerStock = this[`${playerId}_ptokens`];
-            if (!playerStock) {
-                console.warn(`No prayer token stock found for player ${playerId}`);
+            const playerZone = this[`${playerId}_prayer_zone`];
+            if (!playerZone) {
+                console.warn(`No prayer token zone found for player ${playerId}`);
                 return;
             }
             
             // Clear all current tokens
-            playerStock.removeAll();
+            playerZone.removeAll();
             
-            // Use individual tokens (type 1) when less than 6 exist
+            // Create prayer token elements and add to zone for organic arrangement
             if (targetCount < 6) {
-                // Add individual single tokens (type 1)
+                // Add individual single tokens
                 for (let i = 0; i < targetCount; i++) {
-                    playerStock.addToStock(1); // Type 1 = single prayer token
+                    const tokenId = `${playerId}_prayer_${i}`;
+                    this.createPrayerTokenElement(tokenId, 1, playerId); // Type 1 = single prayer token
+                    playerZone.placeInZone(tokenId);
                 }
                 console.log(`Prayer tokens for player ${playerId}: ${targetCount} individual tokens (less than 6)`);
             } else {
-                // Calculate optimal representation: use type 2 (five-tokens) when 6 or more
-                const fiveTokens = Math.floor(targetCount / 5);
-                const singleTokens = targetCount % 5;
+                // For 6+ tokens: always show 1-5 individual tokens plus grouped tokens for visual significance
+                const totalForGrouping = targetCount - 1;
+                const fiveTokens = Math.floor(totalForGrouping / 5);
+                const remainingTokens = targetCount - (fiveTokens * 5);
+                const singleTokens = Math.max(1, Math.min(5, remainingTokens));
                 
-                // Add five-token representations (type 2)
+                let tokenIndex = 0;
+                
+                // Add five-token representations with slight randomization
                 for (let i = 0; i < fiveTokens; i++) {
-                    playerStock.addToStock(2); // Type 2 = five prayer tokens
+                    const tokenId = `${playerId}_prayer_5group_${i}`;
+                    this.createPrayerTokenElement(tokenId, 2, playerId); // Type 2 = five prayer tokens
+                    playerZone.placeInZone(tokenId);
+                    this.addOrganicPositioning(tokenId, tokenIndex++);
                 }
                 
-                // Add remaining single tokens (type 1)
+                // Add individual tokens with organic positioning
                 for (let i = 0; i < singleTokens; i++) {
-                    playerStock.addToStock(1); // Type 1 = single prayer token
+                    const tokenId = `${playerId}_prayer_single_${i}`;
+                    this.createPrayerTokenElement(tokenId, 1, playerId); // Type 1 = single prayer token
+                    playerZone.placeInZone(tokenId);
+                    this.addOrganicPositioning(tokenId, tokenIndex++);
                 }
                 
-                console.log(`Optimized prayer tokens for player ${playerId}: ${fiveTokens} five-tokens + ${singleTokens} single-tokens = ${targetCount} total`);
+                console.log(`Optimized prayer tokens for player ${playerId}: ${fiveTokens} five-tokens + ${singleTokens} individual-tokens = ${targetCount} total (organic arrangement)`);
             }
+        },
+        
+        ///////////////////////////////////////////////////
+        //// Create prayer token DOM elements
+        
+        createPrayerTokenElement: function(elementId, tokenType, playerId) {
+            // Remove existing element if it exists
+            const existingElement = document.getElementById(elementId);
+            if (existingElement) {
+                existingElement.remove();
+            }
+            
+            // Create new prayer token element
+            const tokenElement = document.createElement('div');
+            tokenElement.id = elementId;
+            tokenElement.className = 'prayer_token';
+            tokenElement.style.width = '30px';
+            tokenElement.style.height = '30px';
+            tokenElement.style.backgroundImage = `url('${g_gamethemeurl}img/30_30_prayertokens.png')`;
+            tokenElement.style.backgroundSize = '60px 30px'; // 2 images per row
+            tokenElement.style.backgroundRepeat = 'no-repeat';
+            tokenElement.style.backgroundPosition = tokenType === 1 ? '0px 0px' : '-30px 0px';
+            tokenElement.style.opacity = '0.5'; // Apply the opacity directly
+            tokenElement.style.position = 'absolute';
+            tokenElement.style.cursor = 'default';
+            
+            // Add to prayer content div
+            const prayerContent = document.getElementById(`${playerId}_PrayerContent`);
+            if (prayerContent) {
+                prayerContent.appendChild(tokenElement);
+            }
+        },
+        
+        ///////////////////////////////////////////////////
+        //// Add organic positioning to prayer tokens
+        
+        addOrganicPositioning: function(elementId, index) {
+            setTimeout(() => {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    // Add slight random offset for organic pile effect
+                    const randomX = (Math.random() - 0.5) * 10; // -5 to +5 pixels
+                    const randomY = (Math.random() - 0.5) * 10; // -5 to +5 pixels
+                    const randomRotation = (Math.random() - 0.5) * 20; // -10 to +10 degrees
+                    
+                    // Apply transform for organic look
+                    element.style.transform = `translate(${randomX}px, ${randomY}px) rotate(${randomRotation}deg)`;
+                    element.style.zIndex = 100 + index; // Layer tokens naturally
+                }
+            }, 50 * index); // Stagger the positioning for animation effect
         },
 
         ///////////////////////////////////////////////////
