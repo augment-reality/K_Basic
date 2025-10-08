@@ -2268,11 +2268,11 @@ class Game extends \Table
                 'new_prayer_total' => $player_prayer - self::GLOBAL_DISASTER_AVOID_COST
             ]);
 
-        // Clear the stored card ID and transition to card resolution
+        // Clear the stored card ID and return to round leader's card playing
         $this->setGameStateValue('current_global_disaster', 0);
         
-        // Global disaster choice made, proceed to resolve the card
-        $this->gamestate->nextState("resolveCards");
+        // Return to round leader to continue playing cards or pass
+        $this->gamestate->nextState("playAgain");
     }
 
     public function actDoubleGlobal(): void
@@ -2317,11 +2317,11 @@ class Game extends \Table
                 'new_prayer_total' => $player_prayer - self::GLOBAL_DISASTER_DOUBLE_COST
             ]);
 
-        // Clear the stored card ID and transition to card resolution
+        // Clear the stored card ID and return to round leader's card playing
         $this->setGameStateValue('current_global_disaster', 0);
         
-        // Global disaster choice made, proceed to resolve the card
-        $this->gamestate->nextState("resolveCards");
+        // Return to round leader to continue playing cards or pass
+        $this->gamestate->nextState("playAgain");
     }
 
     public function actNormalGlobal(): void
@@ -2353,11 +2353,11 @@ class Game extends \Table
                 'card_id' => $card_id
             ]);
 
-        // Clear the stored card ID and transition to card resolution
+        // Clear the stored card ID and return to round leader's card playing
         $this->setGameStateValue('current_global_disaster', 0);
         
-        // Global disaster choice made, proceed to resolve the card
-        $this->gamestate->nextState("resolveCards");
+        // Return to round leader to continue playing cards or pass
+        $this->gamestate->nextState("playAgain");
     }
     
     /***************************************/

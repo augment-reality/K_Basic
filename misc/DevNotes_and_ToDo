@@ -1,40 +1,53 @@
 
-which are not required to run the game.
-
-The files won't be committed into source control repository and
+These files won't be committed into source control repository and
 won't be packaged for deployment.
 It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
--discard happening at time of play, not resolution
+✅ CARD OVERLAPPING IMPLEMENTED - SPACE SAVING ✅
+**Status: COMPLETED**
 
-finish debug and validate of many features that all seem to work: amulets/temples/draw-for-five/prefs/game options/predictions/stats
--handle php case for "zombie" player: remove families from game and pass all options to play card
+Enhancement: Added card overlapping to all stock containers to save space and prevent layout overflow.
+
+Implementation:
+- Player card stocks: 15px horizontal overlap
+- Cardback stocks: 15px horizontal overlap  
+- Played cards stock: 20px horizontal overlap
+- Resolved cards stock: 20px horizontal overlap
+- Added smooth 400ms animation for card appearance
+
+Result: Significantly reduced horizontal space requirements, preventing cards from hanging into other divs.
+
+⚠️ LAYOUT BUG FIXED - PLAYER CARDS OVERLAPPING ⚠️
+-Is there a maximum number of prayer cubes??
+-tooltips should have text description of effects, which aren't clear based on icons
+-are amulet graphics working - might have wrong pic
+
+CRITICAL FOR ALPHA DEPLOYMENT (BGA Pre-Release Checklist Issues):
+https://en.doc.boardgamearena.com/Pre-release_checklist
+
+1.  Review and consolidate messages
+
+3. ZOMBIE TURN IMPLEMENTATION:
+   - Comprehensive zombie turn logic implemented in Game.php
+   - Covers all game states: drawing, leader actions, card play, dice rolling, etc.
+   - Ready for testing
+
+4. VERIFIED COMPLIANT:
+   - Game progression calculation implemented (getGameProgression)
+   - giveExtraTime timing configured in gameinfos.inc.php 
+   - Img directory size: 3.7MB (within 15MB limit)
+   - gameinfos.inc.php properly configured with tie-breaker description
+   - stats.json exists with proper structure
+
+NORMAL PRIORITY:
+-add sounds https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds (COMPLETED)
+-custom font based on cards?
 -undo buttons? Maybe just confirm buttons instead (convert/pray)?
 -For mobile: don't show tooltips, and move dice to right of main board?
 
-
-    "table": {
-        "total_rounds": "Total rounds played",
-        "total_global_disasters": "Global disasters played",
-        "total_local_disasters": "Local disasters played",
-        "total_bonus_cards": "Bonus cards played",
-        "players_eliminated": "Players eliminated"
-    },
-    "player": {
-        "atheists_converted": "Atheists converted",
-        "believers_converted": "Believers converted",
-        "families_lost": "Families lost",
-        "families_died": "Families died",
-        "families_became_atheist": "Families became atheist",
-        "temples_built": "Temples built",
-        "temples_destroyed": "Temples destroyed",
-        "amulets_gained": "Amulets gained",
-        "amulets_used": "Amulets used",
-        "speeches_given": "Speeches given",
-        "leader_sacrificed": "Leader sacrificed",
-        "cards_played": "Cards played",
-        "global_disasters_doubled": "Global disasters doubled",
-        "global_disasters_avoided": "Global disasters avoided"
-    }
+COMPLETED:
+-handle php case for "zombie" player: remove families from game and pass all options to play card (DONE)
+-console.log statements removed from kalua.js for production (DONE)
+-CSS classes prefixed with kalua_ for BGA compliance (DONE)
