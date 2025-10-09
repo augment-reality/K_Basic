@@ -276,35 +276,26 @@ function (dojo, declare,) {
             this['played'].create(this, document.getElementById('playedCardsContent'), 120, 181.3);
             this['played'].image_items_per_row = 5;
             this['played'].setSelectionMode(0);
-            // Configure played cards overlapping for space efficiency
-            this['played'].setOverlap(50, 0); // 50px horizontal overlap, leaves 70px visible per card
             // Create stock for resolved cards
             this['resolved'] = new ebg.stock();
             this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 181.3);
             this['resolved'].image_items_per_row = 5;
             this['resolved'].setSelectionMode(0);
-            // Configure resolved cards overlapping for space efficiency
-            this['resolved'].setOverlap(50, 0); // 50px horizontal overlap, leaves 70px visible per card
             // Initialize card stock for each player card div   
             Object.values(gamedatas.players).forEach(player => {
-                // Create main cards container div with flex layout for card type separation
-                const cardsContainer = document.getElementById(`${player.id}_cards`);
-                cardsContainer.style.display = 'flex';
-                cardsContainer.style.flexWrap = 'wrap';
-                cardsContainer.style.gap = '5px';
-                cardsContainer.style.alignItems = 'flex-start';
-                
                 // Create cardbacks stock using the cardbacks div
                 this[`${player.id}_cardbacks`] = new ebg.stock();
                 this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 174);
                 this[`${player.id}_cardbacks`].image_items_per_row = 2;
+                this[`${player.id}_cardbacks`].setOverlap(35, 0); // 15px horizontal overlap
                 this[`${player.id}_cardbacks`].setSelectionMode(0);
-                // Configure cardback overlapping to save space
-                this[`${player.id}_cardbacks`].setOverlap(40, 0); // 40px horizontal overlap, leaves 80px visible per cardback
-                
-                // Initialize card type containers - we'll create stocks dynamically as cards are drawn
-                this[`${player.id}_card_types`] = {}; // Store individual card type stocks
-                this[`${player.id}_card_containers`] = {}; // Store container divs for each card type
+                // Create cards stock using the cards div
+                this[`${player.id}_cards`] = new ebg.stock();
+                this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 181.3);
+                this[`${player.id}_cards`].image_items_per_row = 5;
+                this[`${player.id}_cards`].setOverlap(45, 0); // 15px horizontal overlap
+                this[`${player.id}_cards`].setSelectionMode(1); // single selection
+                dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
                 for (let card_id = 80; card_id <= 81; card_id++)
                 {              
                     // Add card backs to stock
@@ -1266,15 +1257,6 @@ function (dojo, declare,) {
             if (this.prayerCounters[playerId]) {
                 this.prayerCounters[playerId].setValue(newPrayerValue);
                 this.optimizePrayerTokens(playerId, newPrayerValue);
-                // Gentle refresh of player card layouts after prayer token updates
-                setTimeout(() => {
-                    if (this[`${playerId}_cards`]) {
-                        this[`${playerId}_cards`].updateDisplay();
-                    }
-                    if (this[`${playerId}_cardbacks`]) {
-                        this[`${playerId}_cardbacks`].updateDisplay();
-                    }
-                }, 100);
             } else {
                 console.warn(`No prayer counter found for player ${playerId}`);
             }

@@ -5,24 +5,9 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
-✅ CARD OVERLAPPING IMPLEMENTED - SPACE SAVING ✅
-**Status: COMPLETED**
-
-Enhancement: Added card overlapping to all stock containers to save space and prevent layout overflow.
-
-Implementation:
-- Player card stocks: 15px horizontal overlap
-- Cardback stocks: 15px horizontal overlap  
-- Played cards stock: 20px horizontal overlap
-- Resolved cards stock: 20px horizontal overlap
-- Added smooth 400ms animation for card appearance
-
-Result: Significantly reduced horizontal space requirements, preventing cards from hanging into other divs.
-
-⚠️ LAYOUT BUG FIXED - PLAYER CARDS OVERLAPPING ⚠️
+-representation of prayer pool?
+-Group cards when a player has more than one of any specific card
 -Is there a maximum number of prayer cubes??
--tooltips should have text description of effects, which aren't clear based on icons
--are amulet graphics working - might have wrong pic
 
 CRITICAL FOR ALPHA DEPLOYMENT (BGA Pre-Release Checklist Issues):
 https://en.doc.boardgamearena.com/Pre-release_checklist
@@ -42,12 +27,7 @@ https://en.doc.boardgamearena.com/Pre-release_checklist
    - stats.json exists with proper structure
 
 NORMAL PRIORITY:
--add sounds https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds (COMPLETED)
+-add sounds https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds 
 -custom font based on cards?
 -undo buttons? Maybe just confirm buttons instead (convert/pray)?
 -For mobile: don't show tooltips, and move dice to right of main board?
-
-COMPLETED:
--handle php case for "zombie" player: remove families from game and pass all options to play card (DONE)
--console.log statements removed from kalua.js for production (DONE)
--CSS classes prefixed with kalua_ for BGA compliance (DONE)
