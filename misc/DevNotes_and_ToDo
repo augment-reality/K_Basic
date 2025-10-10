@@ -5,65 +5,15 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
--Group cards when a player has more than one of any specific card
+
 -test die roll sound
 -add text info to tooltip?
 -Review and consolidate messages
 -add sounds https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds 
 -undo buttons? Maybe just confirm buttons instead (convert/pray)?
+-add game option to end game if all players family count is zero?
 -For mobile: don't show tooltips, and move dice to right of main board?
-
-⚠️ CRITICAL BUG CONFIRMED - GLOBAL DISASTER RESOLUTION ⚠️
-**Status: FIXED**
-
-Bug Pattern (confirmed via debug logs):
-- Round leader plays global disaster → phaseThreeCheckGlobal (correct)
-- Player chooses multiplier (Normal/Avoid/Double) → notif_globalDisasterChoice (correct) 
-- BUT: Immediately jumps to phaseThreeResolveCard (WRONG!)
-- Expected: Should return to round leader for more cards/pass, then cycle through other players
-
-Root Cause:
-All three global disaster action methods (actNormalGlobal, actAvoidGlobal, actDoubleGlobal) in Game.php incorrectly call:
-`$this->gamestate->nextState("resolveCards");`
-
-This skips the remaining players in the current turn cycle.
-
-**FIXED:** Changed all three methods to use:
-`$this->gamestate->nextState("playAgain");`
-
-This correctly returns to the round leader's card playing state, allowing:
-1. Round leader to continue playing cards or pass
-2. Turn cycle to continue to other players  
-3. Cards only resolve when the full cycle completes (as intended)
-
-Impact: Ensures all players get their turns before card resolution occurs.
-
-🛡️ CHIEF MEEPLE PROTECTION IMPLEMENTED 🛡️ 
-**Status: IMPLEMENTED**
-
-Critical Rule: The chief meeple (player.sprite-based visual meeples 0-4, database player_chief flag) can ONLY be removed through the "Sacrifice Leader" action in the Activate Leader phase. All other game effects must protect the chief meeple.
-
-Protection Applied To:
-1. **Card Effects (applyCardEffects)**: 
-   - convert_to_atheist effects now use getAvailableFamiliesForLoss()
-   - family_dies effects now use getAvailableFamiliesForLoss()
-   - Shows protection messages when chief would be affected
-
-2. **Convert/Pray Phase**: 
-   - Family redistribution now protects chief meeple
-   - Uses getAvailableFamiliesForLoss() to determine safe family loss count
-
-3. **Frontend Visual Handling**:
-   - notif_familiesConverted: Only removes ID_AHTHIEST_STOCK meeples (5), never chief meeples (0-4)  
-   - notif_familiesDied: Only removes ID_AHTHIEST_STOCK meeples (5), never chief meeples (0-4)
-   - sacrificeLeader function correctly removes chief meeple (player_no-1)
-
-**Key Helper Function**: getAvailableFamiliesForLoss($player_id)
-- Returns (total_families - 1) if player has chief, protecting the conceptual "chief family member"
-- Returns total_families if no chief present
-- Ensures chief meeple survival in all scenarios except voluntary sacrifice
-
-Impact: Prevents accidental chief meeple removal, maintaining proper game state and visual consistency.
+-Group cards when a player has more than one of any specific card (maybe with BGA-Cards?)
 
 FOR ALPHA DEPLOYMENT (BGA Pre-Release Checklist Issues):
 https://en.doc.boardgamearena.com/Pre-release_checklist

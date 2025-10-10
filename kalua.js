@@ -1346,6 +1346,7 @@ function (dojo, declare,) {
                 }
             }, 50 * index); // Stagger the positioning for animation effect
         },
+
         ///////////////////////////////////////////////////
         //// Global disaster card image switching
         updateGlobalDisasterCardImage: function(cardId, cardTypeArg, multiplierChoice) {
@@ -1695,7 +1696,7 @@ function (dojo, declare,) {
             // Get all players except the current player
             const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id != this.player_id);
             otherPlayers.forEach(player => {
-                this.addActionButton(`target-player-${player.id}`, _(player.name), () => {
+                this.addActionButton(`target-player-${player.id}`, player.name, () => {
                     this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
                 });
             });
@@ -1709,7 +1710,7 @@ function (dojo, declare,) {
             otherPlayers.forEach(player =>
             {
                 /* TODO disable button if no families? but what if no one else has families? warning? */
-                button = this.statusBar.addActionButton(_(player.name), () => 
+                button = this.statusBar.addActionButton(player.name, () => 
                     this.bgaPerformAction('actConvertBelievers', { target_player_id: player.id}))
             });
         },

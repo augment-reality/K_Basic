@@ -14,7 +14,7 @@ $gameinfos = [
     'game_name' => "Kalua",
 
     // Game publisher (use empty string if there is no publisher)
-    'publisher' => 'Homoludicous',
+    'publisher' => 'HomoLudicous',
 
     // Url of game publisher website
     'publisher_website' => '',
@@ -54,7 +54,7 @@ $gameinfos = [
     // Note: if you are NOT using any tie breaker, leave the empty string.
     //
     // Example: 'tie_breaker_description' => totranslate( "Number of remaining cards in hand" ),
-    'tie_breaker_description' => "families remaining before global extinction, if a global event removed all remaining families",
+    'tie_breaker_description' => totranslate("families remaining before global extinction, if a global event removed all remaining families"),
 
     // If in the game, all losers are equal (no score to rank them or explicit in the rules that losers are not ranked between them), set this to true
     // The game end result will display "Winner" for the 1st player and "Loser" for all other players

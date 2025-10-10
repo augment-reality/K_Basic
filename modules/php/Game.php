@@ -178,7 +178,10 @@ class Game extends \Table
             return;
         }
         
+        // Give extra time to the player who just finished their turn
+        $previous_player = $this->getActivePlayerId();
         $this->activeNextPlayer();
+        $this->giveExtraTime($previous_player);
     
         if ($this->getActivePlayerId() == $this->getGameStateValue("roundLeader"))
         {
@@ -206,7 +209,10 @@ class Game extends \Table
             return;
         }
         
+        // Give extra time to the player who just finished their turn
+        $previous_player = $this->getActivePlayerId();
         $this->activeNextPlayer();
+        $this->giveExtraTime($previous_player);
         $round_leader = $this->getGameStateValue("roundLeader");
     
         if ($this->getActivePlayerId() == $round_leader)
@@ -1831,6 +1837,8 @@ class Game extends \Table
             + $this->bonusCards->countCardInLocation("hand", $player_id)
             >= HAND_SIZE)
         {
+            // Give extra time since player's draw phase is ending
+            $this->giveExtraTime($player_id);
             $this->gamestate->nextState('FreeAction');
         }
     }
@@ -1852,6 +1860,8 @@ class Game extends \Table
             'player_name' => $this->getActivePlayerName()
         ]);
 
+        // Give extra time since player's turn is ending
+        $this->giveExtraTime($player_id);
         $this->gamestate->nextState();
     }
 
@@ -1881,6 +1891,8 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
 
+        // Give extra time since player's turn is ending
+        $this->giveExtraTime($player_id);
         $this->gamestate->nextState();
     }
 
@@ -1913,6 +1925,8 @@ class Game extends \Table
 
         }
 
+        // Give extra time since player's turn is ending
+        $this->giveExtraTime($current_player_id);
         $this->gamestate->nextState();
     }
 
@@ -1946,6 +1960,8 @@ class Game extends \Table
                 'num_atheists' => $toConvert
             ]);
         
+        // Give extra time since player's turn is ending
+        $this->giveExtraTime($player_id);
         $this->gamestate->nextState();
     }
 
@@ -2092,7 +2108,8 @@ class Game extends \Table
                 $this->setGameStateValue("round_leader_continuing_play", 1);
                 $this->gamestate->nextState('playAgain');
             } else {
-                // Non-round leader moves to next player
+                // Non-round leader moves to next player - their turn is ending
+                $this->giveExtraTime($current_player);
                 $this->gamestate->nextState('nextPlayerThree');
             }
             return;
@@ -2147,6 +2164,9 @@ class Game extends \Table
 
             // Commit transaction before state change
             $this->DbQuery("COMMIT");
+            
+            // Give extra time since player's turn is ending
+            $this->giveExtraTime($player_id);
             $this->gamestate->nextState('nextPlayerThree');
             
         } catch (\Exception $e) {
@@ -3515,22 +3535,6 @@ class Game extends \Table
         return (int)min(100, max(0, $progression));
     }
 
-    /**
-     * Game state actions
-     * The action method of state `nextPlayer` is called everytime the current game state is set to `nextPlayer`.
-     */
-    // public function stNextPlayer(): void {
-    //     // Retrieve the active player ID.
-    //     $player_id = (int)$this->getActivePlayerId();
-
-    //     // Give some extra time to the active player when he completed an action
-    //     $this->giveExtraTime($player_id);
-        
-    //     $this->activeNextPlayer();
-    //     // Go to another gamestate
-    //     // Here, we would detect if the game is over, and in this case use "endGame" transition instead 
-    //     $this->gamestate->nextState("nextPlayer");
-    // }
 
     /**
      * Migrate database. Don't worry about this until your game has been published on BGA.
@@ -3818,6 +3822,7 @@ class Game extends \Table
                                     $target_id = $targets[array_rand($targets)];
                                     $this->actConvertBelievers($target_id);
                                 } else {
+                                    $this->giveExtraTime($active_player);
                                     $this->gamestate->nextState("nextPlayerTwo");
                                 }
                                 break;
@@ -3827,6 +3832,7 @@ class Game extends \Table
                         }
                     } else {
                         // No actions available, skip turn
+                        $this->giveExtraTime($active_player);
                         $this->gamestate->nextState("nextPlayerTwo");
                     }
                     break;
@@ -3914,6 +3920,7 @@ class Game extends \Table
                         $this->actSelectTarget($random_target);
                     } else {
                         // No targets available, this shouldn't happen but handle gracefully
+                        $this->giveExtraTime($active_player);
                         $this->gamestate->nextState("continueResolve");
                     }
                     break;
