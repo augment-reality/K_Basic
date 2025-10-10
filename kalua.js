@@ -1955,7 +1955,7 @@ function (dojo, declare,) {
             playerFamilies.removeFromStock(player_no-1); // Remove chief meeple
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
-            element.innerHTML = `<input type="checkbox" disabled>`;
+            element.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
         },
         onBtnPlayCard: function () {
         const action = "actPlayCard";

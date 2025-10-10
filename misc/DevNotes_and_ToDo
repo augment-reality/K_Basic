@@ -5,7 +5,7 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
-
+use <i class="fa-solid fa-xmark"></i> and <i class="fa-solid fa-check"></i> instead of pngs?
 -test die roll sound
 -add text info to tooltip?
 -Review and consolidate messages
