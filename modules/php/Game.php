@@ -1121,9 +1121,10 @@ class Game extends \Table
         if (isset($effects['convert_to_atheist']) && $effects['convert_to_atheist'] > 0) {
             $families_to_convert = (int)$effects['convert_to_atheist'];
             $current_families = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
+            $available_for_loss = $this->getAvailableFamiliesForLoss($player_id);
             
-            // Can only convert as many families as the player has
-            $actual_converted = min($families_to_convert, $current_families);
+            // Can only convert available families (protects chief meeple)
+            $actual_converted = min($families_to_convert, $available_for_loss);
             
             if ($actual_converted > 0) {
                 // Remove families from player
@@ -1156,15 +1157,29 @@ class Game extends \Table
                 // Track statistics: families lost and families converted to atheism
                 $this->incStat($actual_converted, 'families_lost', $player_id);
                 $this->incStat($actual_converted, 'families_became_atheist', $player_id);
+            } else if ($families_to_convert > 0) {
+                // Player was protected by having only their chief remaining
+                $has_chief = $this->getChiefCount($player_id);
+                if ($has_chief > 0 && $current_families <= 1) {
+                    $this->notifyAllPlayers('familiesConverted', 
+                        clienttranslate('${player_name}\'s chief meeple is protected from conversion effects'), [
+                            'player_id' => $player_id,
+                            'player_name' => $this->getPlayerNameById($player_id),
+                            'families_count' => 0,
+                            'families_remaining' => $current_families
+                        ]
+                    );
+                }
             }
         }
         
         if (isset($effects['family_dies']) && $effects['family_dies'] > 0) {
             $families_to_kill = (int)$effects['family_dies'];
             $current_families = (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = $player_id");
+            $available_for_loss = $this->getAvailableFamiliesForLoss($player_id);
             
-            // Can only kill as many families as the player has
-            $actual_killed = min($families_to_kill, $current_families);
+            // Can only kill available families (protects chief meeple)
+            $actual_killed = min($families_to_kill, $available_for_loss);
             
             if ($actual_killed > 0) {
                 // Remove families from player (they die, don't become atheist)
@@ -1194,6 +1209,19 @@ class Game extends \Table
                 // Track statistics: families lost and families that died
                 $this->incStat($actual_killed, 'families_lost', $player_id);
                 $this->incStat($actual_killed, 'families_died', $player_id);
+            } else if ($families_to_kill > 0) {
+                // Player was protected by having only their chief remaining
+                $has_chief = $this->getChiefCount($player_id);
+                if ($has_chief > 0 && $current_families <= 1) {
+                    $this->notifyAllPlayers('familiesDied', 
+                        clienttranslate('${player_name}\'s chief meeple is protected from death effects'), [
+                            'player_id' => $player_id,
+                            'player_name' => $this->getPlayerNameById($player_id),
+                            'families_count' => 0,
+                            'families_remaining' => $current_families
+                        ]
+                    );
+                }
             }
         }
         
@@ -1534,18 +1562,21 @@ class Game extends \Table
         if ($happy_value_low != $happy_value_high) {
 
             // Collect 2 families from low and 1 from middle happiness players
+            // IMPORTANT: Never remove the chief meeple - they can only be sacrificed voluntarily
             foreach ($players as $player_id => $happiness) {
                 if ($happiness == $happy_value_low) {
-                    $player_family = $this->getFamilyCount($player_id);
-                    $to_convert = min(2, $player_family);
+                    $available_for_loss = $this->getAvailableFamiliesForLoss($player_id);
+                    $to_convert = min(2, $available_for_loss);
                     if ($to_convert > 0) {
-                        $this->setFamilyCount($player_id, $player_family - $to_convert);
+                        $current_family = $this->getFamilyCount($player_id);
+                        $this->setFamilyCount($player_id, $current_family - $to_convert);
                         $converted_pool += $to_convert;
                     }
                 } elseif ($happiness != $happy_value_high) {
-                    $player_family = $this->getFamilyCount($player_id);
-                    if ($player_family > 0) {
-                        $this->setFamilyCount($player_id, $player_family - 1);
+                    $available_for_loss = $this->getAvailableFamiliesForLoss($player_id);
+                    if ($available_for_loss > 0) {
+                        $current_family = $this->getFamilyCount($player_id);
+                        $this->setFamilyCount($player_id, $current_family - 1);
                         $converted_pool += 1;
                     }
                 }
@@ -3202,6 +3233,22 @@ class Game extends \Table
     // Aux function to count families in convert/pray phase
     public function getFamilyCount($player_id) {
         return (int)$this->getUniqueValueFromDb("SELECT player_family FROM player WHERE player_id = {$player_id}");
+    }
+
+    // Aux function to get available families for loss (excludes chief protection)
+    // The chief meeple can only be removed through sacrifice action, never through card effects or other means
+    public function getAvailableFamiliesForLoss($player_id) {
+        $total_families = $this->getFamilyCount($player_id);
+        $has_chief = $this->getChiefCount($player_id);
+        
+        // If player has a chief, they must keep at least 1 family member (representing the chief)
+        // The chief is conceptually one of the family members, so subtract 1 from available losses
+        if ($has_chief > 0) {
+            return max(0, $total_families - 1);
+        }
+        
+        // If no chief, all families can be lost
+        return $total_families;
     }
 
     // Aux function to set families for a player

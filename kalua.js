@@ -33,11 +33,11 @@ function (dojo, declare,) {
                 </div>
                 <div id="card_areas">
                     <div id="playedCards">
-                        <div class="kalua_played_resolved">Played Cards:</div>
+                        <div class="kalua_played_resolved">PLAYED CARDS:</div>
                         <div id="playedCardsContent"></div>
                     </div>
                     <div id="resolvedCards" style="position: relative;">
-                        <div class="kalua_played_resolved">Resolved Cards:</div>
+                        <div class="kalua_played_resolved">RESOLVED CARDS:</div>
                         <div id="resolvedCardsContent"></div>
                         <div id="prediction_panel" style="display: none; position: absolute; top: 0; left: 100%; margin-left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000; max-width: 250px; min-width: 200px;">
                             <div id="prediction_panel_header" style="font-weight: bold; margin-bottom: 5px; cursor: pointer; user-select: none;">
@@ -103,11 +103,11 @@ function (dojo, declare,) {
                         <div id="${player.id}_families" class="kalua_player_families"></div>
                         <div class="kalua_player_bottom_section">
                             <div id="${player.id}_InPlay" class="kalua_player_kept_cards">
-                                Kept Cards:
+                                KEPT CARDS:
                                 <div id="${player.id}_InPlayContent"></div>
                             </div>
                             <div id="${player.id}_player_prayer" class="kalua_player_prayer_tokens">
-                                Prayer:
+                                PRAYER:
                                 <div id="${player.id}_PrayerContent"></div>
                             </div>
                         </div>
@@ -2559,6 +2559,25 @@ function (dojo, declare,) {
             if (this.familyCounters[args.player_id]) {
                 this.familyCounters[args.player_id].setValue(args.families_remaining);
             }
+            
+            // Visually handle family conversion in the meeple display
+            const playerFamilies = this[`fams_${args.player_id}`];
+            if (playerFamilies && args.families_count > 0) {
+                // Remove regular family meeples (NEVER remove chief meeple)
+                for (let i = 0; i < args.families_count; i++) {
+                    // Only remove atheist-type meeples (ID_AHTHIEST_STOCK = 5)
+                    // Chief meeples have IDs 0-4 (player.sprite - 1) and should never be removed here
+                    if (playerFamilies.count() > 0) {
+                        const items = playerFamilies.getAllItems();
+                        // Find a regular family meeple (not the chief) to remove
+                        const regularMeeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
+                        if (regularMeeple) {
+                            playerFamilies.removeFromStockById(regularMeeple.id);
+                        }
+                    }
+                }
+            }
+            
             // Add converted families to atheist stock
             for (let i = 0; i < args.families_count; i++) {
                 this['atheists'].addToStock(this.ID_AHTHIEST_STOCK); // 5 = atheist meeple
@@ -2573,6 +2592,25 @@ function (dojo, declare,) {
             if (this.familyCounters[args.player_id]) {
                 this.familyCounters[args.player_id].setValue(args.families_remaining);
             }
+            
+            // Visually handle family death in the meeple display
+            const playerFamilies = this[`fams_${args.player_id}`];
+            if (playerFamilies && args.families_count > 0) {
+                // Remove regular family meeples (NEVER remove chief meeple)
+                for (let i = 0; i < args.families_count; i++) {
+                    // Only remove atheist-type meeples (ID_AHTHIEST_STOCK = 5)  
+                    // Chief meeples have IDs 0-4 (player.sprite - 1) and should never be removed here
+                    if (playerFamilies.count() > 0) {
+                        const items = playerFamilies.getAllItems();
+                        // Find a regular family meeple (not the chief) to remove
+                        const regularMeeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
+                        if (regularMeeple) {
+                            playerFamilies.removeFromStockById(regularMeeple.id);
+                        }
+                    }
+                }
+            }
+            // Note: Dead families don't go to atheist pool, they just disappear
         },
         notif_devStatisticsRefreshed: function(args) {
             // Update the statistics panel with the new data
