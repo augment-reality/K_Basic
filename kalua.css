@@ -176,6 +176,22 @@
 }
 
 
+/* Sidebar icon sprite setup */
+.sidebar-icon {
+    width: 30px;
+    height: 30px;
+    display: inline-block;
+    background-image: url('img/SidebarIcons_150_30.png');
+    background-repeat: no-repeat;
+    background-size: 150px 30px;
+}
+.icon-fam1   { background-position:   0px 0; }
+.icon-happy  { background-position: -30px 0; }
+.icon-lead   { background-position: -60px 0; }
+.icon-pray   { background-position: -90px 0; }
+.icon-pray_g { background-position: -120px 0; }
+
+
 .kalua_played_resolved {
     font-family: 'AHDN', Arial, sans-serif; /* Use AHDN font with fallbacks */
     margin-bottom: 10px;

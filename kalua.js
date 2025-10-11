@@ -148,10 +148,10 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
-                        <span id="icon_p_${player.id}" class="kalua_icon_p" style="display:inline-block;vertical-align:middle;"></span></span> <span>Prayer: <span id="panel_p_${player.id}"></span><br>
-                        <span id="icon_h" style="display:inline-block;vertical-align:middle;"></span> <span>Happiness: <span id="panel_h_${player.id}"></span> </span><br>
-                        <span id="icon_f" style="display:inline-block;vertical-align:middle;"></span> <span>Family: <span id="panel_f_${player.id}"></span> </span>
-                        <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
+                        <span id="icon_p_${player.id}" class="sidebar-icon icon-pray" style="display:inline-block;vertical-align:middle;"></span> <span>Prayer: <span id="panel_p_${player.id}"></span><br>
+                        <span id="icon_h" class="sidebar-icon icon-happy" style="display:inline-block;vertical-align:middle;"></span> <span>Happiness: <span id="panel_h_${player.id}"></span> </span><br>
+                        <span id="icon_f" class="sidebar-icon icon-fam1" style="display:inline-block;vertical-align:middle;"></span> <span>Family: <span id="panel_f_${player.id}"></span> </span>
+                        <span id="icon_l" class="sidebar-icon icon-lead" style="display:inline-block;vertical-align:middle;"></span> <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
                         <span>Temples: <span id="panel_t_${player.id}"></span></span>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
@@ -1955,7 +1955,7 @@ function (dojo, declare,) {
             playerFamilies.removeFromStock(player_no-1); // Remove chief meeple
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
-            element.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+            element.innerHTML = `<input type="checkbox" disabled>`;
         },
         onBtnPlayCard: function () {
         const action = "actPlayCard";
