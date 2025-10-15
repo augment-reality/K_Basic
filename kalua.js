@@ -51,23 +51,6 @@ function (dojo, declare,) {
                     </div>
                 </div>
                 <div id="player-tables" class="zone-container"></div>
-                <!-- Dev Statistics Display -->
-                <div id="dev_stats_panel" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.9); color: white; padding: 15px; border-radius: 8px; font-size: 24px; z-index: 2000; max-width: 600px; max-height: 600px; overflow-y: auto; display: none;">
-                    <div style="font-weight: bold; margin-bottom: 10px; cursor: pointer; user-select: none; font-size: 24px;" onclick="this.parentElement.style.display='none'">
-                        📊 Live Game Statistics ✖
-                    </div>
-                    <div style="font-weight: bold; color: #4CAF50; margin-bottom: 5px; font-size: 21px;">Table Statistics:</div>
-                    <div id="table_stats_content"></div>
-                    <div style="font-weight: bold; color: #2196F3; margin: 10px 0 5px 0; font-size: 21px;">Player Statistics:</div>
-                    <div id="player_stats_content"></div>
-                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #444; font-size: 18px; opacity: 0.7;">
-                        Updates automatically • For development only
-                    </div>
-                </div>
-                <!-- Dev Statistics Toggle Button -->
-                <div id="dev_stats_toggle" style="position: fixed; top: 10px; right: 10px; background: #FF9800; color: white; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; z-index: 1999;" onclick="document.getElementById('dev_stats_panel').style.display='block'; this.style.display='none';">
-                    📊 Stats
-                </div>
             `);
             this.ID_GLOBAL_DISASTER = 1;
             this.ID_LOCAL_DISASTER = 2;
@@ -83,6 +66,47 @@ function (dojo, declare,) {
             this.predictionPanelEnabled = false;
             // Auto-roll tracking to prevent multiple attempts
             this.autoRollAttempted = false;
+            // HK Token movement timing variables
+            this.hkTokenMoveDelay = 1200;      // Delay before starting token movement
+            this.hkTokenTransferDelay = 200;  // Delay between remove and add operations
+
+
+            // Card tooltips for Kalua (JS format)
+            this.CARD_TOOLTIPS = {
+                1: { // Global Disaster
+                    1: "Lose 3 happiness, convert 1 to atheist, gain 3 prayer.",
+                    2: "Lose 3 happiness, convert 1 to atheist, gain 1 prayer.",
+                    3: "Lose 2 happiness, 1 family dies, gain 2 prayer.",
+                    4: "Lose 2 happiness, convert 1 to atheist, gain 1 prayer.",
+                    5: "Lose 2 happiness, convert 1 to atheist, gain 3 prayer.",
+                    6: "Convert 1 to atheist, gain 1 prayer.",
+                    7: "Lose 1 happiness, convert 1 to atheist, gain 1 prayer.",
+                    8: "Convert 1 to atheist, gain 1 prayer, happiness loss: roll d6.",
+                    9: "Lose 1 happiness, convert 1 to atheist, prayer gain: roll d6.",
+                    10: "Convert 1 to atheist, discard card, gain 1 prayer.",
+                },
+                2: { // Local Disaster
+                    1: "Lose 1 happiness, convert 1 to atheist, 1 family dies. Prayer cost: 4.",
+                    2: "Lose 3 happiness, 1 family dies. Prayer cost: 5.",
+                    3: "Lose 1 happiness, 1 family dies. Prayer cost: 1.",
+                    4: "Lose 2 happiness, 1 family dies. Prayer cost: 3.",
+                    5: "Lose 2 happiness, 1 family dies, destroy 1 temple. Prayer cost: 5.",
+                },
+                3: { // Bonus
+                    1: "Gain 2 happiness. Prayer cost: 2.",
+                    2: "Gain 4 happiness. Prayer cost: 5.",
+                    3: "Gain 1 happiness, convert to religion: roll d6. Prayer cost: 6.",
+                    4: "Gain happiness: roll d6. Prayer cost: 5.",
+                    5: "Gain 1 happiness, 1 family dies, recover leader. Prayer cost: 5.",
+                    6: "Build a temple, keep card. Prayer cost: 5.",
+                    7: "Gain amulets, keep card. Prayer cost: 4.",
+                }
+            };
+
+
+
+
+
         },
         setup: function(gamedatas) {
             // Create player areas - current player first, then others
@@ -148,10 +172,10 @@ function (dojo, declare,) {
             Object.values(gamedatas.players).forEach(player => {
                 this.getPlayerPanelElement(player.id).insertAdjacentHTML('beforeend', `
                     <div>
-                        <span id="icon_p_${player.id}" class="sidebar-icon icon-pray" style="display:inline-block;vertical-align:middle;"></span> <span>Prayer: <span id="panel_p_${player.id}"></span><br>
-                        <span id="icon_h" class="sidebar-icon icon-happy" style="display:inline-block;vertical-align:middle;"></span> <span>Happiness: <span id="panel_h_${player.id}"></span> </span><br>
-                        <span id="icon_f" class="sidebar-icon icon-fam1" style="display:inline-block;vertical-align:middle;"></span> <span>Family: <span id="panel_f_${player.id}"></span> </span>
-                        <span id="icon_l" class="sidebar-icon icon-lead" style="display:inline-block;vertical-align:middle;"></span> <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
+                        <span id="icon_p_${player.id}" class="sidebar-icon icon-pray"></span> <span>Prayer: <span id="panel_p_${player.id}"></span><br>
+                        <span id="icon_h" class="sidebar-icon icon-happy"></span> <span>Happiness: <span id="panel_h_${player.id}"></span> </span><br>
+                        <span id="icon_f" class="sidebar-icon icon-fam1"></span> <span>Family: <span id="panel_f_${player.id}"></span> </span>
+                        <span id="icon_l" class="sidebar-icon icon-lead"></span> <span>Leader: <span id="panel_l_${player.id}"></span> </span><br>
                         <span>Cards: <span id="panel_c_${player.id}"></span></span><br>
                         <span>Temples: <span id="panel_t_${player.id}"></span></span>
                         <span>Amulets: <span id="panel_a_${player.id}"></span></span><br>
@@ -308,7 +332,7 @@ function (dojo, declare,) {
                 this[`${player.id}_kept`].setSelectionMode(0);
                 for (let kept_id = 1; kept_id <= 2; kept_id++)
                 {
-                    this[`${player.id}_kept`].addItemType(kept_id, kept_id, g_gamethemeurl + 'img/temple_amulet_237_76.png', kept_id);
+                    this[`${player.id}_kept`].addItemType(kept_id, kept_id, g_gamethemeurl + 'img/temple_amulet_237_76.png', kept_id - 1);
                 }
                 //create prayer token zone for organic pile arrangement
                 this[`${player.id}_prayer_zone`] = new ebg.zone();
@@ -450,11 +474,11 @@ function (dojo, declare,) {
                 element = $(`panel_l_${player.id}`);
                 if (player.chief == 1)
                 {
-                    element.innerHTML = `<span id="icon_cb_t" style="display:inline-block;vertical-align:middle;"></span>`;
+                    element.innerHTML = `<span id="icon_cb_t" class="checkbox-icon icon-check-true"></span>`;
                 }
                 else
                 {
-                    element.innerHTML = `<span id="icon_cb_f" style="display:inline-block;vertical-align:middle;"></span>`;
+                    element.innerHTML = `<span id="icon_cb_f" class="checkbox-icon icon-check-false"></span>`;
                 }
             });
             /* Update player's hands with their drawn cards */
@@ -477,7 +501,7 @@ function (dojo, declare,) {
                 if (this['played'].items && this['played'].items[card.id]) {
                     this['played'].items[card.id].played_by = card.played_by;
                 }
-                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by);
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
                 this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
             Object.values(gamedatas.playedBonus).forEach(card => {
@@ -488,19 +512,19 @@ function (dojo, declare,) {
                 if (this['played'].items && this['played'].items[card.id]) {
                     this['played'].items[card.id].played_by = card.played_by;
                 }
-                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by);
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
                 this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
             /* Populate resolved cards from database */
             Object.values(gamedatas.resolvedDisaster).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['resolved'].addToStockWithId(uniqueId, card.id);
-                this.addCardTooltipByUniqueId('resolved', uniqueId);
+                this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
             });
             Object.values(gamedatas.resolvedBonus).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                 this['resolved'].addToStockWithId(uniqueId, card.id);
-                this.addCardTooltipByUniqueId('resolved', uniqueId);
+                this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
             });
             /* Add cardbacks for other players' cards */
             Object.values(gamedatas.players).forEach(player => {
@@ -535,20 +559,6 @@ function (dojo, declare,) {
                 this.familyCounters[player.id].setValue(player.family);
                 // Optimize prayer token display for each player's current prayer count (redundant but safe)
                 this.optimizePrayerTokens(player.id, player.prayer);
-                // Initialize kept cards based on temple and amulet counts
-                if (this[`${player.id}_kept`]) {
-                    // Add amulet cards (kept_id = 1)
-                    for (let i = 0; i < player.amulet; i++) {
-                        this[`${player.id}_kept`].addToStock(1);
-                    }
-                    // Add temple cards (kept_id = 2)
-                    for (let i = 0; i < player.temple; i++) {
-                        this[`${player.id}_kept`].addToStock(2);
-                    }
-                    
-                } else {
-                    console.error('No kept stock found during re-initialization for player', player.id);
-                }
             });
             // Set initial round leader prayer icon to grayed version
             if (gamedatas.round_leader) {
@@ -599,119 +609,16 @@ function (dojo, declare,) {
             }
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
-            // Load dice roll sound effect
-            this.sounds.load('diceRoll', 'Dice Roll Sound', 'dice_roll');
+            // Load dice roll sound effect with explicit path
+            try {
+                this.sounds.load('dice_roll', 'Dice Roll Sound', g_gamethemeurl + 'img/dice_roll');
+            } catch (e) {
+                console.warn('Could not load dice roll sound:', e);
+            }
             // Force a final layout update for all player card stocks after setup
             setTimeout(() => {
                 this.refreshPlayerCardLayouts();
             }, 100);
-            // Initialize dev statistics display
-            this.updateDevStatsDisplay();
-            // Set up periodic refresh for dev stats (every 5 seconds)
-            setInterval(() => {
-                this.updateDevStatsDisplay();
-            }, 5000);
-        },
-        ///////////////////////////////////////////////////
-        //// Development Statistics Display
-        updateDevStatsDisplay: function() {
-            // Only update if the stats panel exists and is visible
-            const statsPanel = document.getElementById('dev_stats_panel');
-            if (!statsPanel) return;
-            try {
-                // Get current game data
-                const players = this.gamedatas.players || {};
-                // NOTE: This displays current game STATE, not accumulated STATISTICS
-                // Real statistics would need to be fetched from server via AJAX call
-                // For now, we'll show a mix of current game state and placeholders for real statistics
-                // Calculate some basic statistics from current game state
-                let totalCards = 0;
-                let totalFamilies = 0;
-                let totalTemples = 0;
-                let totalAmulets = 0;
-                let playersWithLeaders = 0;
-                Object.values(players).forEach(player => {
-                    totalCards += parseInt(player.cards) || 0;
-                    totalFamilies += parseInt(player.family) || 0;
-                    totalTemples += parseInt(player.temple) || 0;
-                    totalAmulets += parseInt(player.amulet) || 0;
-                    if (player.chief) playersWithLeaders++;
-                });
-                // Get atheist count from game state (if available)
-                const atheistCount = this.atheists ? this.atheists.count() : '?';
-                // Update table statistics 
-                const tableStatsHtml = `
-                    <div style="margin-bottom: 3px;">🌍 Total Players: <span style="color: #FFF;">${Object.keys(players).length}</span></div>
-                    <div style="margin-bottom: 3px;">� Total Families: <span style="color: #FFF;">${totalFamilies}</span></div>
-                    <div style="margin-bottom: 3px;">😈 Atheist Pool: <span style="color: #FFF;">${atheistCount}</span></div>
-                    <div style="margin-bottom: 3px;">�️ Total Temples: <span style="color: #FFF;">${totalTemples}</span></div>
-                    <div style="margin-bottom: 3px;">🧿 Total Amulets: <span style="color: #FFF;">${totalAmulets}</span></div>
-                    <div style="margin-bottom: 3px;">👑 Players w/ Leaders: <span style="color: #FFF;">${playersWithLeaders}</span></div>
-                    <div style="margin-bottom: 3px;">🃏 Total Cards in Hands: <span style="color: #FFF;">${totalCards}</span></div>
-                `;
-                document.getElementById('table_stats_content').innerHTML = tableStatsHtml;
-                // Add refresh button for live statistics
-                const tableStatsContainer = document.getElementById('table_stats_content');
-                if (tableStatsContainer) {
-                    const refreshButtonHtml = `
-                        <div style="margin-top: 8px; margin-bottom: 5px;">
-                            <button id="refresh_stats_btn" style="padding: 6px 18px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                                🔄 Refresh Live Statistics
-                            </button>
-                        </div>
-                        <div id="live_stats_content" style="margin-bottom: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 3px;">
-                            <div style="color: #FFE082; font-weight: bold; margin-bottom: 5px; font-size: 21px;">Live Statistics (click refresh):</div>
-                            <div style="font-size: 20px; opacity: 0.7;">
-                                <div style="font-size: 20px;">Total Rounds: <span style="color: #FFF;">?</span></div>
-                                <div style="font-size: 20px;">Global Disasters: <span style="color: #FFF;">?</span></div>
-                                <div style="font-size: 20px;">Local Disasters: <span style="color: #FFF;">?</span></div>
-                                <div style="font-size: 20px;">Bonus Cards: <span style="color: #FFF;">?</span></div>
-                                <div style="font-size: 20px;">Players Eliminated: <span style="color: #FFF;">?</span></div>
-                            </div>
-                        </div>
-                    `;
-                    tableStatsContainer.innerHTML = refreshButtonHtml + tableStatsHtml;
-                    // Add click handler for refresh button
-                    const refreshBtn = document.getElementById('refresh_stats_btn');
-                    if (refreshBtn) {
-                        refreshBtn.onclick = () => this.refreshDevStatistics();
-                    }
-                }
-                // Update player statistics
-                let playerStatsHtml = '<div style="margin-bottom: 5px; color: #FFE082; font-weight: bold; font-size: 21px;">⚠️ Player Statistics (need server data)</div>';
-                Object.values(players).forEach(player => {
-                    const playerColor = this.fixPlayerColor(player.color);
-                    const isEliminated = (player.family === 0 && !player.chief);
-                    const statusIcon = isEliminated ? '💀' : (player.chief ? '👑' : '👤');
-                    playerStatsHtml += `
-                        <div style="margin-bottom: 8px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; ${isEliminated ? 'opacity: 0.6;' : ''}">
-                            <div style="font-weight: bold; color: ${playerColor}; margin-bottom: 3px;">${statusIcon} ${player.name}</div>
-                            <div style="font-size: 20px; line-height: 1.3; opacity: 0.7;">
-                                Atheists Converted: <span style="color: #FFF;">?</span> | Believers Converted: <span style="color: #FFF;">?</span><br>
-                                Families Lost: <span style="color: #FFF;">?</span> | Temples Built: <span style="color: #FFF;">?</span><br>
-                                Amulets Gained: <span style="color: #FFF;">?</span> | Speeches Given: <span style="color: #FFF;">?</span><br>
-                                Cards Played: <span style="color: #FFF;">?</span> | Disasters Doubled: <span style="color: #FFF;">?</span>
-                            </div>
-                            <div style="font-size: 20px; line-height: 1.3; margin-top: 3px; padding-top: 3px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                <strong>Current State:</strong><br>
-                                Families: <span style="color: ${player.family > 0 ? '#4CAF50' : '#F44336'}">${player.family || 0}</span> | 
-                                Prayer: <span style="color: ${player.prayer > 5 ? '#4CAF50' : player.prayer > 2 ? '#FF9800' : '#F44336'}">${player.prayer || 0}</span><br>
-                                Happiness: <span style="color: ${player.happiness > 6 ? '#4CAF50' : player.happiness > 3 ? '#FF9800' : '#F44336'}">${player.happiness || 0}/10</span> | 
-                                Temples: <span style="color: #2196F3">${player.temple || 0}</span> | 
-                                Amulets: <span style="color: #9C27B0">${player.amulet || 0}</span><br>
-                                Leader: <span style="color: ${player.chief ? '#4CAF50' : '#F44336'}">${player.chief ? 'Yes' : 'No'}</span> | 
-                                Cards: <span style="color: ${player.cards > 3 ? '#4CAF50' : player.cards > 1 ? '#FF9800' : '#F44336'}">${player.cards || 0}</span>
-                                ${isEliminated ? '<br><span style="color: #F44336; font-weight: bold;">❌ ELIMINATED</span>' : ''}
-                            </div>
-                        </div>
-                    `;
-                });
-                document.getElementById('player_stats_content').innerHTML = playerStatsHtml;
-            } catch (error) {
-                // Show error in stats panel
-                document.getElementById('table_stats_content').innerHTML = '<div style="color: #F44336;">Error loading stats</div>';
-                document.getElementById('player_stats_content').innerHTML = '<div style="color: #F44336;">Check console for details</div>';
-            }
         },
         ///////////////////////////////////////////////////
         //// Card tooltip functions
@@ -764,24 +671,55 @@ function (dojo, declare,) {
             const row = Math.floor(imagePosition / cardsPerRow);
             const bgPositionX = -(col * cardWidth);
             const bgPositionY = -(row * cardHeight);
+            
+            // Get tooltip text from CARD_TOOLTIPS
+            let tooltipText = "";
+            if (this.CARD_TOOLTIPS[cardType] && this.CARD_TOOLTIPS[cardType][cardId]) {
+                tooltipText = this.CARD_TOOLTIPS[cardType][cardId];
+            }
+            
             // Create clean image tooltip without player-specific styling
             const imageUrl = g_gamethemeurl + 'img/Cards_1323_2000_compressed.png';
-            const imgTooltip = `<img src="${imageUrl}" style="width: 262px; height: 400px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
-            // Add image tooltip
-            this.addTooltipHtml(elementId, imgTooltip, 300);
+            const imgElement = `<img src="${imageUrl}" style="width: 262px; height: 400px; object-fit: none; object-position: ${bgPositionX}px ${bgPositionY}px; border: 2px solid #333; border-radius: 8px;" />`;
+            
+            // Create text region beneath the image
+            const textElement = `<div style="width: 262px; padding: 10px; background-color: #f8f8f8; font-size: 14px; line-height: 1.4; color: #333; text-align: left; box-sizing: border-box;">${tooltipText}</div>`;
+            
+            // Combine image and text
+            const fullTooltip = `<div style="display: inline-block;">${imgElement}${textElement}</div>`;
+            
+            // Add combined tooltip
+            this.addTooltipHtml(elementId, fullTooltip, 350);
         },
-        addCardTooltipByUniqueId: function(stockName, uniqueId, playerId = null) {
+        addCardTooltipByUniqueId: function(stockName, uniqueId, playerId = null, cardId = null) {
             const cardType = this.getCardTypeFromUniqueId(uniqueId);
-            const cardId = this.getCardIdFromUniqueId(uniqueId);
-            if (cardType && cardId !== null) {
+            const cardIdFromUnique = this.getCardIdFromUniqueId(uniqueId);
+            if (cardType && cardIdFromUnique !== null) {
                 // Use BGA stock system's built-in tooltip functionality if available
                 setTimeout(() => {
                     // Use provided playerId or try to find it from stored data
                     let finalPlayerId = playerId;
                     if (this[stockName] && this[stockName].getAllItems) {
-                        // Find the stock item with this uniqueId
                         const stockItems = this[stockName].getAllItems();
-                        const targetItem = stockItems.find(item => item.type == uniqueId);
+                        let targetItem = null;
+                        
+                        // If we have a specific cardId, find that exact item
+                        if (cardId !== null) {
+                            targetItem = stockItems.find(item => item.id == cardId);
+                        } else {
+                            // Fallback: find the latest item with this uniqueId that doesn't have a tooltip
+                            const itemsWithType = stockItems.filter(item => item.type == uniqueId);
+                            for (let i = itemsWithType.length - 1; i >= 0; i--) {
+                                const item = itemsWithType[i];
+                                const elementId = this[stockName].getItemDivId(item.id);
+                                const element = document.getElementById(elementId);
+                                if (element && !element.hasAttribute('data-tooltip-added')) {
+                                    targetItem = item;
+                                    break;
+                                }
+                            }
+                        }
+                        
                         if (targetItem) {
                             const elementId = this[stockName].getItemDivId(targetItem.id);
                             // Try to get player ID from stored data if not provided
@@ -789,13 +727,13 @@ function (dojo, declare,) {
                                 finalPlayerId = this[stockName].items[targetItem.id].played_by;
                             }
                             if (elementId) {
-                                this.addCardTooltip(elementId, cardType, cardId, finalPlayerId);
+                                this.addCardTooltip(elementId, cardType, cardIdFromUnique, finalPlayerId);
                                 return;
                             }
                         }
                     }
                     // Fallback to previous method
-                    this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardId, finalPlayerId);
+                    this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardIdFromUnique, finalPlayerId);
                 }, 300);
             }
         },
@@ -1080,15 +1018,14 @@ function (dojo, declare,) {
                             if (!canConvert) {
                                 dojo.addClass('convert-btn', 'disabled');
                             }
-                            // For round leader, disable pass button until they've played a card
-                            const roundLeaderPlayedCard = this.gamedatas.round_leader_played_card || 0;
-                            if (roundLeaderPlayedCard === 0) {
+                            // Use the args from the state to determine if pass is allowed
+                            const canPass = args && args.can_pass;
+                            if (!canPass) {
                                 // Use setTimeout to ensure the button is fully rendered before disabling
                                 setTimeout(() => {
                                     const passBtn = document.getElementById('pass-btn');
                                     if (passBtn) {
                                         dojo.addClass(passBtn, 'disabled');
-                                    } else {
                                     }
                                 }, 10);
                             }
@@ -1645,29 +1582,42 @@ function (dojo, declare,) {
         drawCard: function(player, card_id, card_type, card_type_arg) {
             const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
             this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
-            this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId); // Add tooltip
+            this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId, null, card_id); // Add tooltip
             // Force layout update to ensure cards display properly
             if (this[`${player}_cards`]) {
                 this[`${player}_cards`].updateDisplay();
             }
         },
         movetokens: function(tokenTypeToMove, desiredShift) {
-            flag = false;
+            let flag = false;
             for (let x = 0; x <= 10; x++) {
-                    const tokens = this[`hkToken_${x}`].items;
-                    Object.values(tokens).forEach(token => {
-                        if (token.type == tokenTypeToMove && flag == false) {
-                            // Remove from current stock
-                            this[`hkToken_${x}`].removeFromStock(tokenTypeToMove);
-                            // Add to adjacent stock
-                            let newdiv = x + desiredShift;
-                            if (newdiv < 0) newdiv = 0;
-                            if (newdiv > 10) newdiv = 10;
-                            this[`hkToken_${newdiv}`].addToStock(token.type);
-                            flag = true; // only move one token
-                        }
-                    });
-                }
+                const tokens = this[`hkToken_${x}`].items;
+                Object.values(tokens).forEach(token => {
+                    if (token.type == tokenTypeToMove && flag == false) {
+                        // Calculate target position
+                        let newdiv = x + desiredShift;
+                        if (newdiv < 0) newdiv = 0;
+                        if (newdiv > 10) newdiv = 10;
+                        
+                        // Store token info before removal
+                        const tokenId = token.id;
+                        const tokenType = token.type;
+                        
+                        // Add delay to make token movement visible
+                        setTimeout(() => {
+                            // First remove the token by ID (not by type)
+                            this[`hkToken_${x}`].removeFromStockById(tokenId);
+                            
+                            // Add to adjacent stock with slight additional delay
+                            setTimeout(() => {
+                                this[`hkToken_${newdiv}`].addToStockWithId(tokenType, tokenId);
+                            }, this.hkTokenTransferDelay);
+                        }, this.hkTokenMoveDelay);
+                        
+                        flag = true; // only move one token
+                    }
+                });
+            }
         },
         giveSpeech: function(player_id) {
             const currentValue = this.happinessCounters[player_id].getValue();
@@ -1955,7 +1905,7 @@ function (dojo, declare,) {
             playerFamilies.removeFromStock(player_no-1); // Remove chief meeple
             this.familyCounters[player_id].incValue(num_atheists);
             element = $(`panel_l_${player_id}`);
-            element.innerHTML = `<input type="checkbox" disabled>`;
+            element.innerHTML = `<span id="icon_cb_f" class="checkbox-icon icon-check-false"></span>`;
         },
         onBtnPlayCard: function () {
         const action = "actPlayCard";
@@ -2200,7 +2150,7 @@ function (dojo, declare,) {
                 if (this['played'].items && this['played'].items[args.card_id]) {
                     this['played'].items[args.card_id].played_by = args.player_id;
                 }
-                this.addCardTooltipByUniqueId('played', uniqueId, args.player_id);
+                this.addCardTooltipByUniqueId('played', uniqueId, args.player_id, args.card_id);
                 // Add player color border to the played card
                 this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
             }
@@ -2224,7 +2174,7 @@ function (dojo, declare,) {
                 const playerCardsStock = this[`${this.player_id}_cards`];
                 if (playerCardsStock) {
                     playerCardsStock.addToStockWithId(uniqueId, card.id);
-                    this.addCardTooltipByUniqueId(`${this.player_id}_cards`, uniqueId);
+                    this.addCardTooltipByUniqueId(`${this.player_id}_cards`, uniqueId, null, card.id);
                 }
             }
         },
@@ -2296,14 +2246,14 @@ function (dojo, declare,) {
             if (old_leader) {
                 const oldIcon = document.getElementById(`icon_p_${old_leader}`);
                 if (oldIcon) {
-                    oldIcon.className = 'kalua_icon_p';
+                    oldIcon.className = 'sidebar-icon icon-pray';
                 }
             }
             // Set new leader's prayer icon to grayed version
             if (new_leader) {
                 const newIcon = document.getElementById(`icon_p_${new_leader}`);
                 if (newIcon) {
-                    newIcon.className = 'kalua_icon_pg';
+                    newIcon.className = 'sidebar-icon icon-pray_g';
                 }
             }
         },
@@ -2355,7 +2305,7 @@ function (dojo, declare,) {
             const player_id = args.player_id;
             const result = args.result;
             // Play dice roll sound effect
-            this.sounds.play('diceRoll');
+            this.sounds.play('dice_roll');
             // Wait 0.2 seconds before updating dice graphics
             setTimeout(() => {
                 // Reset auto-roll flag when any player rolls dice
@@ -2484,8 +2434,6 @@ function (dojo, declare,) {
             }
             // Update prediction panel if active
             this.refreshPredictionPanelIfActive();
-            // Update dev statistics display
-            this.updateDevStatsDisplay();
         },
         notif_leaderRecovered: function(args) {
             const player_id = args.player_id;
@@ -2498,7 +2446,7 @@ function (dojo, declare,) {
             // Update leader display in player panel
             const leaderElement = document.getElementById(`panel_l_${player_id}`);
             if (leaderElement) {
-                leaderElement.innerHTML = `<span id="icon_cb_t" style="display:inline-block;vertical-align:middle;"></span>`;
+                leaderElement.innerHTML = `<span id="icon_cb_t" class="checkbox-icon icon-check-true"></span>`;
             }
         },
         notif_cardDiscarded: function(args) {
@@ -2533,7 +2481,7 @@ function (dojo, declare,) {
             // Add to resolved stock
             if (this['resolved']) {
                 this['resolved'].addToStockWithId(uniqueId, card_id);
-                this.addCardTooltipByUniqueId('resolved', uniqueId);
+                this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
             }
         },
         notif_cardBeingResolved: function(args) {
@@ -2613,12 +2561,6 @@ function (dojo, declare,) {
             }
             // Note: Dead families don't go to atheist pool, they just disappear
         },
-        notif_devStatisticsRefreshed: function(args) {
-            // Update the statistics panel with the new data
-            if (args.statistics) {
-                this.updateDevStatisticsWithServerData(args.statistics);
-            }
-        },
         ///////////////////////////////////////////////////
         //// Utility Notifications
         // Helper function to refresh prediction panel after counter updates
@@ -2627,110 +2569,6 @@ function (dojo, declare,) {
                 document.getElementById('prediction_panel').style.display !== 'none') {
                 this.updatePredictionPanel();
             }
-        },
-        ///////////////////////////////////////////////////
-        //// Reaction to cometD notifications
-        ///////////////////////////////////////////////////
-        //// Development statistics refresh functionality
-        refreshDevStatistics: function() {
-            // Disable button and show loading
-            const refreshBtn = document.getElementById('refresh_stats_btn');
-            if (refreshBtn) {
-                refreshBtn.disabled = true;
-                refreshBtn.textContent = 'Loading...';
-            }
-            // Make AJAX call to get real statistics
-            this.bgaPerformAction('actGetDevStatistics', {}, {
-                onSuccess: () => {
-                    // The actual data will come via notification handler
-                    // Re-enable button
-                    if (refreshBtn) {
-                        refreshBtn.disabled = false;
-                        refreshBtn.textContent = '🔄 Refresh Live Statistics';
-                    }
-                },
-                onError: (error) => {
-                    console.error('Failed to refresh statistics:', error);
-                    // Show error in stats panel
-                    const liveStatsContent = document.getElementById('live_stats_content');
-                    if (liveStatsContent) {
-                        liveStatsContent.innerHTML = '<div style="color: #F44336;">Error loading statistics</div>';
-                    }
-                    // Re-enable button
-                    if (refreshBtn) {
-                        refreshBtn.disabled = false;
-                        refreshBtn.textContent = '🔄 Refresh Live Statistics';
-                    }
-                }
-            });
-        },
-        updateDevStatisticsWithServerData: function(stats) {
-            try {
-                // Update table statistics with real data
-                const liveStatsContent = document.getElementById('live_stats_content');
-                if (liveStatsContent && stats.table) {
-                    const tableStats = stats.table;
-                    liveStatsContent.innerHTML = `
-                        <div style="margin-bottom: 3px; font-size: 21px;">Total Rounds: <span style="color: #4CAF50;">${tableStats.total_rounds || 0}</span></div>
-                        <div style="margin-bottom: 3px; font-size: 21px;">Global Disasters Played: <span style="color: #4CAF50;">${tableStats.total_global_disasters || 0}</span></div>
-                        <div style="margin-bottom: 3px; font-size: 21px;">Local Disasters Played: <span style="color: #4CAF50;">${tableStats.total_local_disasters || 0}</span></div>
-                        <div style="margin-bottom: 3px; font-size: 21px;">Bonus Cards Played: <span style="color: #4CAF50;">${tableStats.total_bonus_cards || 0}</span></div>
-                        <div style="margin-bottom: 3px; font-size: 21px;">Players Eliminated: <span style="color: #4CAF50;">${tableStats.players_eliminated || 0}</span></div>
-                    `;
-                }
-                // Update player statistics with real data
-                if (stats.players) {
-                    const players = this.gamedatas.players || {};
-                    let playerStatsHtml = '<div style="margin-bottom: 5px; color: #4CAF50; font-weight: bold; font-size: 21px;">✅ Player Statistics (live data)</div>';
-                    Object.values(players).forEach(player => {
-                        const playerStats = stats.players[player.id];
-                        if (playerStats) {
-                            const playerColor = this.fixPlayerColor(player.color);
-                            const isEliminated = (player.family === 0 && !player.chief);
-                            const statusIcon = isEliminated ? '💀' : (player.chief ? '👑' : '👤');
-                            playerStatsHtml += `
-                                <div style="margin-bottom: 8px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; ${isEliminated ? 'opacity: 0.6;' : ''}">
-                                    <div style="font-weight: bold; color: ${playerColor}; margin-bottom: 3px;">${statusIcon} ${player.name}</div>
-                                    <div style="font-size: 20px; line-height: 1.3; color: #4CAF50;">
-                                        Atheists Converted: <span style="color: #FFF;">${playerStats.atheists_converted || 0}</span> | Believers Converted: <span style="color: #FFF;">${playerStats.believers_converted || 0}</span><br>
-                                        Families Lost: <span style="color: #FFF;">${playerStats.families_lost || 0}</span> | Temples Built: <span style="color: #FFF;">${playerStats.temples_built || 0}</span><br>
-                                        Amulets Gained: <span style="color: #FFF;">${playerStats.amulets_gained || 0}</span> | Speeches Given: <span style="color: #FFF;">${playerStats.speeches_given || 0}</span><br>
-                                        Cards Played: <span style="color: #FFF;">${playerStats.cards_played || 0}</span> | Disasters Doubled: <span style="color: #FFF;">${playerStats.global_disasters_doubled || 0}</span>
-                                    </div>
-                                    <div style="font-size: 20px; line-height: 1.3; margin-top: 3px; padding-top: 3px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                        <strong>Current State:</strong><br>
-                                        Families: <span style="color: ${player.family > 0 ? '#4CAF50' : '#F44336'}">${player.family || 0}</span> | 
-                                        Prayer: <span style="color: ${player.prayer > 5 ? '#4CAF50' : player.prayer > 2 ? '#FF9800' : '#F44336'}">${player.prayer || 0}</span><br>
-                                        Happiness: <span style="color: ${player.happiness > 6 ? '#4CAF50' : player.happiness > 3 ? '#FF9800' : '#F44336'}">${player.happiness || 0}/10</span> | 
-                                        Temples: <span style="color: #2196F3">${player.temple || 0}</span> | 
-                                        Amulets: <span style="color: #9C27B0">${player.amulet || 0}</span><br>
-                                        Leader: <span style="color: ${player.chief ? '#4CAF50' : '#F44336'}">${player.chief ? 'Yes' : 'No'}</span> | 
-                                        Cards: <span style="color: ${player.cards > 3 ? '#4CAF50' : player.cards > 1 ? '#FF9800' : '#F44336'}">${player.cards || 0}</span>
-                                        ${isEliminated ? '<br><span style="color: #F44336; font-weight: bold;">❌ ELIMINATED</span>' : ''}
-                                    </div>
-                                </div>
-                            `;
-                        }
-                    });
-                    document.getElementById('player_stats_content').innerHTML = playerStatsHtml;
-                }
-            } catch (error) {
-                console.error('Error updating statistics with server data:', error);
-            }
-        },
-        ///////////////////////////////////////////////////
-        //// Helper functions for development statistics panel
-        getTotalFamilies: function(players) {
-            return Object.values(players).reduce((total, player) => total + (parseInt(player.family) || 0), 0);
-        },
-        getTotalTemples: function(players) {
-            return Object.values(players).reduce((total, player) => total + (parseInt(player.temple) || 0), 0);
-        },
-        getTotalAmulets: function(players) {
-            return Object.values(players).reduce((total, player) => total + (parseInt(player.amulet) || 0), 0);
-        },
-        getAtheistCount: function() {
-            return this.atheists ? this.atheists.count() : '?';
         },
     });
 });

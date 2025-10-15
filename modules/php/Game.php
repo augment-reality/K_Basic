@@ -1306,10 +1306,6 @@ class Game extends \Table
             $effect_parts[] = "{$sign}{$effects['happiness_effect']} happiness";
         }
         
-        if (isset($effects['convert_to_atheist']) && $effects['convert_to_atheist'] > 0) {
-            $effect_parts[] = "{$effects['convert_to_atheist']} families convert to atheist";
-        }
-        
         if (isset($effects['family_dies']) && $effects['family_dies'] > 0) {
             $effect_parts[] = "{$effects['family_dies']} families die";
         }
@@ -1357,13 +1353,8 @@ class Game extends \Table
             $this->bonusCards->moveCard($card_id, 'resolved');
         }
         
-        // Notify frontend to move card from played to resolved stock
-        $this->notifyAllPlayers('cardResolved', clienttranslate('${card_name} has been resolved'), [
-            'card_id' => $card_id,
-            'card_type' => $card_type,
-            'card_type_arg' => $card_type_arg,
-            'card_name' => $this->getCardName($card)
-        ]);
+        // Move card from played to resolved stock without notification
+        // (Removed "has been resolved" notification as it was deemed superfluous)
     }
     
     public function stSelectTarget(): void
@@ -2108,7 +2099,8 @@ class Game extends \Table
                 $this->setGameStateValue("round_leader_continuing_play", 1);
                 $this->gamestate->nextState('playAgain');
             } else {
-                // Non-round leader moves to next player - their turn is ending
+                // Non-round leader automatically passes after playing a card
+                // This prevents them from playing two cards in a row
                 $this->giveExtraTime($current_player);
                 $this->gamestate->nextState('nextPlayerThree');
             }
@@ -2235,6 +2227,16 @@ class Game extends \Table
         // Deduct 5 prayer points
         $this->DbQuery("UPDATE player SET player_prayer = player_prayer - 5 WHERE player_id = $player_id");
         
+        // Get updated player data and notify about prayer change
+        $updated_player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
+                                                       player_family as family_count, player_temple as temple_count,
+                                                       player_amulet as amulet_count
+                                                       FROM player WHERE player_id = $player_id");
+        
+        $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+            'player_id' => $player_id
+        ], $updated_player_data));
+        
         // Draw the card using the existing private function, passing player_id explicitly
         $this->drawCard_private($type, $player_id);
         
@@ -2302,6 +2304,16 @@ class Game extends \Table
         // Deduct the avoid cost immediately
         $this->DbQuery("UPDATE player SET player_prayer = player_prayer - " . self::GLOBAL_DISASTER_AVOID_COST . " WHERE player_id = $player_id");
         
+        // Get updated player data and notify about prayer change
+        $updated_player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
+                                                       player_family as family_count, player_temple as temple_count,
+                                                       player_amulet as amulet_count
+                                                       FROM player WHERE player_id = $player_id");
+        
+        $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+            'player_id' => $player_id
+        ], $updated_player_data));
+        
         // Record the player's choice to avoid
         $this->setGlobalDisasterChoice($card_id, $player_id, 'avoid', self::GLOBAL_DISASTER_AVOID_COST);
         
@@ -2321,6 +2333,9 @@ class Game extends \Table
 
         // Clear the stored card ID and return to round leader's card playing
         $this->setGameStateValue('current_global_disaster', 0);
+        
+        // Set continuing play flag so round leader state isn't reset
+        $this->setGameStateValue("round_leader_continuing_play", 1);
         
         // Return to round leader to continue playing cards or pass
         $this->gamestate->nextState("playAgain");
@@ -2351,6 +2366,16 @@ class Game extends \Table
         // Deduct the double cost immediately
         $this->DbQuery("UPDATE player SET player_prayer = player_prayer - " . self::GLOBAL_DISASTER_DOUBLE_COST . " WHERE player_id = $player_id");
         
+        // Get updated player data and notify about prayer change
+        $updated_player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
+                                                       player_family as family_count, player_temple as temple_count,
+                                                       player_amulet as amulet_count
+                                                       FROM player WHERE player_id = $player_id");
+        
+        $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+            'player_id' => $player_id
+        ], $updated_player_data));
+        
         // Record the player's choice to double the effect
         $this->setGlobalDisasterChoice($card_id, $player_id, 'double', self::GLOBAL_DISASTER_DOUBLE_COST);
         
@@ -2370,6 +2395,9 @@ class Game extends \Table
 
         // Clear the stored card ID and return to round leader's card playing
         $this->setGameStateValue('current_global_disaster', 0);
+        
+        // Set continuing play flag so round leader state isn't reset
+        $this->setGameStateValue("round_leader_continuing_play", 1);
         
         // Return to round leader to continue playing cards or pass
         $this->gamestate->nextState("playAgain");
@@ -2406,6 +2434,9 @@ class Game extends \Table
 
         // Clear the stored card ID and return to round leader's card playing
         $this->setGameStateValue('current_global_disaster', 0);
+        
+        // Set continuing play flag so round leader state isn't reset
+        $this->setGameStateValue("round_leader_continuing_play", 1);
         
         // Return to round leader to continue playing cards or pass
         $this->gamestate->nextState("playAgain");
@@ -3482,7 +3513,9 @@ class Game extends \Table
         // Determine available actions based on player role and state
         $is_round_leader = ($current_player == $round_leader);
         $can_convert = $is_round_leader && ($round_leader_played_card == 0);
-        $can_pass = true; // All players can always pass
+        
+        // Round leader can pass if they've already played a card, non-round leaders can always pass
+        $can_pass = !$is_round_leader || ($round_leader_played_card == 1);
         
         return [
             'is_round_leader' => $is_round_leader,

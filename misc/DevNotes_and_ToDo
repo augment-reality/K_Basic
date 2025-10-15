@@ -5,10 +5,18 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
+Not all card resolutions need an ending notification: Temple has been resolved is superfluous
+Longer delay after each card resolution, and between each hktoken move
+Merge notifications"Round has ended. Unhappy religions lose families and all religions pray." and "Card resolution complete. Proceeding to convert/pray phase"
+-add padding to player cards?
+✓ prayer pool updates immediately after global disaster choices and card purchases
+✓ non-round leader players can only play one card per round (round leader can play multiple)
 use <i class="fa-solid fa-xmark"></i> and <i class="fa-solid fa-check"></i> instead of pngs?
 -test die roll sound
+-add auto pass to non-round leader players who have no prayer during card playing?
 -add text info to tooltip?
 -Review and consolidate messages
+-add a preference to force players to sacrifice their leader after x turns to avoid endless games?
 -add sounds https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds 
 -undo buttons? Maybe just confirm buttons instead (convert/pray)?
 -add game option to end game if all players family count is zero?
