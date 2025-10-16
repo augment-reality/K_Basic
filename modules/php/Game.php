@@ -2331,14 +2331,22 @@ class Game extends \Table
                 'new_prayer_total' => $player_prayer - self::GLOBAL_DISASTER_AVOID_COST
             ]);
 
-        // Clear the stored card ID and return to round leader's card playing
+        // Clear the stored card ID
         $this->setGameStateValue('current_global_disaster', 0);
         
-        // Set continuing play flag so round leader state isn't reset
-        $this->setGameStateValue("round_leader_continuing_play", 1);
+        // Check if current player is round leader to determine next state
+        $current_player = $this->getActivePlayerId();
+        $round_leader = $this->getGameStateValue("roundLeader");
         
-        // Return to round leader to continue playing cards or pass
-        $this->gamestate->nextState("playAgain");
+        if ($current_player == $round_leader) {
+            // Round leader can continue playing
+            $this->setGameStateValue("round_leader_continuing_play", 1);
+            $this->gamestate->nextState("playAgain");
+        } else {
+            // Non-round leader moves to next player after making global disaster choice
+            $this->giveExtraTime($current_player);
+            $this->gamestate->nextState("nextPlayerThree");
+        }
     }
 
     public function actDoubleGlobal(): void
@@ -2393,14 +2401,22 @@ class Game extends \Table
                 'new_prayer_total' => $player_prayer - self::GLOBAL_DISASTER_DOUBLE_COST
             ]);
 
-        // Clear the stored card ID and return to round leader's card playing
+        // Clear the stored card ID
         $this->setGameStateValue('current_global_disaster', 0);
         
-        // Set continuing play flag so round leader state isn't reset
-        $this->setGameStateValue("round_leader_continuing_play", 1);
+        // Check if current player is round leader to determine next state
+        $current_player = $this->getActivePlayerId();
+        $round_leader = $this->getGameStateValue("roundLeader");
         
-        // Return to round leader to continue playing cards or pass
-        $this->gamestate->nextState("playAgain");
+        if ($current_player == $round_leader) {
+            // Round leader can continue playing
+            $this->setGameStateValue("round_leader_continuing_play", 1);
+            $this->gamestate->nextState("playAgain");
+        } else {
+            // Non-round leader moves to next player after making global disaster choice
+            $this->giveExtraTime($current_player);
+            $this->gamestate->nextState("nextPlayerThree");
+        }
     }
 
     public function actNormalGlobal(): void
@@ -2432,14 +2448,22 @@ class Game extends \Table
                 'card_id' => $card_id
             ]);
 
-        // Clear the stored card ID and return to round leader's card playing
+        // Clear the stored card ID
         $this->setGameStateValue('current_global_disaster', 0);
         
-        // Set continuing play flag so round leader state isn't reset
-        $this->setGameStateValue("round_leader_continuing_play", 1);
+        // Check if current player is round leader to determine next state
+        $current_player = $this->getActivePlayerId();
+        $round_leader = $this->getGameStateValue("roundLeader");
         
-        // Return to round leader to continue playing cards or pass
-        $this->gamestate->nextState("playAgain");
+        if ($current_player == $round_leader) {
+            // Round leader can continue playing
+            $this->setGameStateValue("round_leader_continuing_play", 1);
+            $this->gamestate->nextState("playAgain");
+        } else {
+            // Non-round leader moves to next player after making global disaster choice
+            $this->giveExtraTime($current_player);
+            $this->gamestate->nextState("nextPlayerThree");
+        }
     }
     
     /***************************************/
@@ -3628,9 +3652,9 @@ class Game extends \Table
         $result["handBonus"] = $this->bonusCards->getPlayerHand($current_player_id);
 
         /* Get played and resolved cards for all players to display in the common areas */
-        // Use custom queries to include played_by information
-        $result["playedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'played'");
-        $result["playedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'played'");
+        // Use custom queries to include played_by information and play_order for proper sorting
+        $result["playedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM disaster_card WHERE card_location = 'played' ORDER BY play_order ASC");
+        $result["playedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM bonus_card WHERE card_location = 'played' ORDER BY play_order ASC");
         $result["resolvedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'resolved'");
         $result["resolvedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'resolved'");
 

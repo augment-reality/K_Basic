@@ -5,13 +5,13 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
+-leader meeples not updating for everyone right away when sacrificed
+
 Not all card resolutions need an ending notification: Temple has been resolved is superfluous
 Longer delay after each card resolution, and between each hktoken move
 Merge notifications"Round has ended. Unhappy religions lose families and all religions pray." and "Card resolution complete. Proceeding to convert/pray phase"
 -add padding to player cards?
 ✓ prayer pool updates immediately after global disaster choices and card purchases
-✓ non-round leader players can only play one card per round (round leader can play multiple)
-use <i class="fa-solid fa-xmark"></i> and <i class="fa-solid fa-check"></i> instead of pngs?
 -test die roll sound
 -add auto pass to non-round leader players who have no prayer during card playing?
 -add text info to tooltip?
@@ -22,6 +22,7 @@ use <i class="fa-solid fa-xmark"></i> and <i class="fa-solid fa-check"></i> inst
 -add game option to end game if all players family count is zero?
 -For mobile: don't show tooltips, and move dice to right of main board?
 -Group cards when a player has more than one of any specific card (maybe with BGA-Cards?)
+-during initial card selection, maybe undo option? https://en.doc.boardgamearena.com/BGA_Studio_Cookbook#Out-of-turn_actions:_Un-pass
 
 FOR ALPHA DEPLOYMENT (BGA Pre-Release Checklist Issues):
 https://en.doc.boardgamearena.com/Pre-release_checklist

@@ -65,4 +65,3 @@ CREATE TABLE IF NOT EXISTS `global_disaster_choice` (
 -- Note: This will only insert if the global_id doesn't already exist
 -- The value will be properly set during game setup based on player count
 INSERT IGNORE INTO `global` (global_id, global_value) VALUES (101, 0);
-INSERT IGNORE INTO `global` (global_id, global_value) VALUES (102, ''); -- Track players who have played this cycle

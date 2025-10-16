@@ -69,6 +69,10 @@ function (dojo, declare,) {
             // HK Token movement timing variables
             this.hkTokenMoveDelay = 1200;      // Delay before starting token movement
             this.hkTokenTransferDelay = 200;  // Delay between remove and add operations
+            // Play order tracking for proper card sorting
+            this.nextPlayOrder = 1000; // Start high to avoid conflicts with database play_order
+            // Card resolution timing variables
+            this.cardResolutionDelay = 800;    // Delay after card is added to resolved area
 
 
             // Card tooltips for Kalua (JS format)
@@ -496,6 +500,10 @@ function (dojo, declare,) {
             Object.values(gamedatas.playedDisaster).forEach(card => {
                 
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                // Override the itemType weight with play_order for proper sorting
+                if (card.play_order !== undefined) {
+                    this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
+                }
                 this['played'].addToStockWithId(uniqueId, card.id);
                 // Store player info and add tooltip with player information
                 if (this['played'].items && this['played'].items[card.id]) {
@@ -507,6 +515,10 @@ function (dojo, declare,) {
             Object.values(gamedatas.playedBonus).forEach(card => {
                 
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                // Override the itemType weight with play_order for proper sorting
+                if (card.play_order !== undefined) {
+                    this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
+                }
                 this['played'].addToStockWithId(uniqueId, card.id);
                 // Store player info and add tooltip with player information
                 if (this['played'].items && this['played'].items[card.id]) {
@@ -2145,6 +2157,10 @@ function (dojo, declare,) {
             // Add the card to the played stock
             const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
             if (this['played']) {
+                // Set proper weight for play order sorting
+                this['played'].changeItemsWeight(uniqueId, this.nextPlayOrder);
+                this.nextPlayOrder++; // Increment for next card
+                
                 this['played'].addToStockWithId(uniqueId, args.card_id);
                 // Store player info and add tooltip with player information
                 if (this['played'].items && this['played'].items[args.card_id]) {
@@ -2323,6 +2339,7 @@ function (dojo, declare,) {
                     this['dice'].addToStockWithId(playerDieFace, player_id);
                 }
             }, 200); // 0.2 seconds delay
+            this.disableNextMoveSound();
         },
         notif_templeIncremented: function(args) {
             const player_id = args.player_id;
@@ -2474,19 +2491,26 @@ function (dojo, declare,) {
             const card_type_arg = args.card_type_arg;
             // Move card from played stock to resolved stock
             const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
-            // Remove from played stock
-            if (this['played']) {
-                this['played'].removeFromStockById(card_id);
-            }
-            // Add to resolved stock
+            
+            // Add to resolved stock (card was already removed from played in cardBeingResolved)
             if (this['resolved']) {
                 this['resolved'].addToStockWithId(uniqueId, card_id);
                 this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
+                
+                // Add delay after card is added to resolved area
+                setTimeout(() => {
+                    // Additional visual effects or next steps can be added here
+                    // The delay allows players to see the card move to resolved area
+                }, this.cardResolutionDelay);
             }
         },
         notif_cardBeingResolved: function(args) {
             // This notification indicates a card is about to be resolved
-            // Visual feedback can be added here if needed
+            // Remove the card from played stock when resolution begins
+            const card_id = args.card_id;
+            if (this['played'] && card_id) {
+                this['played'].removeFromStockById(card_id);
+            }
         },
         notif_resolvedCardsCleanup: function(args) {
             // Clear all cards from the resolved stock
