@@ -317,13 +317,37 @@ function (dojo, declare,) {
                 this[`${player.id}_cardbacks`].image_items_per_row = 2;
                 this[`${player.id}_cardbacks`].setOverlap(35, 0); // 15px horizontal overlap
                 this[`${player.id}_cardbacks`].setSelectionMode(0);
-                // Create cards stock using the cards div
+                // Create cards stock using the cards div with horizontal layout for scrolling
                 this[`${player.id}_cards`] = new ebg.stock();
                 this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 181.3);
-                this[`${player.id}_cards`].image_items_per_row = 5;
-                this[`${player.id}_cards`].setOverlap(45, 0); // 15px horizontal overlap
+                this[`${player.id}_cards`].image_items_per_row = 5; // Must match sprite sheet layout
+                // Configure for horizontal linear display with scrolling and grouping
+                this[`${player.id}_cards`].item_margin = 0; // No extra margin needed
+                this[`${player.id}_cards`].autowidth = false; // Prevent auto-width calculation
+                // Prevent vertical wrapping by setting container height
+                this[`${player.id}_cards`].container_div.style.height = '181.3px';
+                this[`${player.id}_cards`].container_div.style.maxHeight = '181.3px';
+                // Defensive: also force minHeight to prevent container from growing
+                this[`${player.id}_cards`].container_div.style.minHeight = '181.3px';
+                // Defensive: if container is too tall, forcibly reset it
+                setTimeout(() => {
+                    const c = this[`${player.id}_cards`].container_div;
+                    if (c && parseFloat(c.style.height) > 181.3) {
+                        c.style.height = '181.3px';
+                    }
+                }, 50);
+                // Enable card grouping - cards of same type will stack together
+                this[`${player.id}_cards`].apparenceBorderWidth = '2px'; // Border around card groups
+                this[`${player.id}_cards`].centerItems = false; // Keep items left-aligned
+                // Use overlap to control spacing: for 5px total spacing between groups
+                // Cards in same group overlap completely (managed by grouping), different groups get 5px gap
+                this[`${player.id}_cards`].setOverlap(115, 0); // 120 - 115 = 5px spacing between card groups
                 this[`${player.id}_cards`].setSelectionMode(1); // single selection
                 dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
+                // Container scrolling and layout is handled by CSS
+
+        // Utility: Force all stockitems to top: 0px to prevent vertical stacking
+        setTimeout(() => { this.fixPlayerCardStockTop(`${player.id}_cards`); }, 0);
                 for (let card_id = 80; card_id <= 81; card_id++)
                 {              
                     // Add card backs to stock
@@ -492,9 +516,25 @@ function (dojo, declare,) {
             Object.values(gamedatas.handBonus).forEach(card => {
                 this.drawCard(this.player_id, card.id, card.type, card.type_arg);
             })
+
+            // TEST: Add duplicate cards to the player's hand to test grouping and badge
+            // We'll add two extra Local Disaster #1 cards (type: 2, type_arg: 1) with unique ids
+            const testCardType = this.ID_LOCAL_DISASTER;
+            const testCardTypeArg = 1;
+            const uniqueId = this.getCardUniqueId(testCardType, testCardTypeArg);
+            // Use high fake ids to avoid collision
+            this.drawCard(this.player_id, 9001, testCardType, testCardTypeArg);
+            this.drawCard(this.player_id, 9002, testCardType, testCardTypeArg);
+            // Now the player will have at least two cards of the same type/id, so badge should show
             // Force update display for player card stocks to ensure proper layout
             if (this[`${this.player_id}_cards`]) {
                 this[`${this.player_id}_cards`].updateDisplay();
+                // Set attributes after display update
+                this.setCardItemAttributes(this.player_id);
+                // Update card count badges for initial grouping display
+                this.updateCardGroupBadges(this.player_id);
+                // Ensure wrapper accommodates horizontal layout
+                this.fixCardContainerWidth(this.player_id);
             }
             /* Populate played cards from database */
             Object.values(gamedatas.playedDisaster).forEach(card => {
@@ -1192,13 +1232,18 @@ function (dojo, declare,) {
                     if (this[`${player.id}_cards`]) {
                         this[`${player.id}_cards`].updateDisplay();
                     }
-                    if (this[`${player.id}_cardbacks`]) {
-                        this[`${player.id}_cardbacks`].updateDisplay();
-                    }
-                    if (this[`${player.id}_kept`]) {
-                        this[`${player.id}_kept`].updateDisplay();
-                    }
                 });
+            }
+        },
+        /**
+         * Utility to force all .stockitem in a player card stock to top: 0px (prevents vertical stacking)
+         */
+        fixPlayerCardStockTop: function(stockDivId) {
+            const container = document.getElementById(stockDivId);
+            if (!container) return;
+            const items = container.getElementsByClassName('stockitem');
+            for (let i = 0; i < items.length; i++) {
+                items[i].style.top = '0px';
             }
         },
         //// Prayer token management helper function
@@ -1353,6 +1398,130 @@ function (dojo, declare,) {
             /* TODO exception? */
             return 0;
         },
+        fixCardContainerWidth: function(player_id) {
+            const stock = this[`${player_id}_cards`];
+            if (!stock || !stock.items) return;
+            
+            const performFix = () => {
+                const cardContainer = document.getElementById(`${player_id}_cards`);
+                if (!cardContainer) return;
+                
+                // Calculate required width: number of unique card types * (card_width + spacing)
+                const uniqueTypes = new Set(Object.values(stock.items).map(item => item.type));
+                const numGroups = uniqueTypes.size;
+                // Each card group needs 120px (card) + 5px (spacing) = 125px
+                const minWidth = Math.max(650, numGroups * 125 + 50); // Extra 50px buffer
+                
+                // Set wrapper dimensions if wrapper exists
+                const wrapper = cardContainer.firstElementChild;
+                if (wrapper) {
+                    wrapper.style.width = minWidth + 'px';
+                    wrapper.style.minWidth = minWidth + 'px';
+                    wrapper.style.height = '181.3px'; // Fixed height prevents wrapping
+                }
+                
+                // Force container to maintain its height too
+                cardContainer.style.height = '200px';
+                cardContainer.style.maxHeight = '200px';
+                
+                // Aggressively fix ALL cards with incorrect positioning or dimensions
+                Object.values(stock.items).forEach(item => {
+                    const cardElement = document.getElementById(`${player_id}_cards_item_${item.id}`);
+                    if (cardElement) {
+                        // Force correct top position (single row only)
+                        cardElement.style.setProperty('top', '0px', 'important');
+                        
+                        // Force correct dimensions
+                        cardElement.style.setProperty('width', '120px', 'important');
+                        cardElement.style.setProperty('height', '181.3px', 'important');
+                        cardElement.style.setProperty('min-width', '120px', 'important');
+                        cardElement.style.setProperty('max-width', '120px', 'important');
+                        cardElement.style.setProperty('min-height', '181.3px', 'important');
+                        cardElement.style.setProperty('max-height', '181.3px', 'important');
+                    }
+                });
+            };
+            
+            // Run fix immediately
+            performFix();
+            
+            // Run again after short delay to catch stock recalculations
+            setTimeout(performFix, 50);
+            setTimeout(performFix, 150);
+            setTimeout(performFix, 300);
+        },
+        updateCardGroupBadges: function(player_id) {
+            // Ensure each .stockitem has data-type and data-unique-id attributes (call helper)
+            this.setCardItemAttributes(player_id);
+            // Debug: log all .stockitem elements in this player's card area
+            var cardArea = document.getElementById(`${player_id}_cards`);
+            if (cardArea) {
+                var stockitems = cardArea.querySelectorAll('.stockitem');
+                console.log('[BADGE DEBUG] .stockitem elements for player', player_id);
+                stockitems.forEach(function(el) {
+                    console.log('  id:', el.id, 'data-type:', el.getAttribute('data-type'), 'data-unique-id:', el.getAttribute('data-unique-id'), el);
+                });
+            }
+            // Update card count badges for grouped cards
+            console.log('[BADGE] updateCardGroupBadges called for player:', player_id);
+            const stock = this[`${player_id}_cards`];
+            if (!stock || !stock.items) {
+                console.log('[BADGE] No stock or items for player:', player_id);
+                return;
+            }
+
+            // Count cards by type and find the card with the highest z-index for each type
+            const cardTypeCounts = {};
+            const topCardByType = {};
+
+            // First, clear all badges
+            Object.values(stock.items).forEach(item => {
+                const element = document.getElementById(`${stock.control_name}_item_${item.id}`);
+                if (element) {
+                    element.removeAttribute('data-card-count');
+                }
+            });
+
+            // Group all elements by type
+            Object.values(stock.items).forEach(item => {
+                if (!cardTypeCounts[item.type]) cardTypeCounts[item.type] = 0;
+                cardTypeCounts[item.type]++;
+            });
+            console.log('[BADGE] cardTypeCounts:', cardTypeCounts);
+
+            // For each group, find the card element with the highest z-index (topmost in DOM)
+            Object.keys(cardTypeCounts).forEach(type => {
+                if (cardTypeCounts[type] > 1) {
+                    // Find all elements for this type
+                    const elements = Array.from(document.querySelectorAll(`.kalua_player_cards .stockitem[data-type="${type}"]`));
+                    let topElement = null;
+                    let topZ = -Infinity;
+                    elements.forEach(el => {
+                        const z = parseInt(window.getComputedStyle(el).zIndex) || 0;
+                        if (z > topZ) {
+                            topZ = z;
+                            topElement = el;
+                        }
+                    });
+                    if (topElement) {
+                        topElement.setAttribute('data-card-count', cardTypeCounts[type]);
+                        // Debug log
+                        console.log('[BADGE TOP]', {type, count: cardTypeCounts[type], topElement, topZ});
+                    }
+                }
+            });
+        },
+        setCardItemAttributes: function(player_id) {
+            const stock = this[`${player_id}_cards`];
+            if (!stock || !stock.items) return;
+            Object.values(stock.items).forEach(function(item) {
+                var el = document.getElementById(`${stock.control_name}_item_${item.id}`);
+                if (el) {
+                    el.setAttribute('data-type', item.type);
+                    el.setAttribute('data-unique-id', item.type); // Use type for grouping; change to item.id for unique
+                }
+            });
+        },
         playCardOnTable : function(player_id, color, value, card_id) {
             
                 // You played a card. If it exists in your hand, move card from there and remove
@@ -1362,6 +1531,10 @@ function (dojo, declare,) {
                         const currentValue = this.cardCounters[player_id].getValue();
                         this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
                     }
+                    // Update card count badges after removing card
+                    this.updateCardGroupBadges(player_id);
+                    // Fix container width after card removal
+                    this.fixCardContainerWidth(player_id);
             // Add card to played cards area
             const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
             this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
@@ -1427,36 +1600,43 @@ function (dojo, declare,) {
                         if (cardElement) break;
                     }
                     if (cardElement) {
-                        // Remove any existing indicator
-                        const existingIndicator = cardElement.querySelector('.player-indicator');
-                        if (existingIndicator) {
-                            existingIndicator.remove();
-                        }
-                        // Create player indicator
-                        const indicator = document.createElement('div');
-                        indicator.className = 'player-indicator';
-                        indicator.style.cssText = `
-                            position: absolute;
-                            top: -5px;
-                            right: -5px;
-                            width: 20px;
-                            height: 20px;
-                            background-color: ${playerColor};
-                            border: 2px solid white;
-                            border-radius: 50%;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                            z-index: 10;
-                            cursor: help;
-                        `;
-                        indicator.title = `Played by ${playerName}`;
-                        // Ensure the card element has relative positioning
-                        if (getComputedStyle(cardElement).position === 'static') {
-                            cardElement.style.position = 'relative';
-                        }
-                        cardElement.appendChild(indicator);
-                        
-                    } else {
-                        console.warn(`Could not find card element for ${stock_name}_item_${card_id}`);
+                        // Remove all existing badges
+                        const cardArea = document.getElementById(`${player_id}_cards`);
+                        if (!cardArea) return;
+                        const allCards = cardArea.querySelectorAll('.stockitem');
+                        allCards.forEach(function(card) {
+                            card.removeAttribute('data-card-count');
+                        });
+                        // Group cards by uniqueId
+                        var cardGroups = {};
+                        allCards.forEach(function(card) {
+                            var uniqueId = card.getAttribute('data-unique-id');
+                            if (!uniqueId) return;
+                            if (!cardGroups[uniqueId]) cardGroups[uniqueId] = [];
+                            cardGroups[uniqueId].push(card);
+                        });
+                        // For each group, set badge on the last (rightmost/topmost) card if count > 1
+                        Object.values(cardGroups).forEach(function(group) {
+                            if (group.length > 1) {
+                                // Always use the last card in the group (rightmost/topmost in DOM)
+                                var topCard = group[group.length - 1];
+                                if (!topCard) {
+                                    // Fallback: use first card
+                                    topCard = group[0];
+                                }
+                                if (topCard) {
+                                    topCard.setAttribute('data-card-count', group.length);
+                                    // Debug log
+                                    if (window && window.console) {
+                                        console.log('[BADGE] Badge set on card:', topCard, 'Count:', group.length);
+                                    }
+                                } else {
+                                    if (window && window.console) {
+                                        console.warn('[BADGE] No card found to set badge for group:', group);
+                                    }
+                                }
+                            }
+                        });
                     }
                 }, 150);
             } catch (error) {
@@ -1598,6 +1778,10 @@ function (dojo, declare,) {
             // Force layout update to ensure cards display properly
             if (this[`${player}_cards`]) {
                 this[`${player}_cards`].updateDisplay();
+                // Update card count badges for grouping
+                this.updateCardGroupBadges(player);
+                // Fix container width after adding card
+                this.fixCardContainerWidth(player);
             }
         },
         movetokens: function(tokenTypeToMove, desiredShift) {
@@ -1937,7 +2121,7 @@ function (dojo, declare,) {
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
             // Add 0.5 second delays to card resolution notifications so players can follow along
-            this.notifqueue.setSynchronous('playerCountsChanged', 500);
+            this.notifqueue.setSynchronous('playerCountsChanged', 0);
             this.notifqueue.setSynchronous('familiesConverted', 500);
             this.notifqueue.setSynchronous('familiesDied', 500);
             this.notifqueue.setSynchronous('templeDestroyed', 500);
