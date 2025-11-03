@@ -1109,11 +1109,14 @@ class Game extends \Table
         if (!empty($updates)) {
             $sql = "UPDATE player SET " . implode(", ", $updates) . " WHERE player_id = $player_id";
             $this->DbQuery($sql);
-            // Immediately notify UI of updated prayer value for instant feedback
+            
+            // Get the updated player data to send to the UI
             $player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness, 
                                                    player_family as family_count, player_temple as temple_count,
                                                    player_amulet as amulet_count
                                                    FROM player WHERE player_id = $player_id");
+            
+            // Notify about the stat changes
             $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
                 'player_id' => $player_id
             ], $player_data));

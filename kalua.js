@@ -20,8 +20,10 @@ define([
     "ebg/counter",
     "ebg/stock",
     "ebg/zone",
+    getLibUrl('bga-animations', '1.x'),
+    getLibUrl('bga-cards', '1.x'),
 ],
-function (dojo, declare,) {
+function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimations, BgaCards) {
     return declare("bgagame.kalua", ebg.core.gamegui, {
         constructor: function(){
             // Setup non-player based divs
@@ -113,6 +115,104 @@ function (dojo, declare,) {
 
         },
         setup: function(gamedatas) {
+            // Initialize BGA Animation Manager
+            this.animationManager = new BgaAnimations.Manager({
+                animationsActive: () => this.bgaAnimationsActive(),
+            });
+
+            // Initialize BGA Cards Manager
+            this.cardsManager = new BgaCards.Manager({
+                animationManager: this.animationManager,
+                type: 'kalua-card',
+                getId: (card) => `${card.id}`,
+                setupFrontDiv: (card, div) => {
+                    // Set card dimensions
+                    div.style.width = '120px';
+                    div.style.height = '181.3px';
+                    
+                    // Add data attribute for card ID (for grouping counter updates)
+                    div.setAttribute('data-card-id', card.id);
+                    
+                    // Determine which sprite sheet to use based on card type
+                    let spriteSheet;
+                    let imagePosition;
+                    
+                    if (card.type == this.ID_LOCAL_DISASTER) {
+                        // Local disaster cards: positions 0-4
+                        spriteSheet = 'img/Cards_600_907_compressed.png';
+                        imagePosition = card.type_arg - 1;
+                    } else if (card.type == this.ID_GLOBAL_DISASTER) {
+                        // Global disaster cards: positions 5-14 (normal), 25-34 (avoid), 35-44 (double)
+                        spriteSheet = 'img/Cards_600_907_compressed.png';
+                        // Check if card has a multiplier property for avoid/double display
+                        if (card.multiplier === 'avoid') {
+                            imagePosition = card.type_arg + 24;
+                        } else if (card.multiplier === 'double') {
+                            imagePosition = card.type_arg + 34;
+                        } else {
+                            imagePosition = card.type_arg + 4;
+                        }
+                    } else if (card.type == this.ID_BONUS) {
+                        // Bonus cards: positions 15-21
+                        spriteSheet = 'img/Cards_600_907_compressed.png';
+                        imagePosition = card.type_arg + 14;
+                    }
+                    
+                    // Apply background image and position
+                    div.style.backgroundImage = `url('${g_gamethemeurl}${spriteSheet}')`;
+                    div.style.backgroundSize = '500% 500%'; // 5 columns x 5 rows (22 cards total)
+                    div.style.backgroundRepeat = 'no-repeat';
+                    
+                    // Calculate background position (5 columns, 5 rows)
+                    const col = imagePosition % 5;
+                    const row = Math.floor(imagePosition / 5);
+                    div.style.backgroundPositionX = `calc(100% / 4 * ${col})`;
+                    div.style.backgroundPositionY = `calc(100% / 4 * ${row})`;
+                    
+                    // Add tooltip
+                    const tooltip = this.getCardTooltip(card.type, card.type_arg);
+                    if (tooltip) {
+                        this.addTooltipHtml(div.id, tooltip);
+                    }
+                    
+                    // Add player color border if card is in played area
+                    if (card.player_id && card.location === 'played') {
+                        const player = gamedatas.players[card.player_id];
+                        if (player) {
+                            const fixedColor = this.fixPlayerColor(player.color);
+                            div.style.border = `4px solid ${fixedColor}`;
+                            div.style.borderRadius = '6px';
+                        }
+                    }
+                },
+                setupBackDiv: (card, div) => {
+                    // Set card back dimensions
+                    div.style.width = '120px';
+                    div.style.height = '174px';
+                    
+                    // Determine card back based on type (disaster vs bonus)
+                    let backPosition = 80; // Default disaster back
+                    if (card.type == this.ID_BONUS) {
+                        backPosition = 81; // Bonus back
+                    }
+                    
+                    // Apply background image
+                    div.style.backgroundImage = `url('${g_gamethemeurl}img/Cards_Backs_240_174.png')`;
+                    div.style.backgroundSize = '200% 100%';
+                    div.style.backgroundRepeat = 'no-repeat';
+                    div.style.backgroundPositionX = backPosition == 80 ? '0%' : '100%';
+                    div.style.backgroundPositionY = '0%';
+                },
+                isCardVisible: (card) => {
+                    // Cards are visible in player's own hand, played area, and resolved area
+                    // Cards in other players' hands show the back
+                    if (card.location === 'hand') {
+                        return card.player_id == this.player_id;
+                    }
+                    return true; // played, resolved, and other locations show front
+                },
+            });
+
             // Create player areas - current player first, then others
             const sortedPlayers = Object.values(gamedatas.players).sort((a, b) => {
                 // Current player goes first
@@ -299,60 +399,49 @@ function (dojo, declare,) {
                     console.error('Missing happiness token stock for happiness level:', happiness, 'player:', player);
                 }
             });
-            // Create stock for played cards
-            this['played'] = new ebg.stock();  
-            this['played'].create(this, document.getElementById('playedCardsContent'), 120, 181.3);
-            this['played'].image_items_per_row = 5;
-            this['played'].setSelectionMode(0);
-            // Create stock for resolved cards
-            this['resolved'] = new ebg.stock();
-            this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 181.3);
-            this['resolved'].image_items_per_row = 5;
-            this['resolved'].setSelectionMode(0);
+            
+            // Create BgaCards.LineStock (scrollable) for played cards
+            this.playedStock = new BgaCards.LineStock(this.cardsManager, document.getElementById('playedCardsContent'), {
+                gap: '10px',
+                center: false,
+                direction: 'row',
+                wrap: 'nowrap',
+            });
+            
+            // Create BgaCards.LineStock (scrollable) for resolved cards
+            this.resolvedStock = new BgaCards.LineStock(this.cardsManager, document.getElementById('resolvedCardsContent'), {
+                gap: '10px',
+                center: false,
+                direction: 'row',
+                wrap: 'nowrap',
+            });
+            
             // Initialize card stock for each player card div   
             Object.values(gamedatas.players).forEach(player => {
-                // Create cardbacks stock using the cardbacks div
-                this[`${player.id}_cardbacks`] = new ebg.stock();
-                this[`${player.id}_cardbacks`].create(this, $(`${player.id}_cards`), 120, 174);
-                this[`${player.id}_cardbacks`].image_items_per_row = 2;
-                this[`${player.id}_cardbacks`].setOverlap(35, 0); // 15px horizontal overlap
-                this[`${player.id}_cardbacks`].setSelectionMode(0);
-                // Create cards stock using the cards div with horizontal layout for scrolling
-                this[`${player.id}_cards`] = new ebg.stock();
-                this[`${player.id}_cards`].create(this, $(`${player.id}_cards`), 120, 181.3);
-                this[`${player.id}_cards`].image_items_per_row = 5; // Must match sprite sheet layout
-                // Configure for horizontal linear display with scrolling and grouping
-                this[`${player.id}_cards`].item_margin = 0; // No extra margin needed
-                this[`${player.id}_cards`].autowidth = false; // Prevent auto-width calculation
-                // Prevent vertical wrapping by setting container height
-                this[`${player.id}_cards`].container_div.style.height = '181.3px';
-                this[`${player.id}_cards`].container_div.style.maxHeight = '181.3px';
-                // Defensive: also force minHeight to prevent container from growing
-                this[`${player.id}_cards`].container_div.style.minHeight = '181.3px';
-                // Defensive: if container is too tall, forcibly reset it
-                setTimeout(() => {
-                    const c = this[`${player.id}_cards`].container_div;
-                    if (c && parseFloat(c.style.height) > 181.3) {
-                        c.style.height = '181.3px';
-                    }
-                }, 50);
-                // Enable card grouping - cards of same type will stack together
-                this[`${player.id}_cards`].apparenceBorderWidth = '2px'; // Border around card groups
-                this[`${player.id}_cards`].centerItems = false; // Keep items left-aligned
-                // Use overlap to control spacing: for 5px total spacing between groups
-                // Cards in same group overlap completely (managed by grouping), different groups get 5px gap
-                this[`${player.id}_cards`].setOverlap(115, 0); // 120 - 115 = 5px spacing between card groups
-                this[`${player.id}_cards`].setSelectionMode(1); // single selection
-                dojo.connect(this[`${player.id}_cards`], 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
-                // Container scrolling and layout is handled by CSS
-
-        // Utility: Force all stockitems to top: 0px to prevent vertical stacking
-        setTimeout(() => { this.fixPlayerCardStockTop(`${player.id}_cards`); }, 0);
-                for (let card_id = 80; card_id <= 81; card_id++)
-                {              
-                    // Add card backs to stock
-                    this[`${player.id}_cardbacks`].addItemType(card_id, card_id, g_gamethemeurl + 'img/Cards_Backs_240_174.png', card_id);
+                // Create BgaCards.LineStock (scrollable) for player cards with grouping
+                this[`${player.id}_cardStock`] = new BgaCards.LineStock(this.cardsManager, document.getElementById(`${player.id}_cards`), {
+                    gap: '10px',
+                    center: false,
+                    direction: 'row',
+                    wrap: 'nowrap',
+                    // Enable card grouping by type and type_arg
+                    sort: (a, b) => {
+                        // First sort by type (Local Disaster, Global Disaster, Bonus)
+                        if (a.type !== b.type) {
+                            return a.type - b.type;
+                        }
+                        // Then sort by type_arg within same type
+                        return a.type_arg - b.type_arg;
+                    },
+                });
+                
+                // Set up card selection for current player only
+                if (player.id == this.player_id) {
+                    this[`${player.id}_cardStock`].onSelectionChange = (selection, lastChange) => {
+                        this.onPlayerHandSelectionChanged(player.id, selection, lastChange);
+                    };
                 }
+                
                 //create amulet/temple stock 1 = amulet, 2 = temple
                 this[`${player.id}_kept`] = new ebg.stock();
                 this[`${player.id}_kept`].create(this, $(`${player.id}_InPlayContent`), 118.5, 76);
@@ -420,60 +509,10 @@ function (dojo, declare,) {
                 // Note: This will be optimized again in the setup phase with actual player.prayer value
                 this.optimizePrayerTokens(player.id, 5);
             });
-            /* Add local disaster cards */
-            const card_type_local_disaster = this.ID_LOCAL_DISASTER;
-            const num_local_disaster_cards = 5;
-            for (let card_id = 1; card_id <= num_local_disaster_cards; card_id++)
-            {
-                const uniqueId = this.getCardUniqueId(card_type_local_disaster, card_id);
-                // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', card_id - 1);
-                // Add to resolved cards stock
-                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id - 1);
-                Object.values(gamedatas.players).forEach(player => {
-                    /* Note: image ID 0 - 4 for local disaster cards */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id - 1);
-                });
-            }
-            /* Add global disaster cards */
-            const card_type_global_disaster = this.ID_GLOBAL_DISASTER;
-            const num_global_disaster_cards = 10;
-            // Global disaster card image position mappings
-            // Normal: positions 5-14, Avoid: positions 25-34, Double: positions 35-44
-            this.globalDisasterImageMappings = {
-                'normal': (card_id) => card_id + 4,    // Original positions 5-14
-                'avoid': (card_id) => card_id + 24,    // Avoid positions 25-34  
-                'double': (card_id) => card_id + 34    // Double positions 35-44
-            };
-            for (let card_id = 1; card_id <= num_global_disaster_cards; card_id++)
-            {
-                const uniqueId = this.getCardUniqueId(card_type_global_disaster, card_id);
-                // Start with normal image positions (will be updated when multiplier is selected)
-                const normalImagePos = this.globalDisasterImageMappings.normal(card_id);
-                // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', normalImagePos);
-                // Add to resolved cards stock  
-                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
-                Object.values(gamedatas.players).forEach(player => {
-                    /* Note: image ID 5 - 14 for normal global disaster cards, will be updated for avoid/double */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
-                });
-            } 
-            /* Add bonus cards */
-            const card_type_bonus = this.ID_BONUS;
-            const num_bonus_cards = 7;
-            for (let card_id = 1; card_id <= num_bonus_cards; card_id++)
-            {
-                const uniqueId = this.getCardUniqueId(card_type_bonus, card_id);
-                // Add to played cards stock
-                this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', card_id + 14);
-                // Add to resolved cards stock
-                this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 14);
-                Object.values(gamedatas.players).forEach(player => {
-                    /* Note: image ID 15-21 for bonus cards */
-                    this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 14);
-                });
-            } 
+            
+            // BGA Cards framework handles card rendering via setupFrontDiv/setupBackDiv
+            // No need to register card types separately
+            
             /*** Update the UI with gamedata ***/
             /* Update counters */
             Object.values(gamedatas.players).forEach(player => {
@@ -516,88 +555,89 @@ function (dojo, declare,) {
             Object.values(gamedatas.handBonus).forEach(card => {
                 this.drawCard(this.player_id, card.id, card.type, card.type_arg);
             })
-
-            // TEST: Add duplicate cards to the player's hand to test grouping and badge
-            // We'll add two extra Local Disaster #1 cards (type: 2, type_arg: 1) with unique ids
-            const testCardType = this.ID_LOCAL_DISASTER;
-            const testCardTypeArg = 1;
-            const uniqueId = this.getCardUniqueId(testCardType, testCardTypeArg);
-            // Use high fake ids to avoid collision
-            this.drawCard(this.player_id, 9001, testCardType, testCardTypeArg);
-            this.drawCard(this.player_id, 9002, testCardType, testCardTypeArg);
-            // Now the player will have at least two cards of the same type/id, so badge should show
-            // Force update display for player card stocks to ensure proper layout
-            if (this[`${this.player_id}_cards`]) {
-                this[`${this.player_id}_cards`].updateDisplay();
-                // Set attributes after display update
-                this.setCardItemAttributes(this.player_id);
-                // Update card count badges for initial grouping display
-                this.updateCardGroupBadges(this.player_id);
-                // Ensure wrapper accommodates horizontal layout
-                this.fixCardContainerWidth(this.player_id);
-            }
             /* Populate played cards from database */
+            const playedCards = [];
             Object.values(gamedatas.playedDisaster).forEach(card => {
-                
-                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                // Override the itemType weight with play_order for proper sorting
-                if (card.play_order !== undefined) {
-                    this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
-                }
-                this['played'].addToStockWithId(uniqueId, card.id);
-                // Store player info and add tooltip with player information
-                if (this['played'].items && this['played'].items[card.id]) {
-                    this['played'].items[card.id].played_by = card.played_by;
-                }
-                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
-                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+                playedCards.push({
+                    id: card.id,
+                    type: parseInt(card.type),
+                    type_arg: parseInt(card.type_arg),
+                    location: 'played',
+                    player_id: card.played_by,
+                    play_order: card.play_order
+                });
             });
             Object.values(gamedatas.playedBonus).forEach(card => {
-                
-                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                // Override the itemType weight with play_order for proper sorting
-                if (card.play_order !== undefined) {
-                    this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
-                }
-                this['played'].addToStockWithId(uniqueId, card.id);
-                // Store player info and add tooltip with player information
-                if (this['played'].items && this['played'].items[card.id]) {
-                    this['played'].items[card.id].played_by = card.played_by;
-                }
-                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
-                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+                playedCards.push({
+                    id: card.id,
+                    type: parseInt(card.type),
+                    type_arg: parseInt(card.type_arg),
+                    location: 'played',
+                    player_id: card.played_by,
+                    play_order: card.play_order
+                });
             });
+            // Sort by play_order and add to played stock
+            playedCards.sort((a, b) => (a.play_order || 0) - (b.play_order || 0));
+            this.playedStock.addCards(playedCards);
+            
             /* Populate resolved cards from database */
+            const resolvedCards = [];
             Object.values(gamedatas.resolvedDisaster).forEach(card => {
-                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                this['resolved'].addToStockWithId(uniqueId, card.id);
-                this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
+                resolvedCards.push({
+                    id: card.id,
+                    type: parseInt(card.type),
+                    type_arg: parseInt(card.type_arg),
+                    location: 'resolved',
+                    player_id: null
+                });
             });
             Object.values(gamedatas.resolvedBonus).forEach(card => {
-                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                this['resolved'].addToStockWithId(uniqueId, card.id);
-                this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
+                resolvedCards.push({
+                    id: card.id,
+                    type: parseInt(card.type),
+                    type_arg: parseInt(card.type_arg),
+                    location: 'resolved',
+                    player_id: null
+                });
             });
-            /* Add cardbacks for other players' cards */
+            this.resolvedStock.addCards(resolvedCards);
+            
+            /* Add hidden cards for other players */
             Object.values(gamedatas.players).forEach(player => {
                 if (player.id != this.player_id) {
-                    const cardbackStock = this[`${player.id}_cardbacks`];
-                    if (cardbackStock) {
+                    const cardStock = this[`${player.id}_cardStock`];
+                    if (cardStock) {
+                        const hiddenCards = [];
                         let cardback_id_counter = 0;
-                        // Add disaster cardbacks based on actual disaster card count
+                        
+                        // Add disaster cards (type = ID_LOCAL_DISASTER as placeholder)
                         const disasterCount = parseInt(player.disaster_cards) || 0;
                         for (let i = 0; i < disasterCount; i++) {
                             const unique_cardback_id = player.id * 1000 + cardback_id_counter++;
-                            cardbackStock.addToStockWithId(80, unique_cardback_id); // 80 = disaster cardback
+                            hiddenCards.push({
+                                id: unique_cardback_id,
+                                type: this.ID_LOCAL_DISASTER,
+                                type_arg: 1, // Placeholder
+                                location: 'hand',
+                                player_id: player.id
+                            });
                         }
-                        // Add bonus cardbacks based on actual bonus card count
+                        
+                        // Add bonus cards (type = ID_BONUS as placeholder)
                         const bonusCount = parseInt(player.bonus_cards) || 0;
                         for (let i = 0; i < bonusCount; i++) {
                             const unique_cardback_id = player.id * 1000 + cardback_id_counter++;
-                            cardbackStock.addToStockWithId(81, unique_cardback_id); // 81 = bonus cardback
+                            hiddenCards.push({
+                                id: unique_cardback_id,
+                                type: this.ID_BONUS,
+                                type_arg: 1, // Placeholder
+                                location: 'hand',
+                                player_id: player.id
+                            });
                         }
-                        // Force update display to ensure proper layout after adding cardbacks
-                        cardbackStock.updateDisplay();
+                        
+                        cardStock.addCards(hiddenCards);
                     }
                 }
             });
@@ -674,6 +714,15 @@ function (dojo, declare,) {
         },
         ///////////////////////////////////////////////////
         //// Card tooltip functions
+        
+        getCardTooltip: function(type, type_arg) {
+            // Get tooltip text from CARD_TOOLTIPS
+            if (this.CARD_TOOLTIPS[type] && this.CARD_TOOLTIPS[type][type_arg]) {
+                return this.CARD_TOOLTIPS[type][type_arg];
+            }
+            return '';
+        },
+        
         getCardTypeFromUniqueId: function(uniqueId) {
             // Based on getCardUniqueId logic:
             // Global Disaster: uniqueId = type_id (1-10)
@@ -1043,7 +1092,7 @@ function (dojo, declare,) {
                             return; // Skip normal button setup
                         }
                         this.addActionButton('playCard-btn', _('Play Card'), () => {
-                            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                            const selectedCards = this[`${this.player_id}_cardStock`].getSelection();
                             if (selectedCards.length > 0) {
                                 const card = selectedCards[0];
                                 this.bgaPerformAction('actPlayCard', {
@@ -1085,7 +1134,7 @@ function (dojo, declare,) {
                             // For non-round leaders, no special logic needed - they can always pass
                         }
                         // Initially disable the play card button
-                        const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                        const selectedCards = this[`${this.player_id}_cardStock`].getSelection();
                         if (selectedCards.length === 0) {
                             dojo.addClass('playCard-btn', 'disabled');
                         }
@@ -1107,7 +1156,7 @@ function (dojo, declare,) {
                         break;
                     case 'phaseThreeDiscard':
                         this.addActionButton('discard-btn', _('Discard Card'), () => {
-                            const selectedCardsForDiscard = this[`${this.player_id}_cards`].getSelectedItems();
+                            const selectedCardsForDiscard = this[`${this.player_id}_cardStock`].getSelection();
                             if (selectedCardsForDiscard.length > 0) {
                                 const card = selectedCardsForDiscard[0];
                                 this.bgaPerformAction('actDiscard', {
@@ -1118,7 +1167,7 @@ function (dojo, declare,) {
                             }
                         });
                         // Initially disable the discard button until a card is selected
-                        const selectedCardsForDiscard = this[`${this.player_id}_cards`].getSelectedItems();
+                        const selectedCardsForDiscard = this[`${this.player_id}_cardStock`].getSelection();
                         if (selectedCardsForDiscard.length === 0) {
                             dojo.addClass('discard-btn', 'disabled');
                         }
@@ -1232,18 +1281,13 @@ function (dojo, declare,) {
                     if (this[`${player.id}_cards`]) {
                         this[`${player.id}_cards`].updateDisplay();
                     }
+                    if (this[`${player.id}_cardbacks`]) {
+                        this[`${player.id}_cardbacks`].updateDisplay();
+                    }
+                    if (this[`${player.id}_kept`]) {
+                        this[`${player.id}_kept`].updateDisplay();
+                    }
                 });
-            }
-        },
-        /**
-         * Utility to force all .stockitem in a player card stock to top: 0px (prevents vertical stacking)
-         */
-        fixPlayerCardStockTop: function(stockDivId) {
-            const container = document.getElementById(stockDivId);
-            if (!container) return;
-            const items = container.getElementsByClassName('stockitem');
-            for (let i = 0; i < items.length; i++) {
-                items[i].style.top = '0px';
             }
         },
         //// Prayer token management helper function
@@ -1398,179 +1442,27 @@ function (dojo, declare,) {
             /* TODO exception? */
             return 0;
         },
-        fixCardContainerWidth: function(player_id) {
-            const stock = this[`${player_id}_cards`];
-            if (!stock || !stock.items) return;
-            
-            const performFix = () => {
-                const cardContainer = document.getElementById(`${player_id}_cards`);
-                if (!cardContainer) return;
-                
-                // Calculate required width: number of unique card types * (card_width + spacing)
-                const uniqueTypes = new Set(Object.values(stock.items).map(item => item.type));
-                const numGroups = uniqueTypes.size;
-                // Each card group needs 120px (card) + 5px (spacing) = 125px
-                const minWidth = Math.max(650, numGroups * 125 + 50); // Extra 50px buffer
-                
-                // Set wrapper dimensions if wrapper exists
-                const wrapper = cardContainer.firstElementChild;
-                if (wrapper) {
-                    wrapper.style.width = minWidth + 'px';
-                    wrapper.style.minWidth = minWidth + 'px';
-                    wrapper.style.height = '181.3px'; // Fixed height prevents wrapping
-                }
-                
-                // Force container to maintain its height too
-                cardContainer.style.height = '200px';
-                cardContainer.style.maxHeight = '200px';
-                
-                // Aggressively fix ALL cards with incorrect positioning or dimensions
-                Object.values(stock.items).forEach(item => {
-                    const cardElement = document.getElementById(`${player_id}_cards_item_${item.id}`);
-                    if (cardElement) {
-                        // Force correct top position (single row only)
-                        cardElement.style.setProperty('top', '0px', 'important');
-                        
-                        // Force correct dimensions
-                        cardElement.style.setProperty('width', '120px', 'important');
-                        cardElement.style.setProperty('height', '181.3px', 'important');
-                        cardElement.style.setProperty('min-width', '120px', 'important');
-                        cardElement.style.setProperty('max-width', '120px', 'important');
-                        cardElement.style.setProperty('min-height', '181.3px', 'important');
-                        cardElement.style.setProperty('max-height', '181.3px', 'important');
-                    }
-                });
+        playCardOnTable : async function(player_id, color, value, card_id) {
+            // Create card object for BGA Cards
+            const card = {
+                id: card_id,
+                type: parseInt(color),
+                type_arg: parseInt(value),
+                location: 'played',
+                player_id: player_id
             };
             
-            // Run fix immediately
-            performFix();
-            
-            // Run again after short delay to catch stock recalculations
-            setTimeout(performFix, 50);
-            setTimeout(performFix, 150);
-            setTimeout(performFix, 300);
-        },
-        updateCardGroupBadges: function(player_id) {
-            // Ensure each .stockitem has data-type and data-unique-id attributes (call helper)
-            this.setCardItemAttributes(player_id);
-            // Debug: log all .stockitem elements in this player's card area
-            var cardArea = document.getElementById(`${player_id}_cards`);
-            if (cardArea) {
-                var stockitems = cardArea.querySelectorAll('.stockitem');
-                console.log('[BADGE DEBUG] .stockitem elements for player', player_id);
-                stockitems.forEach(function(el) {
-                    console.log('  id:', el.id, 'data-type:', el.getAttribute('data-type'), 'data-unique-id:', el.getAttribute('data-unique-id'), el);
-                });
+            // Remove card from player's hand if it exists
+            if (this[`${player_id}_cardStock`]) {
+                await this[`${player_id}_cardStock`].removeCards([card]);
+                if (this.cardCounters[player_id]) {
+                    const currentValue = this.cardCounters[player_id].getValue();
+                    this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
+                }
             }
-            // Update card count badges for grouped cards
-            console.log('[BADGE] updateCardGroupBadges called for player:', player_id);
-            const stock = this[`${player_id}_cards`];
-            if (!stock || !stock.items) {
-                console.log('[BADGE] No stock or items for player:', player_id);
-                return;
-            }
-
-            // Count cards by type and find the card with the highest z-index for each type
-            const cardTypeCounts = {};
-            const topCardByType = {};
-
-            // First, clear all badges
-            Object.values(stock.items).forEach(item => {
-                const element = document.getElementById(`${stock.control_name}_item_${item.id}`);
-                if (element) {
-                    element.removeAttribute('data-card-count');
-                }
-            });
-
-            // Group all elements by type
-            Object.values(stock.items).forEach(item => {
-                if (!cardTypeCounts[item.type]) cardTypeCounts[item.type] = 0;
-                cardTypeCounts[item.type]++;
-            });
-            console.log('[BADGE] cardTypeCounts:', cardTypeCounts);
-
-            // For each group, find the card element with the highest z-index (topmost in DOM)
-            Object.keys(cardTypeCounts).forEach(type => {
-                if (cardTypeCounts[type] > 1) {
-                    // Find all elements for this type
-                    const elements = Array.from(document.querySelectorAll(`.kalua_player_cards .stockitem[data-type="${type}"]`));
-                    let topElement = null;
-                    let topZ = -Infinity;
-                    elements.forEach(el => {
-                        const z = parseInt(window.getComputedStyle(el).zIndex) || 0;
-                        if (z > topZ) {
-                            topZ = z;
-                            topElement = el;
-                        }
-                    });
-                    if (topElement) {
-                        topElement.setAttribute('data-card-count', cardTypeCounts[type]);
-                        // Debug log
-                        console.log('[BADGE TOP]', {type, count: cardTypeCounts[type], topElement, topZ});
-                    }
-                }
-            });
-        },
-        setCardItemAttributes: function(player_id) {
-            const stock = this[`${player_id}_cards`];
-            if (!stock || !stock.items) return;
-            Object.values(stock.items).forEach(function(item) {
-                var el = document.getElementById(`${stock.control_name}_item_${item.id}`);
-                if (el) {
-                    el.setAttribute('data-type', item.type);
-                    el.setAttribute('data-unique-id', item.type); // Use type for grouping; change to item.id for unique
-                }
-            });
-        },
-        playCardOnTable : function(player_id, color, value, card_id) {
             
-                // You played a card. If it exists in your hand, move card from there and remove
-                // corresponding item
-                    this[`${player_id}_cards`].removeFromStockById(card_id);
-                    if (this.cardCounters[player_id]) {
-                        const currentValue = this.cardCounters[player_id].getValue();
-                        this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
-                    }
-                    // Update card count badges after removing card
-                    this.updateCardGroupBadges(player_id);
-                    // Fix container width after card removal
-                    this.fixCardContainerWidth(player_id);
             // Add card to played cards area
-            const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
-            this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
-            // Store player info for this card for future reference
-            if (this['played'] && this['played'].items && this['played'].items[card_id]) {
-                this['played'].items[card_id].played_by = player_id;
-            }
-            // Add tooltip with player information
-            setTimeout(() => {
-                const cardType = this.getCardTypeFromUniqueId(uniqueId);
-                const cardIdFromUnique = this.getCardIdFromUniqueId(uniqueId);
-                if (cardType && cardIdFromUnique !== null) {
-                    // Find the DOM element for this card
-                    const stockItems = this['played'].getAllItems();
-                    
-                    const targetItem = Object.values(stockItems).find(item => item.type == uniqueId);
-                    if (targetItem) {
-                        const elementId = this['played'].getItemDivId(targetItem.id);
-                        if (elementId) {
-                            // Add tooltip with player information
-                            this.addCardTooltip(elementId, cardType, cardIdFromUnique, player_id);
-                        } else {
-
-                        }
-                    } else {
-
-                        // Try alternative approach - find by card_id directly
-                        const fallbackElementId = `played_item_${card_id}`;
-                        this.addCardTooltip(fallbackElementId, cardType, cardIdFromUnique, player_id);
-                    }
-                } else {
-
-                }
-                // Add visual player indicator
-                this.addPlayerIndicator(card_id, player_id, 'played');
-            }, 200);
+            await this.playedStock.addCards([card]);
         },
         // Add a simple colored indicator next to the card
         addPlayerIndicator: function(card_id, player_id, stock_name) {
@@ -1600,43 +1492,36 @@ function (dojo, declare,) {
                         if (cardElement) break;
                     }
                     if (cardElement) {
-                        // Remove all existing badges
-                        const cardArea = document.getElementById(`${player_id}_cards`);
-                        if (!cardArea) return;
-                        const allCards = cardArea.querySelectorAll('.stockitem');
-                        allCards.forEach(function(card) {
-                            card.removeAttribute('data-card-count');
-                        });
-                        // Group cards by uniqueId
-                        var cardGroups = {};
-                        allCards.forEach(function(card) {
-                            var uniqueId = card.getAttribute('data-unique-id');
-                            if (!uniqueId) return;
-                            if (!cardGroups[uniqueId]) cardGroups[uniqueId] = [];
-                            cardGroups[uniqueId].push(card);
-                        });
-                        // For each group, set badge on the last (rightmost/topmost) card if count > 1
-                        Object.values(cardGroups).forEach(function(group) {
-                            if (group.length > 1) {
-                                // Always use the last card in the group (rightmost/topmost in DOM)
-                                var topCard = group[group.length - 1];
-                                if (!topCard) {
-                                    // Fallback: use first card
-                                    topCard = group[0];
-                                }
-                                if (topCard) {
-                                    topCard.setAttribute('data-card-count', group.length);
-                                    // Debug log
-                                    if (window && window.console) {
-                                        console.log('[BADGE] Badge set on card:', topCard, 'Count:', group.length);
-                                    }
-                                } else {
-                                    if (window && window.console) {
-                                        console.warn('[BADGE] No card found to set badge for group:', group);
-                                    }
-                                }
-                            }
-                        });
+                        // Remove any existing indicator
+                        const existingIndicator = cardElement.querySelector('.player-indicator');
+                        if (existingIndicator) {
+                            existingIndicator.remove();
+                        }
+                        // Create player indicator
+                        const indicator = document.createElement('div');
+                        indicator.className = 'player-indicator';
+                        indicator.style.cssText = `
+                            position: absolute;
+                            top: -5px;
+                            right: -5px;
+                            width: 20px;
+                            height: 20px;
+                            background-color: ${playerColor};
+                            border: 2px solid white;
+                            border-radius: 50%;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                            z-index: 10;
+                            cursor: help;
+                        `;
+                        indicator.title = `Played by ${playerName}`;
+                        // Ensure the card element has relative positioning
+                        if (getComputedStyle(cardElement).position === 'static') {
+                            cardElement.style.position = 'relative';
+                        }
+                        cardElement.appendChild(indicator);
+                        
+                    } else {
+                        console.warn(`Could not find card element for ${stock_name}_item_${card_id}`);
                     }
                 }, 150);
             } catch (error) {
@@ -1771,18 +1656,60 @@ function (dojo, declare,) {
             const b = parseInt(hex.slice(5, 7), 16);
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         },
-        drawCard: function(player, card_id, card_type, card_type_arg) {
-            const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
-            this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
-            this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId, null, card_id); // Add tooltip
-            // Force layout update to ensure cards display properly
-            if (this[`${player}_cards`]) {
-                this[`${player}_cards`].updateDisplay();
-                // Update card count badges for grouping
-                this.updateCardGroupBadges(player);
-                // Fix container width after adding card
-                this.fixCardContainerWidth(player);
+        drawCard: async function(player, card_id, card_type, card_type_arg) {
+            // Create card object for BGA Cards
+            const card = {
+                id: card_id,
+                type: parseInt(card_type),
+                type_arg: parseInt(card_type_arg),
+                location: 'hand',
+                player_id: player
+            };
+            
+            // Add card to player's hand stock
+            if (this[`${player}_cardStock`]) {
+                await this[`${player}_cardStock`].addCards([card]);
+                
+                // Update card grouping counters after adding
+                this.updateCardGroupingCounters(player);
             }
+            
+            // Update card counter
+            if (this.cardCounters[player]) {
+                this.cardCounters[player].incValue(1);
+            }
+        },
+        
+        updateCardGroupingCounters: function(player_id) {
+            // Get all cards in player's hand
+            const cardStock = this[`${player_id}_cardStock`];
+            if (!cardStock) return;
+            
+            const cards = this.cardsManager.getCards().filter(c => 
+                c.location === 'hand' && c.player_id == player_id
+            );
+            
+            // Count cards by type and type_arg
+            const cardCounts = {};
+            cards.forEach(card => {
+                const key = `${card.type}_${card.type_arg}`;
+                cardCounts[key] = (cardCounts[key] || 0) + 1;
+            });
+            
+            // Update the DOM elements with count badges
+            cards.forEach(card => {
+                const cardElement = document.querySelector(`[data-card-id="${card.id}"]`);
+                if (cardElement) {
+                    const key = `${card.type}_${card.type_arg}`;
+                    const count = cardCounts[key];
+                    
+                    if (count > 1) {
+                        cardElement.setAttribute('data-card-count', count);
+                    } else {
+                        cardElement.removeAttribute('data-card-count');
+                    }
+                }
+            });
         },
         movetokens: function(tokenTypeToMove, desiredShift) {
             let flag = false;
@@ -2074,7 +2001,7 @@ function (dojo, declare,) {
             this.updatePageTitle();
             this.statusBar.removeActionButtons();
             this.addActionButton('discard-btn', _('Discard Selected Card'), () => {
-                const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+                const selectedCards = this[`${this.player_id}_cardStock`].getSelection();
                 if (selectedCards.length > 0) {
                     const card = selectedCards[0];
                     this.bgaPerformAction('actDiscard', {
@@ -2085,7 +2012,7 @@ function (dojo, declare,) {
                 }
             });
             // Initially disable the discard button until a card is selected
-            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+            const selectedCards = this[`${this.player_id}_cardStock`].getSelection();
             if (selectedCards.length === 0) {
                 dojo.addClass('discard-btn', 'disabled');
             }
@@ -2121,7 +2048,7 @@ function (dojo, declare,) {
             // automatically listen to the notifications, based on the `notif_xxx` function on this class.
             this.bgaSetupPromiseNotifications();
             // Add 0.5 second delays to card resolution notifications so players can follow along
-            this.notifqueue.setSynchronous('playerCountsChanged', 0);
+            this.notifqueue.setSynchronous('playerCountsChanged', 500);
             this.notifqueue.setSynchronous('familiesConverted', 500);
             this.notifqueue.setSynchronous('familiesDied', 500);
             this.notifqueue.setSynchronous('templeDestroyed', 500);
@@ -2138,10 +2065,10 @@ function (dojo, declare,) {
                 this.refreshAllCardTooltips();
             }, 1000);
         },
-        onPlayerHandSelectionChanged: function () {
-            const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
+        onPlayerHandSelectionChanged: function (player_id, selection, lastChange) {
+            // selection is an array of selected card objects from BGA Cards
             // Enable/disable the Play Card button based on selection
-            if (selectedCards.length > 0) {
+            if (selection && selection.length > 0) {
                 if ($('playCard-btn')) {
                     dojo.removeClass('playCard-btn', 'disabled');
                 }
@@ -2149,7 +2076,7 @@ function (dojo, declare,) {
                     dojo.removeClass('discard-btn', 'disabled');
                 }
                 // Check for warnings if warnings preference is enabled
-                this.checkCardWarnings(selectedCards[0]);
+                this.checkCardWarnings(selection[0]);
             } else {
                 if ($('playCard-btn')) {
                     dojo.addClass('playCard-btn', 'disabled');
@@ -2244,28 +2171,33 @@ function (dojo, declare,) {
         notif_playerDrewCard: async function( args )
         {
             const player_id = args.player_id;
-            const player_name = args.player_name;
             const type = args.card_type;
             const card_id = args.card_id;
+            
             if (player_id == this.player_id)
             {
-                this.drawCard(player_id, args.card_id, args.card_type, args.card_type_arg);
+                // Draw actual card for current player (drawCard handles grouping update)
+                await this.drawCard(player_id, args.card_id, args.card_type, args.card_type_arg);
             }
             else
             {
-                // Show cardback to other players
-                const cardbackStock = this[`${player_id}_cardbacks`];
-                if (cardbackStock) {
-                    // Determine cardback type based on card type
-                    let cardback_id;
-                    if (type == 1 || type == 2) { // GlobalDisaster or LocalDisaster
-                        cardback_id = 80; // disaster cardback
-                    } else { // Bonus or any other type
-                        cardback_id = 81; // bonus cardback (fallback for unknown types)
-                    }
-                    cardbackStock.addToStockWithId(cardback_id, card_id);
+                // Show hidden card back to other players
+                const card = {
+                    id: card_id,
+                    type: parseInt(type),
+                    type_arg: 1, // Placeholder
+                    location: 'hand',
+                    player_id: player_id
+                };
+                
+                const cardStock = this[`${player_id}_cardStock`];
+                if (cardStock) {
+                    await cardStock.addCards([card]);
+                    // Update grouping for other players' cards too
+                    this.updateCardGroupingCounters(player_id);
                 }
             }
+            
             /* Update counter with protection against negative values */
             if (this.cardCounters[player_id]) {
                 const currentValue = this.cardCounters[player_id].getValue();
@@ -2323,37 +2255,34 @@ function (dojo, declare,) {
                 this.updatePlayerPrayer(args.target_id, args.target_prayer);
             }
         },
-        notif_cardPlayed: function(args) {
-            // Remove the card from the correct player's hand if the stock exists
-            const playerCardsStock = this[`${args.player_id}_cards`];
+        notif_cardPlayed: async function(args) {
+            // Create card object
+            const card = {
+                id: args.card_id,
+                type: parseInt(args.card_type),
+                type_arg: parseInt(args.card_type_arg),
+                location: 'played',
+                player_id: args.player_id
+            };
+            
+            // Remove the card from player's hand
+            const playerCardsStock = this[`${args.player_id}_cardStock`];
             if (playerCardsStock) {
-                playerCardsStock.removeFromStockById(args.card_id);
+                await playerCardsStock.removeCards([card]);
+                // Update grouping counters after removing card
+                this.updateCardGroupingCounters(args.player_id);
             }
-            // Remove the cardback from other players' view
-            const cardbackStock = this[`${args.player_id}_cardbacks`];
-            if (cardbackStock) {
-                cardbackStock.removeFromStockById(args.card_id);
-            }
+            
             // Update card counter with exact count from server (prevents negative values)
             if (this.cardCounters[args.player_id] && args.card_count !== undefined) {
                 this.cardCounters[args.player_id].setValue(Math.max(0, args.card_count));
             }
+            
             // Add the card to the played stock
-            const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
-            if (this['played']) {
-                // Set proper weight for play order sorting
-                this['played'].changeItemsWeight(uniqueId, this.nextPlayOrder);
-                this.nextPlayOrder++; // Increment for next card
-                
-                this['played'].addToStockWithId(uniqueId, args.card_id);
-                // Store player info and add tooltip with player information
-                if (this['played'].items && this['played'].items[args.card_id]) {
-                    this['played'].items[args.card_id].played_by = args.player_id;
-                }
-                this.addCardTooltipByUniqueId('played', uniqueId, args.player_id, args.card_id);
-                // Add player color border to the played card
-                this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
+            if (this.playedStock) {
+                await this.playedStock.addCards([card]);
             }
+            
             // Update prayer counter if prayer was spent
             if (args.new_prayer_total !== undefined && this.prayerCounters[args.player_id]) {
                 this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
@@ -2650,36 +2579,50 @@ function (dojo, declare,) {
                 leaderElement.innerHTML = `<span id="icon_cb_t" class="checkbox-icon icon-check-true"></span>`;
             }
         },
-        notif_cardDiscarded: function(args) {
+        notif_cardDiscarded: async function(args) {
             const player_id = args.player_id;
             const card_id = args.card_id;
-            // Remove the card from the player's hand if the stock exists
-            const playerCardsStock = this[`${player_id}_cards`];
+            
+            // Create card object for removal
+            const card = {
+                id: card_id,
+                type: parseInt(args.card_type || 1),
+                type_arg: parseInt(args.card_type_arg || 1),
+                location: 'hand',
+                player_id: player_id
+            };
+            
+            // Remove the card from the player's hand
+            const playerCardsStock = this[`${player_id}_cardStock`];
             if (playerCardsStock) {
-                playerCardsStock.removeFromStockById(card_id);
+                await playerCardsStock.removeCards([card]);
+                // Update grouping counters after removing card
+                this.updateCardGroupingCounters(player_id);
             }
-            // Remove the cardback from other players' view
-            const cardbackStock = this[`${player_id}_cardbacks`];
-            if (cardbackStock) {
-                cardbackStock.removeFromStockById(card_id);
-            }
+            
             // Update card counter (prevent negative values)
             if (this.cardCounters[player_id]) {
                 const currentValue = this.cardCounters[player_id].getValue();
                 this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
             }
         },
-        notif_cardResolved: function(args) {
+        notif_cardResolved: async function(args) {
             const card_id = args.card_id;
             const card_type = args.card_type;
             const card_type_arg = args.card_type_arg;
-            // Move card from played stock to resolved stock
-            const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
             
-            // Add to resolved stock (card was already removed from played in cardBeingResolved)
-            if (this['resolved']) {
-                this['resolved'].addToStockWithId(uniqueId, card_id);
-                this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
+            // Create card object for moving to resolved
+            const card = {
+                id: card_id,
+                type: parseInt(card_type),
+                type_arg: parseInt(card_type_arg),
+                location: 'resolved',
+                player_id: null
+            };
+            
+            // Add to resolved stock
+            if (this.resolvedStock) {
+                await this.resolvedStock.addCards([card]);
                 
                 // Add delay after card is added to resolved area
                 setTimeout(() => {
@@ -2688,23 +2631,34 @@ function (dojo, declare,) {
                 }, this.cardResolutionDelay);
             }
         },
-        notif_cardBeingResolved: function(args) {
+        notif_cardBeingResolved: async function(args) {
             // This notification indicates a card is about to be resolved
             // Remove the card from played stock when resolution begins
             const card_id = args.card_id;
-            if (this['played'] && card_id) {
-                this['played'].removeFromStockById(card_id);
+            const card_type = args.card_type;
+            const card_type_arg = args.card_type_arg;
+            
+            if (this.playedStock && card_id) {
+                const card = {
+                    id: card_id,
+                    type: parseInt(card_type),
+                    type_arg: parseInt(card_type_arg),
+                    location: 'played',
+                    player_id: null
+                };
+                await this.playedStock.removeCards([card]);
             }
         },
-        notif_resolvedCardsCleanup: function(args) {
+        notif_resolvedCardsCleanup: async function(args) {
             // Clear all cards from the resolved stock
-            if (this['resolved']) {
-                this['resolved'].removeAll();
+            if (this.resolvedStock) {
+                const allCards = this.cardsManager.getCards().filter(c => c.location === 'resolved');
+                await this.resolvedStock.removeCards(allCards);
             }
         },
-        notif_allCardsCleanup: function(args) {
+        notif_allCardsCleanup: async function(args) {
             // Clear all cards from both played and resolved stocks
-            if (this['played']) {
+            if (this.playedStock) {
                 this['played'].removeAll();
             }
             if (this['resolved']) {
