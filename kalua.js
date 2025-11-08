@@ -130,8 +130,10 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
                     div.style.width = '120px';
                     div.style.height = '181.3px';
                     
-                    // Add data attribute for card ID (for grouping counter updates)
+                    // Add data attributes for card identification and grouping
                     div.setAttribute('data-card-id', card.id);
+                    div.setAttribute('data-card-type', card.type);
+                    div.setAttribute('data-card-type-arg', card.type_arg);
                     
                     // Determine which sprite sheet to use based on card type
                     let spriteSheet;
@@ -169,10 +171,9 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
                     div.style.backgroundPositionX = `calc(100% / 4 * ${col})`;
                     div.style.backgroundPositionY = `calc(100% / 4 * ${row})`;
                     
-                    // Add tooltip
-                    const tooltip = this.getCardTooltip(card.type, card.type_arg);
-                    if (tooltip) {
-                        this.addTooltipHtml(div.id, tooltip);
+                    // Add tooltip with high-res card image
+                    if (div.id) {
+                        this.addCardTooltip(div.id, card.type, card.type_arg);
                     }
                     
                     // Add player color border if card is in played area
@@ -402,7 +403,7 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
             
             // Create BgaCards.LineStock (scrollable) for played cards
             this.playedStock = new BgaCards.LineStock(this.cardsManager, document.getElementById('playedCardsContent'), {
-                gap: '10px',
+                gap: '0px',
                 center: false,
                 direction: 'row',
                 wrap: 'nowrap',
@@ -410,7 +411,7 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
             
             // Create BgaCards.LineStock (scrollable) for resolved cards
             this.resolvedStock = new BgaCards.LineStock(this.cardsManager, document.getElementById('resolvedCardsContent'), {
-                gap: '10px',
+                gap: '0px',
                 center: false,
                 direction: 'row',
                 wrap: 'nowrap',
@@ -420,7 +421,7 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
             Object.values(gamedatas.players).forEach(player => {
                 // Create BgaCards.LineStock (scrollable) for player cards with grouping
                 this[`${player.id}_cardStock`] = new BgaCards.LineStock(this.cardsManager, document.getElementById(`${player.id}_cards`), {
-                    gap: '10px',
+                    gap: '0px',
                     center: false,
                     direction: 'row',
                     wrap: 'nowrap',
@@ -893,6 +894,11 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
         ///////////////////////////////////////////////////
         //// Game & client states
         onEnteringState: function(stateName, args) {
+            // Disable card selection by default
+            if (this[`${this.player_id}_cardStock`]) {
+                this[`${this.player_id}_cardStock`].setSelectionMode('none');
+            }
+            
             switch (stateName) {
                 case 'phaseOneDraw':
                     if (this.isCurrentPlayerActive()) {
@@ -901,18 +907,20 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
                 case 'phaseTwoActivateLeader':
                     // Existing code for phaseTwoActivateLeader
                     break;
-                case 'phaseThreeCheckGlobal':
-                    if (this.isCurrentPlayerActive()) {
-                        this.addActionButton('normal-btn', _('Normal Effect'), () => {
-                            this.bgaPerformAction('actNormalGlobal', {});
-                        });
-                        this.addActionButton('avoid-btn', _('Avoid (Cost: Prayer)'), () => {
-                            this.bgaPerformAction('actAvoidGlobal', {});
-                        });
-                        this.addActionButton('double-btn', _('Double (Cost: Prayer)'), () => {
-                            this.bgaPerformAction('actDoubleGlobal', {});
-                        });
+                case 'phaseThreePlayCard':
+                    // Enable card selection when player can play cards
+                    if (this.isCurrentPlayerActive() && this[`${this.player_id}_cardStock`]) {
+                        this[`${this.player_id}_cardStock`].setSelectionMode('single');
                     }
+                    break;
+                case 'phaseThreeDiscard':
+                    // Enable card selection when player needs to discard
+                    if (this.isCurrentPlayerActive() && this[`${this.player_id}_cardStock`]) {
+                        this[`${this.player_id}_cardStock`].setSelectionMode('single');
+                    }
+                    break;
+                case 'phaseThreeCheckGlobal':
+                    // Button setup is handled by onUpdateActionButtons
                     break;
                 case 'phaseThreeSelectTargets':
                     if (this.isCurrentPlayerActive()) {
@@ -996,17 +1004,23 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
             }, 50);
         },
         onLeavingState: function(stateName) {
-                        switch (stateName) {
+            // Disable card selection when leaving states
+            if (this[`${this.player_id}_cardStock`]) {
+                this[`${this.player_id}_cardStock`].setSelectionMode('none');
+                this[`${this.player_id}_cardStock`].unselectAll();
+            }
+            
+            switch (stateName) {
                 case 'Initial_Draw':
                     if (this.isCurrentPlayerActive()) {
-            if (this.gamedatas.hand) {
-                for (var i in this.gamedatas.hand) {
-                    var card = this.gamedatas.hand[i];
-                    var color = card.type;
-                    var value = card.type_arg;
-                    this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
-                }
-            }
+                        if (this.gamedatas.hand) {
+                            for (var i in this.gamedatas.hand) {
+                                var card = this.gamedatas.hand[i];
+                                var color = card.type;
+                                var value = card.type_arg;
+                                this[`playerHand_${this.player_id}`].addToStockWithId(this.getCardUniqueId(color, value), card.id);
+                            }
+                        }
                     }
                     break;
                 case 'phaseOneDraw':
@@ -1073,7 +1087,7 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
                         break;
                     case 'phaseThreePlayCard':
                         // Check if player should be automatically passed
-                        const cardsInHand = this[`${this.player_id}_cards`].count();
+                        const cardsInHand = this[`${this.player_id}_cardStock`] ? this[`${this.player_id}_cardStock`].getCards().length : 0;
                         const currentPrayer = this.prayerCounters[this.player_id].getValue();
                         if (cardsInHand === 0 && currentPrayer < 5) {
                             // Player has no cards and insufficient prayer to buy more - automatically pass
@@ -1245,6 +1259,17 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
                                 rollBtn.title = _('Dice will roll automatically (auto-roll enabled in preferences)');
                             }
                         }
+                        break;
+                    case 'phaseThreeCheckGlobal':
+                        this.addActionButton('normal-btn', _('Normal Effect'), () => {
+                            this.bgaPerformAction('actNormalGlobal', {});
+                        });
+                        this.addActionButton('avoid-btn', _('Avoid (Cost: Prayer)'), () => {
+                            this.bgaPerformAction('actAvoidGlobal', {});
+                        });
+                        this.addActionButton('double-btn', _('Double (Cost: Prayer)'), () => {
+                            this.bgaPerformAction('actDoubleGlobal', {});
+                        });
                         break;
                     case 'phaseThreeResolveAmulets':
                         // Note: Do not call updatePageTitle() here as it causes infinite recursion
@@ -1681,35 +1706,48 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
         },
         
         updateCardGroupingCounters: function(player_id) {
-            // Get all cards in player's hand
-            const cardStock = this[`${player_id}_cardStock`];
-            if (!cardStock) return;
-            
-            const cards = this.cardsManager.getCards().filter(c => 
-                c.location === 'hand' && c.player_id == player_id
-            );
-            
-            // Count cards by type and type_arg
-            const cardCounts = {};
-            cards.forEach(card => {
-                const key = `${card.type}_${card.type_arg}`;
-                cardCounts[key] = (cardCounts[key] || 0) + 1;
-            });
-            
-            // Update the DOM elements with count badges
-            cards.forEach(card => {
-                const cardElement = document.querySelector(`[data-card-id="${card.id}"]`);
-                if (cardElement) {
+            // Use setTimeout to ensure DOM is fully updated after card operations
+            setTimeout(() => {
+                // Get all cards in player's hand
+                const cardStock = this[`${player_id}_cardStock`];
+                if (!cardStock) return;
+                
+                // Get cards from the stock itself (BGA Cards LineStock has getCards() method)
+                const cards = cardStock.getCards ? cardStock.getCards() : [];
+                
+                if (cards.length === 0) return;
+                
+                // Count cards by type and type_arg
+                const cardCounts = {};
+                const firstCardOfEachType = {}; // Track first card ID for each type
+                
+                cards.forEach(card => {
                     const key = `${card.type}_${card.type_arg}`;
+                    if (!cardCounts[key]) {
+                        cardCounts[key] = 0;
+                        firstCardOfEachType[key] = card.id; // Remember the first card of this type
+                    }
+                    cardCounts[key]++;
+                });
+                
+                // First, remove all existing count badges
+                const allCardElements = document.querySelectorAll(`#${player_id}_cards .kalua-card`);
+                allCardElements.forEach(el => el.removeAttribute('data-card-count'));
+                
+                // Update the DOM elements - only show counter on the FIRST card of each group
+                Object.keys(cardCounts).forEach(key => {
                     const count = cardCounts[key];
+                    const firstCardId = firstCardOfEachType[key];
                     
                     if (count > 1) {
-                        cardElement.setAttribute('data-card-count', count);
-                    } else {
-                        cardElement.removeAttribute('data-card-count');
+                        // Only add the counter to the first card of this type
+                        const cardElement = document.querySelector(`#${player_id}_cards [data-card-id="${firstCardId}"]`);
+                        if (cardElement) {
+                            cardElement.setAttribute('data-card-count', count);
+                        }
                     }
-                }
-            });
+                });
+            }, 100);
         },
         movetokens: function(tokenTypeToMove, desiredShift) {
             let flag = false;
@@ -2620,33 +2658,46 @@ function (dojo, declare, dijitTooltip, gamegui, counter, stock, zone, BgaAnimati
                 player_id: null
             };
             
-            // Add to resolved stock
-            if (this.resolvedStock) {
-                await this.resolvedStock.addCards([card]);
+            // Move card from played to resolved with animation
+            if (this.playedStock && this.resolvedStock) {
+                // First check if card exists in played stock
+                const cardsInPlayed = this.playedStock.getCards();
+                const cardInPlayed = cardsInPlayed.find(c => c.id == card_id);
                 
-                // Add delay after card is added to resolved area
-                setTimeout(() => {
-                    // Additional visual effects or next steps can be added here
-                    // The delay allows players to see the card move to resolved area
-                }, this.cardResolutionDelay);
+                if (cardInPlayed) {
+                    // Remove from played stock and add to resolved stock
+                    // BGA Cards will automatically animate the transition
+                    await this.playedStock.removeCards([cardInPlayed]);
+                    await this.resolvedStock.addCards([card]);
+                } else {
+                    // Card not in played stock, just add to resolved
+                    await this.resolvedStock.addCards([card]);
+                }
+                
+                // Add delay after card is added to resolved area for visual pacing
+                await new Promise(resolve => setTimeout(resolve, this.cardResolutionDelay));
             }
         },
         notif_cardBeingResolved: async function(args) {
             // This notification indicates a card is about to be resolved
-            // Remove the card from played stock when resolution begins
+            // We'll handle the actual card movement in notif_cardResolved
+            // This is just for visual feedback that resolution is starting
             const card_id = args.card_id;
-            const card_type = args.card_type;
-            const card_type_arg = args.card_type_arg;
             
-            if (this.playedStock && card_id) {
-                const card = {
-                    id: card_id,
-                    type: parseInt(card_type),
-                    type_arg: parseInt(card_type_arg),
-                    location: 'played',
-                    player_id: null
-                };
-                await this.playedStock.removeCards([card]);
+            // Add visual highlight to the card being resolved
+            const cardElement = document.querySelector(`[data-card-id="${card_id}"]`);
+            if (cardElement) {
+                cardElement.style.transition = 'all 0.3s ease';
+                cardElement.style.transform = 'scale(1.1)';
+                cardElement.style.boxShadow = '0 0 20px rgba(255, 215, 0, 0.8)';
+                cardElement.style.zIndex = '1000';
+                
+                // Remove highlight after a moment
+                setTimeout(() => {
+                    cardElement.style.transform = '';
+                    cardElement.style.boxShadow = '';
+                    cardElement.style.zIndex = '';
+                }, 600);
             }
         },
         notif_resolvedCardsCleanup: async function(args) {

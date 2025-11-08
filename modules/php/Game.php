@@ -1509,6 +1509,8 @@ class Game extends \Table
 
     public function stConvertPray(): void
     {
+        // Clear the convert/pray requested flag now that we're in the phase
+        $this->setGameStateValue("convert_pray_requested", 0);
 
         $this->notifyAllPlayers(
             'roundEnded',

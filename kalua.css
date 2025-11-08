@@ -90,8 +90,8 @@
 }
 
 #playedCardsContent {
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
     white-space: nowrap;
     max-width: 100%;
     min-height: 190px;
@@ -112,8 +112,8 @@
 }
 
 #resolvedCardsContent {
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
     white-space: nowrap;
     max-width: 100%;
     min-height: 190px;
@@ -302,8 +302,8 @@ font-size: 22px;
     padding: 5px;
     box-sizing: border-box; /* Ensure padding and border are included in the height */
     display: block;
-    overflow-x: auto; /* Enable horizontal scrolling */
-    overflow-y: hidden; /* Prevent vertical scrolling */
+    overflow-x: auto !important; /* Enable horizontal scrolling */
+    overflow-y: hidden !important; /* Prevent vertical scrolling */
     white-space: nowrap; /* Prevent wrapping */
     margin-bottom: 5px; /* Space between cards and bottom section */
     margin-top: 5px; /* Space between cards and top section */
@@ -526,7 +526,9 @@ font-size: 22px;
     flex-shrink: 0 !important; /* Prevent cards from shrinking */
     display: inline-block;
     background-repeat: no-repeat !important;
-    margin-right: 10px !important;
+    margin-right: 0 !important;
+    outline: none !important;
+    border: none !important;
 }
 
 /* Card fronts (500% x 500% sprite sheet - 5 columns x 5 rows, 22 cards) */
@@ -558,8 +560,21 @@ font-size: 22px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
-.kalua-card.bga-cards_selectable-card {
-    cursor: pointer;
+/* Remove BGA Cards default selectable styling (dotted orange border) */
+.bga-cards_selectable-card,
+.bga-cards_selectable-card *,
+.kalua-card.bga-cards_selectable-card,
+.bga-cards_card.bga-cards_selectable-card {
+    cursor: pointer !important;
+    outline: none !important;
+    border: none !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+}
+
+.bga-cards_selectable-card:hover,
+.kalua-card.bga-cards_selectable-card:hover {
+    border: none !important;
+    outline: none !important;
 }
 
 .kalua-card.bga-cards_selected-card {
@@ -575,7 +590,10 @@ font-size: 22px;
 /* Card grouping - stack cards of same type visually */
 .bga-cards_line-stock .kalua-card {
     position: relative;
-    margin-right: 10px; /* Add spacing between cards */
+    margin-right: 0 !important; /* No spacing between cards */
+    margin-left: 0 !important;
+    outline: none !important;
+    border: none !important;
 }
 
 /* Add a counter badge for grouped cards (if BGA Cards supports it) */
