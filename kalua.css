@@ -79,7 +79,7 @@
 }
 
 #playedCards {
-    width: 650px; /* Container width */
+    width: 650px; /* needs to hold five cards */
     height: 225px; /* Match card height plus header */
     background-color: #fff;
     border: 1px solid #ddd;
@@ -89,36 +89,16 @@
     margin: 10px;
 }
 
-#playedCardsContent {
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    white-space: nowrap;
-    max-width: 100%;
-    min-height: 190px;
-    height: auto;
-    padding: 5px 0;
-}
 
 #resolvedCards {
-    width: 650px; /* Container width */
-    height: auto; /* Auto height to fit content */
-    min-height: 210px;
+    width: 650px; /* needs to hold five cards */
+    height: 210px; /* Match card height plus header */
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 5px;
     text-align: center;
     margin: 10px;
-}
-
-#resolvedCardsContent {
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    white-space: nowrap;
-    max-width: 100%;
-    min-height: 190px;
-    height: auto;
-    padding: 5px 0;
 }
 
 #card_areas {
@@ -293,20 +273,61 @@ font-size: 22px;
 }
 
 .kalua_player_cards {
-    min-height: 190px !important;
-    height: auto !important;
+    min-height: 200px; /* Minimum height to accommodate cards + scrollbar */
+    height: auto; /* Let it size to content */
+    max-height: none; /* Remove max height restriction */
     width: auto;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box; /* Ensure padding and border are included in the height */
-    display: block;
-    overflow-x: auto !important; /* Enable horizontal scrolling */
-    overflow-y: hidden !important; /* Prevent vertical scrolling */
-    white-space: nowrap; /* Prevent wrapping */
+    display: flex; /* Use flexbox instead of stock default positioning */
+    flex-direction: row;
+    flex-wrap: nowrap; /* Critical: prevent wrapping */
+    align-items: flex-start;
+    gap: 5px; /* Space between cards */
+    overflow-x: auto; /* Horizontal scrollbar when needed */
+    overflow-y: hidden; /* No vertical scroll */
     margin-bottom: 5px; /* Space between cards and bottom section */
     margin-top: 5px; /* Space between cards and top section */
+}
+
+/* Override stock positioning for cards to work with flexbox */
+.kalua_player_cards .stockitem {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    margin: 0 !important;
+    flex-shrink: 0; /* Prevent cards from shrinking */
+    display: block !important; /* Ensure normal display for visible cards */
+}
+
+/* Completely hide duplicate stacked cards - ensure they don't affect layout */
+.kalua_player_cards .stockitem.card-hidden-duplicate {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    flex: 0 0 0 !important;
+}
+
+/* Scrollbar styling for card area */
+.kalua_player_cards::-webkit-scrollbar {
+    height: 8px;
+}
+
+.kalua_player_cards::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.kalua_player_cards::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.kalua_player_cards::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 
@@ -322,6 +343,12 @@ font-size: 22px;
     padding: 5px;
     text-align: center;
     flex: 0 0 480px; /* Fixed width of 480px */
+}
+
+/* Border for temple and amulet sprites */
+.kalua_player_kept_cards .stockitem {
+    border: 2px solid #000;
+    border-radius: 3px;
 }
 
 /* Make first letter of kept cards text larger */
@@ -515,161 +542,27 @@ font-size: 22px;
 	border: 4px solid rgb(255, 145, 0) ! important;
 }
 
-/* BGA Cards framework styles */
-.kalua-card {
-    width: 120px !important;
-    min-width: 120px !important;
-    max-width: 120px !important;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    flex-shrink: 0 !important; /* Prevent cards from shrinking */
-    display: inline-block;
-    background-repeat: no-repeat !important;
-    margin-right: 0 !important;
-    outline: none !important;
-    border: none !important;
-}
-
-/* Card fronts (500% x 500% sprite sheet - 5 columns x 5 rows, 22 cards) */
-.kalua-card:not(.bga-cards_card-back) {
-    height: 181.3px !important;
-    min-height: 181.3px !important;
-    max-height: 181.3px !important;
-    background-size: 500% 500% !important;
-}
-
-/* Card backs (200% x 100% sprite sheet) */
-.kalua-card.bga-cards_card-back {
-    height: 174px !important;
-    min-height: 174px !important;
-    max-height: 174px !important;
-    background-size: 200% 100% !important;
-}
-
-/* BGA Cards wrapper - accommodate both sizes */
-.bga-cards_card-wrapper {
-    width: 120px !important;
-    min-width: 120px !important;
-    flex-shrink: 0 !important;
-    display: inline-block;
-}
-
-.kalua-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
-/* Remove BGA Cards default selectable styling (dotted orange border) */
-.bga-cards_selectable-card,
-.bga-cards_selectable-card *,
-.kalua-card.bga-cards_selectable-card,
-.bga-cards_card.bga-cards_selectable-card {
-    cursor: pointer !important;
-    outline: none !important;
-    border: none !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
-}
-
-.bga-cards_selectable-card:hover,
-.kalua-card.bga-cards_selectable-card:hover {
-    border: none !important;
-    outline: none !important;
-}
-
-.kalua-card.bga-cards_selected-card {
-    border: 4px solid rgb(255, 145, 0) !important;
-    transform: translateY(-8px);
-}
-
-.kalua-card .card-back {
-    width: 120px !important;
-    height: 174px !important;
-}
-
-/* Card grouping - stack cards of same type visually */
-.bga-cards_line-stock .kalua-card {
-    position: relative;
-    margin-right: 0 !important; /* No spacing between cards */
-    margin-left: 0 !important;
-    outline: none !important;
-    border: none !important;
-}
-
-/* Add a counter badge for grouped cards (if BGA Cards supports it) */
-.kalua-card[data-card-count]::after {
-    content: 'x' attr(data-card-count);
+/* Card count overlay for grouped cards */
+.card-count-overlay {
     position: absolute;
-    bottom: 5px;
+    top: 5px;
     right: 5px;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.85);
     color: white;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 14px;
     font-weight: bold;
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 9px;
+    border: 1px solid white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    z-index: 100;
     pointer-events: none;
-    z-index: 10;
+    min-width: 18px;
+    text-align: center;
+    font-family: Arial, sans-serif;
 }
 
-/* Ensure LineStock inside player card divs has proper height for tallest cards */
-.kalua_player_cards .bga-cards_line-stock {
-    min-height: 181.3px !important;
-    height: auto !important;
-    align-items: flex-start !important;
-}
-
-/* Ensure card wrappers inside player areas accommodate both sizes */
-.kalua_player_cards .bga-cards_card-wrapper {
-    height: auto !important;
-    min-height: 174px !important;
-    max-height: 181.3px !important;
-}
-
-.bga-cards_line-stock {
-    display: flex !important;
-    flex-wrap: nowrap !important; /* No wrapping for scrollable display */
-    align-items: flex-start !important;
-    width: max-content !important; /* Allow content to extend beyond container */
-    min-width: 100% !important; /* Minimum full width */
-    gap: 0 !important; /* Remove gap since we use margin on cards */
-}
-
-/* Ensure proper card sizing in all contexts */
-.bga-cards_line-stock > * {
-    flex-shrink: 0 !important;
-}
-
-/* Scrollbar styling for card containers */
-#playedCardsContent::-webkit-scrollbar,
-#resolvedCardsContent::-webkit-scrollbar,
-.kalua_player_cards::-webkit-scrollbar {
-    height: 8px;
-}
-
-#playedCardsContent::-webkit-scrollbar-track,
-#resolvedCardsContent::-webkit-scrollbar-track,
-.kalua_player_cards::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-#playedCardsContent::-webkit-scrollbar-thumb,
-#resolvedCardsContent::-webkit-scrollbar-thumb,
-.kalua_player_cards::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
-}
-
-#playedCardsContent::-webkit-scrollbar-thumb:hover,
-#resolvedCardsContent::-webkit-scrollbar-thumb:hover,
-.kalua_player_cards::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-/* Remove old stock item styling that conflicts with BGA Cards */
-#playedCardsContent .stockitem,
-#resolvedCardsContent .stockitem,
-[id$="_cards"] .stockitem {
-    display: none; /* Hide old stock items */
+/* Completely hide duplicate stacked cards - remove from layout flow */
+.card-hidden-duplicate {
+    display: none !important;
 }
