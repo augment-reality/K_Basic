@@ -39,15 +39,6 @@ function (dojo, declare,) {
                     <div id="resolvedCards" style="position: relative;">
                         <div class="kalua_played_resolved">RESOLVED CARDS:</div>
                         <div id="resolvedCardsContent"></div>
-                        <div id="prediction_panel" style="display: none; position: absolute; top: 0; left: 100%; margin-left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000; max-width: 250px; min-width: 200px;">
-                            <div id="prediction_panel_header" style="font-weight: bold; margin-bottom: 5px; cursor: pointer; user-select: none;">
-                                ⭐ Convert/Pray Predictions ✖
-                            </div>
-                            <div id="prediction_content"></div>
-                            <div style="font-size: 10px; margin-top: 5px; opacity: 0.7;">
-                                Based on current happiness & temples
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div id="player-tables" class="zone-container"></div>
@@ -62,8 +53,6 @@ function (dojo, declare,) {
             this.templeCounters = {};
             this.amuletCounters = {};
             this.familyCounters = {};
-            // Prediction panel settings
-            this.predictionPanelEnabled = false;
             // Auto-roll tracking to prevent multiple attempts
             this.autoRollAttempted = false;
             // HK Token movement timing variables
@@ -338,62 +327,8 @@ function (dojo, declare,) {
                 {
                     this[`${player.id}_kept`].addItemType(kept_id, kept_id, g_gamethemeurl + 'img/temple_amulet_400_121.png', kept_id - 1);
                 }
-                //create prayer token zone for organic pile arrangement
-                this[`${player.id}_prayer_zone`] = new ebg.zone();
-                this[`${player.id}_prayer_zone`].create(this, `${player.id}_PrayerContent`, 30, 30);
-                // Configure zone for organic pile-like arrangement
-                this[`${player.id}_prayer_zone`].item_margin = 2;
-                this[`${player.id}_prayer_zone`].instantaneous = false; // Enable animations
-                this[`${player.id}_prayer_zone`].control_name = 'prayer_tokens';
-                // Set custom pattern for organic placement with predefined positions
-                this[`${player.id}_prayer_zone`].setPattern('custom');
-                // Define custom organic positions for up to 15 prayer tokens
-                // Store player ID for use in the function
-                const playerId = player.id;
-                this[`${player.id}_prayer_zone`].itemIdToCoords = function(i, control_width) {
-                    // Create truly organic, non-linear scattered positions
-                    // Using irregular clustering and random-feeling placement
-                    const positions = [
-                        { x: 33, y: 30, w: 30, h: 30 }, // token 1 - center cluster
-                        { x: 58, y: 50, w: 30, h: 30 }, // token 2 - right of center, down
-                        { x: 13, y: 45, w: 30, h: 30 }, // token 3 - left of center, down
-                        { x: 73, y: 25, w: 30, h: 30 }, // token 4 - upper right
-                        { x: 3, y: 15, w: 30, h: 30 }, // token 5 - upper left corner
-                        { x: 43, y: 65, w: 30, h: 30 }, // token 6 - lower center
-                        { x: 93, y: 55, w: 30, h: 30 }, // token 7 - far right, lower
-                        { x: 23, y: 8, w: 30, h: 30 },  // token 8 - upper left area
-                        { x: 78, y: 40, w: 30, h: 30 }, // token 9 - right side, mid
-                        { x: -4, y: 60, w: 30, h: 30 },  // token 10 - far left, bottom
-                        { x: 63, y: 15, w: 30, h: 30 }, // token 11 - upper right area
-                        { x: 38, y: 52, w: 30, h: 30 }, // token 12 - center, lower
-                        { x: 103, y: 35, w: 30, h: 30 }, // token 13 - far right edge
-                        { x: 8, y: 35, w: 30, h: 30 }, // token 14 - left side, mid
-                        { x: 53, y: 8, w: 30, h: 30 }   // token 15 - upper center-right
-                    ];
-                    // Add unique random offset for each player using player ID as seed
-                    if (i < positions.length) {
-                        const position = positions[i];
-                        // Create deterministic but unique offsets based on player ID and token index
-                        const playerSeed = parseInt(playerId) || 1;
-                        const pseudoRandom1 = ((playerSeed * 17 + i * 23) % 13) - 6; // -6 to +6
-                        const pseudoRandom2 = ((playerSeed * 31 + i * 41) % 11) - 5; // -5 to +5
-                        return {
-                            x: position.x + pseudoRandom1,
-                            y: position.y + pseudoRandom2,
-                            w: position.w,
-                            h: position.h
-                        };
-                    } else {
-                        // Fallback for more than 15 tokens (shouldn't happen in normal gameplay)
-                        return { x: 10 + (i % 4) * 30, y: 10 + Math.floor(i / 4) * 20, w: 30, h: 30 };
-                    }
-                };
-                // Override the default positioning for more organic feel
-                this[`${player.id}_prayer_zone`].getAllItems = function() {
-                    return this.items;
-                };
-                // Initialize with 5 prayer tokens using optimized representation
-                // Note: This will be optimized again in the setup phase with actual player.prayer value
+                // Initialize prayer token display with simple representation
+                // Note: This will be updated in the setup phase with actual player.prayer value
                 this.optimizePrayerTokens(player.id, 5);
             });
             /* Add local disaster cards */
@@ -529,6 +464,50 @@ function (dojo, declare,) {
                 this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
                 this.addPlayerBorderToCard(card.id, card.played_by, 'played');
             });
+            /* Populate resolving cards - these are shown in played area during resolution */
+            Object.values(gamedatas.resolvingDisaster).forEach(card => {
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                
+                // For global disasters, update the image position based on multiplier choice
+                if (parseInt(card.type) === this.ID_GLOBAL_DISASTER && card.multiplier) {
+                    const cardTypeArg = parseInt(card.type_arg);
+                    let imagePos;
+                    switch(card.multiplier) {
+                        case 'avoid':
+                            imagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);
+                            break;
+                        case 'double':
+                            imagePos = this.globalDisasterImageMappings.double(cardTypeArg);
+                            break;
+                        case 'normal':
+                        default:
+                            imagePos = this.globalDisasterImageMappings.normal(cardTypeArg);
+                            break;
+                    }
+                    // Update the item type's image position before adding the card
+                    if (this['played'].item_type && this['played'].item_type[uniqueId]) {
+                        this['played'].item_type[uniqueId].image_position = imagePos;
+                    }
+                }
+                
+                this['played'].addToStockWithId(uniqueId, card.id);
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[card.id]) {
+                    this['played'].items[card.id].played_by = card.played_by;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
+                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+            });
+            Object.values(gamedatas.resolvingBonus).forEach(card => {
+                const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                this['played'].addToStockWithId(uniqueId, card.id);
+                // Store player info and add tooltip with player information
+                if (this['played'].items && this['played'].items[card.id]) {
+                    this['played'].items[card.id].played_by = card.played_by;
+                }
+                this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
+                this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+            });
             /* Populate resolved cards from database */
             Object.values(gamedatas.resolvedDisaster).forEach(card => {
                 const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
@@ -579,49 +558,6 @@ function (dojo, declare,) {
             // Set initial round leader prayer icon to grayed version
             if (gamedatas.round_leader) {
                 this.updateRoundLeaderIcons(null, gamedatas.round_leader);
-            }
-            // Add prediction toggle button to the bottom right of resolved cards div
-            // Only if 'Show End-Round Predictions' game option is enabled (option 101 == 2)
-            const resolvedCardsDiv = document.getElementById('resolvedCards');
-            if (resolvedCardsDiv && this.isPredictionsEnabled()) {
-                resolvedCardsDiv.insertAdjacentHTML('beforeend', `
-                    <div id="prediction_toggle_panel" style="
-                        position: absolute; 
-                        bottom: 5px; 
-                        right: 5px; 
-                        background: rgba(240,240,240,0.95); 
-                        border-radius: 5px; 
-                        padding: 5px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                    ">
-                        <button id="prediction_toggle_btn" style="
-                            padding: 4px 8px; 
-                            background: #4a90e2; 
-                            color: white; 
-                            border: none; 
-                            border-radius: 3px; 
-                            cursor: pointer; 
-                            font-size: 11px;
-                            white-space: nowrap;
-                        ">
-                            📊 Predictions
-                        </button>
-                    </div>
-                `);
-                // Add click event listener after creating the button
-                const toggleBtn = document.getElementById('prediction_toggle_btn');
-                if (toggleBtn) {
-                    toggleBtn.addEventListener('click', () => {
-                        this.togglePredictionPanel();
-                    });
-                }
-            }
-            // Add click event listener for prediction panel close button
-            const panelHeader = document.getElementById('prediction_panel_header');
-            if (panelHeader) {
-                panelHeader.addEventListener('click', () => {
-                    this.togglePredictionPanel();
-                });
             }
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
@@ -835,7 +771,10 @@ function (dojo, declare,) {
                     }
                     break;
                 case 'phaseThreeResolveAmulets':
-                    // Button setup is handled by onUpdateActionButtons
+                    // Trigger action button setup
+                    if (this.isCurrentPlayerActive()) {
+                        this.updatePageTitle();
+                    }
                     break;
                 case 'phaseThreeResolveCard':
                     // This state handles the actual resolution of global disaster cards
@@ -889,17 +828,10 @@ function (dojo, declare,) {
                     }
                     break;
                 case 'phaseThreePlayCard':
-                    // Show predictions when players are making decisions about cards
-                    // since the round might end and family redistribution will occur
-                    // Only if 'Show End-Round Predictions' game option is enabled
-                    if (this.isPredictionsEnabled()) {
-                        this.predictionPanelEnabled = true;
-                        this.showPredictionPanel();
-                    }
+                    // No special action needed
                     break;
                 case 'phaseFourConvertPray':
-                    // Hide predictions during the actual family redistribution
-                    this.hidePredictionPanel();
+                    // No special action needed
                     break;
                 default:
                     // Perform actions for unknown state
@@ -1217,89 +1149,58 @@ function (dojo, declare,) {
         ///////////////////////////////////////////////////
         //// Prayer token optimization helper
         optimizePrayerTokens: function(playerId, targetCount) {
-            const playerZone = this[`${playerId}_prayer_zone`];
-            if (!playerZone) {
-                console.warn(`No prayer token zone found for player ${playerId}`);
+            const prayerContent = document.getElementById(`${playerId}_PrayerContent`);
+            if (!prayerContent) {
+                console.warn(`No prayer content found for player ${playerId}`);
                 return;
             }
-            // Clear all current tokens
-            playerZone.removeAll();
-            // Create prayer token elements and add to zone for organic arrangement
-            if (targetCount < 6) {
-                // Add individual single tokens
-                for (let i = 0; i < targetCount; i++) {
-                    const tokenId = `${playerId}_prayer_${i}`;
-                    this.createPrayerTokenElement(tokenId, 1, playerId); // Type 1 = single prayer token
-                    playerZone.placeInZone(tokenId);
-                }
+            
+            // Clear existing content
+            prayerContent.innerHTML = '';
+            
+            // Calculate groups of 5 and singles
+            const fiveGroups = Math.floor(targetCount / 5);
+            const singles = targetCount % 5;
+            
+            // Add group of 5 icon with multiplier if needed
+            if (fiveGroups > 0) {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'prayer_token_group';
                 
-            } else {
-                // For 6+ tokens: always show 1-5 individual tokens plus grouped tokens for visual significance
-                const totalForGrouping = targetCount - 1;
-                const fiveTokens = Math.floor(totalForGrouping / 5);
-                const remainingTokens = targetCount - (fiveTokens * 5);
-                const singleTokens = Math.max(1, Math.min(5, remainingTokens));
-                let tokenIndex = 0;
-                // Add five-token representations with slight randomization
-                for (let i = 0; i < fiveTokens; i++) {
-                    const tokenId = `${playerId}_prayer_5group_${i}`;
-                    this.createPrayerTokenElement(tokenId, 2, playerId); // Type 2 = five prayer tokens
-                    playerZone.placeInZone(tokenId);
-                    this.addOrganicPositioning(tokenId, tokenIndex++);
-                }
-                // Add individual tokens with organic positioning
-                for (let i = 0; i < singleTokens; i++) {
-                    const tokenId = `${playerId}_prayer_single_${i}`;
-                    this.createPrayerTokenElement(tokenId, 1, playerId); // Type 1 = single prayer token
-                    playerZone.placeInZone(tokenId);
-                    this.addOrganicPositioning(tokenId, tokenIndex++);
-                }
+                const groupIcon = document.createElement('div');
+                groupIcon.className = 'prayer_token_icon group';
                 
+                const groupMultiplier = document.createElement('div');
+                groupMultiplier.className = 'prayer_token_multiplier';
+                groupMultiplier.textContent = `×${fiveGroups}`;
+                
+                groupDiv.appendChild(groupIcon);
+                groupDiv.appendChild(groupMultiplier);
+                prayerContent.appendChild(groupDiv);
+            }
+            
+            // Add single icon with multiplier if needed
+            if (singles > 0) {
+                const singleDiv = document.createElement('div');
+                singleDiv.className = 'prayer_token_group';
+                
+                const singleIcon = document.createElement('div');
+                singleIcon.className = 'prayer_token_icon single';
+                
+                const singleMultiplier = document.createElement('div');
+                singleMultiplier.className = 'prayer_token_multiplier';
+                singleMultiplier.textContent = `×${singles}`;
+                
+                singleDiv.appendChild(singleIcon);
+                singleDiv.appendChild(singleMultiplier);
+                prayerContent.appendChild(singleDiv);
+            }
+            
+            // If no tokens at all, show empty state
+            if (targetCount === 0) {
+                prayerContent.innerHTML = '<div style="opacity: 0.4; font-size: 14px; color: #999;">0</div>';
             }
         },
-        ///////////////////////////////////////////////////
-        //// Create prayer token DOM elements
-        createPrayerTokenElement: function(elementId, tokenType, playerId) {
-            // Remove existing element if it exists
-            const existingElement = document.getElementById(elementId);
-            if (existingElement) {
-                existingElement.remove();
-            }
-            // Create new prayer token element
-            const tokenElement = document.createElement('div');
-            tokenElement.id = elementId;
-            tokenElement.className = 'prayer_token';
-            tokenElement.style.width = '30px';
-            tokenElement.style.height = '30px';
-            tokenElement.style.backgroundImage = `url('${g_gamethemeurl}img/30_30_prayertokens.png')`;
-            tokenElement.style.backgroundSize = '60px 30px'; // 2 images per row
-            tokenElement.style.backgroundRepeat = 'no-repeat';
-            tokenElement.style.backgroundPosition = tokenType === 1 ? '0px 0px' : '-30px 0px';
-            tokenElement.style.opacity = '0.5'; // Apply the opacity directly
-            tokenElement.style.position = 'absolute';
-            tokenElement.style.cursor = 'default';
-            // Add to prayer content div
-            const prayerContent = document.getElementById(`${playerId}_PrayerContent`);
-            if (prayerContent) {
-                prayerContent.appendChild(tokenElement);
-            }
-        },
-        ///////////////////////////////////////////////////
-        //// Add organic positioning to prayer tokens
-        addOrganicPositioning: function(elementId, index) {
-            setTimeout(() => {
-                const element = document.getElementById(elementId);
-                if (element) {
-                    // Add slight random offset for organic pile effect
-                    const randomX = (Math.random() - 0.5) * 10; // -5 to +5 pixels
-                    const randomY = (Math.random() - 0.5) * 10; // -5 to +5 pixels
-                    // Apply transform for organic look (no rotation to preserve static shadows)
-                    element.style.transform = `translate(${randomX}px, ${randomY}px)`;
-                    element.style.zIndex = 100 + index; // Layer tokens naturally
-                }
-            }, 50 * index); // Stagger the positioning for animation effect
-        },
-
         ///////////////////////////////////////////////////
         //// Global disaster card image switching
         updateGlobalDisasterCardImage: function(cardId, cardTypeArg, multiplierChoice) {
@@ -1320,9 +1221,18 @@ function (dojo, declare,) {
                     break;
             }
             
+            console.log(`Updating card ${cardId} (type_arg ${cardTypeArg}) to ${multiplierChoice}: position ${newImagePos}`);
+            
             // Update the card image in the played cards stock
             if (this['played'] && this['played'].item_type && this['played'].item_type[uniqueId]) {
+                // Store original played_by data before removing
+                let playedBy = null;
+                if (this['played'].items && this['played'].items[cardId]) {
+                    playedBy = this['played'].items[cardId].played_by;
+                }
+                
                 this['played'].item_type[uniqueId].image_position = newImagePos;
+                
                 // Force a visual update of the specific card if it exists in the played stock
                 const playedItems = this['played'].getAllItems();
                 const targetItem = playedItems.find(item => item.id == cardId);
@@ -1330,6 +1240,19 @@ function (dojo, declare,) {
                     // Remove and re-add the item to force visual update
                     this['played'].removeFromStockById(cardId);
                     this['played'].addToStockWithId(uniqueId, cardId);
+                    
+                    // Restore played_by data
+                    if (playedBy && this['played'].items && this['played'].items[cardId]) {
+                        this['played'].items[cardId].played_by = playedBy;
+                    }
+                    
+                    // Re-add tooltip and player border
+                    setTimeout(() => {
+                        this.addCardTooltipByUniqueId('played', uniqueId, playedBy, cardId);
+                        if (playedBy) {
+                            this.addPlayerBorderToCard(cardId, playedBy, 'played');
+                        }
+                    }, 100);
                 }
             }
             // Update in resolved cards stock as well (in case it moves there later)
@@ -1685,14 +1608,27 @@ function (dojo, declare,) {
                 if (cardStock.updateDisplay) {
                     cardStock.updateDisplay();
                 }
+                
+                // Force a reflow to recalculate container height
+                const cardContainer = document.getElementById(`${player_id}_cards`);
+                if (cardContainer) {
+                    void cardContainer.offsetHeight;
+                    const parentContainer = cardContainer.parentElement;
+                    if (parentContainer) {
+                        void parentContainer.offsetHeight;
+                    }
+                }
             }, 150);
         },
         updateCardbackGrouping: function(player_id) {
             setTimeout(() => {
                 const cardbackStock = this[`${player_id}_cardbacks`];
                 if (!cardbackStock || !cardbackStock.items) {
+                    console.log(`No cardback stock or items for player ${player_id}`);
                     return;
                 }
+                
+                console.log(`Updating cardback grouping for player ${player_id}`);
                 
                 // Group cardbacks by type
                 const cardbacksByType = {};
@@ -1705,6 +1641,19 @@ function (dojo, declare,) {
                     }
                     cardbacksByType[uniqueId].push(item);
                 });
+                
+                console.log(`Cardbacks grouped by type for player ${player_id}:`, cardbacksByType);
+                
+                // Store hidden cardbacks to restore later if needed
+                if (!this.hiddenCardbacksByPlayer) {
+                    this.hiddenCardbacksByPlayer = {};
+                }
+                if (!this.hiddenCardbacksByPlayer[player_id]) {
+                    this.hiddenCardbacksByPlayer[player_id] = [];
+                }
+                
+                // Clear previous hidden cardbacks tracking
+                this.hiddenCardbacksByPlayer[player_id] = [];
                 
                 // For each type, show only the first cardback with a counter, hide the rest
                 Object.keys(cardbacksByType).forEach(uniqueId => {
@@ -1719,6 +1668,7 @@ function (dojo, declare,) {
                             if (index === 0) {
                                 // First cardback of this type - show it with counter if count > 1
                                 cardbackElement.classList.remove('card-hidden-duplicate');
+                                cardbackElement.style.display = '';
                                 
                                 if (count > 1) {
                                     this.addCardCountOverlay(cardbackElement, count);
@@ -1733,14 +1683,30 @@ function (dojo, declare,) {
                                 cardbackElement.style.display = 'none';
                                 this.removeCardCountOverlay(cardbackElement);
                                 cardbackElement.classList.remove('has-card-count');
+                                
+                                // Track hidden cardbacks
+                                this.hiddenCardbacksByPlayer[player_id].push(item.id);
                             }
                         }
                     });
                 });
                 
-                // Force the stock to recalculate layout
+                // Force the stock to recalculate layout without hidden cards
                 if (cardbackStock.updateDisplay) {
                     cardbackStock.updateDisplay();
+                }
+                
+                // Force a reflow to recalculate container height
+                // This fixes the issue where the div doesn't resize until window resize
+                const cardbackContainer = document.getElementById(`${player_id}_cardbacks`);
+                if (cardbackContainer) {
+                    // Trigger reflow by reading offsetHeight
+                    void cardbackContainer.offsetHeight;
+                    // Force the parent container to recalculate as well
+                    const parentContainer = cardbackContainer.parentElement;
+                    if (parentContainer) {
+                        void parentContainer.offsetHeight;
+                    }
                 }
             }, 150);
         },
@@ -1803,8 +1769,6 @@ function (dojo, declare,) {
             // Use the player's sprite value from gamedatas to move the correct token
             const sprite = this.gamedatas.players[player_id].sprite;
             this.movetokens(sprite-1, 1);
-            // Update prediction panel if active
-            this.refreshPredictionPanelIfActive();
         },
         convertAtheists: function(player_id, num_atheists) {
             const atheistFamilies = this['atheists'];
@@ -1848,174 +1812,6 @@ function (dojo, declare,) {
             playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to current player's families
             this.familyCounters[player_id].incValue(1);
             this.familyCounters[target_player_id].incValue(-1);
-        },
-        // Calculate predicted family and happiness changes during convert/pray phase
-        calculatePrayConvertPredictions: function() {
-            const predictions = {};
-            const allPlayers = Object.values(this.gamedatas.players);
-            const happinessScores = {};
-            // Collect current happiness scores (including temple bonuses)
-            allPlayers.forEach(player => {
-                const currentHappiness = this.happinessCounters[player.id].getValue();
-                const templeCount = this.templeCounters[player.id].getValue();
-                // Happiness with temple bonus (clamped 0-10)
-                happinessScores[player.id] = Math.max(0, Math.min(10, currentHappiness + templeCount));
-            });
-            // Find lowest and highest happiness scores
-            const happinessValues = Object.values(happinessScores);
-            const happy_value_low = Math.min(...happinessValues);
-            const happy_value_high = Math.max(...happinessValues);
-            // Get high happiness players
-            const high_happiness_players = allPlayers.filter(player => 
-                happinessScores[player.id] === happy_value_high
-            );
-            const high_players = high_happiness_players.length;
-            // Calculate predictions for each player
-            allPlayers.forEach(player => {
-                const player_id = player.id;
-                const currentFamilies = this.familyCounters[player_id].getValue();
-                const currentPrayer = this.prayerCounters[player_id].getValue();
-                const currentHappiness = happinessScores[player_id]; // Already includes temple bonus
-                const templeCount = this.templeCounters[player_id].getValue();
-                let predictedFamilies = currentFamilies;
-                let predictedPrayer = currentPrayer;
-                let predictedHappiness = currentHappiness; // Already includes temple bonus
-                // Family redistribution (only if not everyone has same happiness)
-                if (happy_value_low !== happy_value_high) {
-                    if (happinessScores[player_id] === happy_value_low) {
-                        // Lose 2 families (or all if less than 2)
-                        const to_lose = Math.min(2, currentFamilies);
-                        predictedFamilies -= to_lose;
-                    } else if (happinessScores[player_id] !== happy_value_high) {
-                        // Lose 1 family (middle happiness)
-                        if (currentFamilies > 0) {
-                            predictedFamilies -= 1;
-                        }
-                    } else {
-                        // High happiness: receive families from the pool
-                        // Calculate total converted pool
-                        let converted_pool = 0;
-                        allPlayers.forEach(p => {
-                            const p_families = this.familyCounters[p.id].getValue();
-                            if (happinessScores[p.id] === happy_value_low) {
-                                converted_pool += Math.min(2, p_families);
-                            } else if (happinessScores[p.id] !== happy_value_high && p_families > 0) {
-                                converted_pool += 1;
-                            }
-                        });
-                        // Divide families among high happiness players
-                        const fams_to_happy = Math.floor(converted_pool / high_players);
-                        predictedFamilies += fams_to_happy;
-                    }
-                }
-                // Prayer calculation: 1 per 5 families + bonuses + temples
-                predictedPrayer += Math.floor(predictedFamilies / 5);
-                if (happinessScores[player_id] === happy_value_low) {
-                    predictedPrayer += 4;
-                } else if (happinessScores[player_id] !== happy_value_high) {
-                    predictedPrayer += 2;
-                }
-                predictedPrayer += templeCount; // Temple prayer bonus
-                predictions[player_id] = {
-                    familyChange: predictedFamilies - currentFamilies,
-                    prayerChange: predictedPrayer - currentPrayer,
-                    happinessChange: predictedHappiness - this.happinessCounters[player_id].getValue(), // Temple bonus effect
-                    predictedFamilies: predictedFamilies,
-                    predictedPrayer: predictedPrayer,
-                    predictedHappiness: predictedHappiness
-                };
-            });
-            return predictions;
-        },
-        // Update and show the prediction panel
-        updatePredictionPanel: function() {
-            // Check if 'Show End-Round Predictions' game option is enabled
-            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
-            const predictions = this.calculatePrayConvertPredictions();
-            const content = document.getElementById('prediction_content');
-            const panel = document.getElementById('prediction_panel');
-            if (!content || !panel) return;
-            let html = '';
-            Object.values(this.gamedatas.players).forEach(player => {
-                const prediction = predictions[player.id];
-                const playerName = player.name;
-                const isMe = player.id == this.player_id;
-                html += `<div style="margin-bottom: 3px; ${isMe ? 'font-weight: bold; color: #ffff80;' : ''}">`;
-                html += `<span style="color: ${this.fixPlayerColor(player.color)};">●</span> ${playerName}:<br>`;
-                // Family change
-                if (prediction.familyChange !== 0) {
-                    const familyColor = prediction.familyChange > 0 ? '#80ff80' : '#ff8080';
-                    html += `&nbsp;&nbsp;👨‍👩‍👧‍👦 ${prediction.familyChange > 0 ? '+' : ''}${prediction.familyChange}<br>`;
-                }
-                // Prayer change
-                if (prediction.prayerChange !== 0) {
-                    const prayerColor = prediction.prayerChange > 0 ? '#80ff80' : '#ff8080';
-                    html += `&nbsp;&nbsp;🙏 ${prediction.prayerChange > 0 ? '+' : ''}${prediction.prayerChange}<br>`;
-                }
-                // Happiness change
-                if (prediction.happinessChange !== 0) {
-                    const happinessColor = prediction.happinessChange > 0 ? '#80ff80' : '#ff8080';
-                    html += `&nbsp;&nbsp;😊 ${prediction.happinessChange > 0 ? '+' : ''}${prediction.happinessChange}<br>`;
-                }
-                html += `</div>`;
-            });
-            content.innerHTML = html;
-            panel.style.display = 'block';
-        },
-        // Helper function to check if end-round predictions are enabled
-        isPredictionsEnabled: function() {
-            // Check game options (standard BGA pattern)
-            if (this.gamedatas.game_options && this.gamedatas.game_options[101]) {
-                return this.gamedatas.game_options[101] == 2;
-            }
-            // Fallback: check if options are stored differently
-            if (this.gamedatas.options && this.gamedatas.options[101]) {
-                return this.gamedatas.options[101] == 2;
-            }
-            // Another fallback: check gameinfos (some BGA games store it here)
-            if (this.gamedatas.gameinfos && this.gamedatas.gameinfos.game_options && this.gamedatas.gameinfos.game_options[101]) {
-                return this.gamedatas.gameinfos.game_options[101] == 2;
-            }
-            
-            // Default to disabled if option not found
-            return false;
-        },
-        // Show prediction panel if appropriate game state
-        showPredictionPanel: function() {
-            // Check if 'Show End-Round Predictions' game option is enabled
-            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
-            const panel = document.getElementById('prediction_panel');
-            if (panel) {
-                this.updatePredictionPanel();
-                panel.style.display = 'block';
-            }
-        },
-        // Hide prediction panel
-        hidePredictionPanel: function() {
-            const panel = document.getElementById('prediction_panel');
-            if (panel) {
-                panel.style.display = 'none';
-            }
-        },
-        // Toggle prediction panel visibility
-        togglePredictionPanel: function() {
-            // Check if 'Show End-Round Predictions' game option is enabled
-            if (!this.isPredictionsEnabled()) return;
-            this.predictionPanelEnabled = !this.predictionPanelEnabled;
-            const toggleButton = document.getElementById('prediction_toggle_btn');
-            if (this.predictionPanelEnabled) {
-                this.showPredictionPanel();
-                if (toggleButton) {
-                    toggleButton.style.background = '#28a745';
-                    toggleButton.innerHTML = '📊 Hide';
-                }
-            } else {
-                this.hidePredictionPanel();
-                if (toggleButton) {
-                    toggleButton.style.background = '#4a90e2';
-                    toggleButton.innerHTML = '📊 Predictions';
-                }
-            }
         },
         setupAmuletDecision: function() {
             /* Present amulet usage choice to the player */
@@ -2109,8 +1905,8 @@ function (dojo, declare,) {
             this.notifqueue.setSynchronous('leaderRecovered', 500);
             this.notifqueue.setSynchronous('templeBuilt', 500);
             this.notifqueue.setSynchronous('amuletGained', 500);
-            this.notifqueue.setSynchronous('cardResolved', 500);
-            this.notifqueue.setSynchronous('cardBeingResolved', 500);
+            this.notifqueue.setSynchronous('cardResolved', 500); // Reduced to prevent timeout
+            // cardBeingResolved removed - it's now a no-op and doesn't need delay
             this.notifqueue.setSynchronous('diceRolled', 500);
             this.notifqueue.setSynchronous('amuletUsed', 500);
             this.notifqueue.setSynchronous('amuletNotUsed', 500);
@@ -2469,10 +2265,25 @@ function (dojo, declare,) {
         notif_amuletUsed: function(args) {
             const player_name = args.player_name;
             const player_id = args.player_id;
-            // Update amulet counter
+            
+            // Update gamedata
+            if (this.gamedatas.players[player_id]) {
+                this.gamedatas.players[player_id].amulet = Math.max(0, (this.gamedatas.players[player_id].amulet || 0) - 1);
+            }
+            
+            // Decrement amulet counter
             if (this.amuletCounters[player_id]) {
-                // The counter should already be decremented by the server
-                // Visual feedback could be added here to show amulet usage
+                this.amuletCounters[player_id].incValue(-1);
+            }
+            
+            // Remove one amulet from the kept cards display
+            if (this[`${player_id}_kept`]) {
+                const keptItems = this[`${player_id}_kept`].getAllItems();
+                // Find an amulet item (type 1 = amulet, type 2 = temple)
+                const amuletItem = keptItems.find(item => item.type === 1);
+                if (amuletItem) {
+                    this[`${player_id}_kept`].removeFromStockById(amuletItem.id);
+                }
             }
         },
         notif_amuletNotUsed: function(args) {
@@ -2498,10 +2309,9 @@ function (dojo, declare,) {
             // Wait 0.2 seconds before updating dice graphics
             setTimeout(() => {
                 // Reset auto-roll flag when any player rolls dice
-                // This allows auto-roll to work again if we return to dice rolling state
-                if (player_id == this.player_id) {
-                    this.autoRollAttempted = false;
-                }
+                // This ensures each client is ready for the next dice roll state
+                this.autoRollAttempted = false;
+                
                 // Update only the specific player's die
                 if (player_id && this.gamedatas.players[player_id]) {
                     const player = this.gamedatas.players[player_id];
@@ -2622,8 +2432,6 @@ function (dojo, declare,) {
             if (this.templeCounters[player_id] && args.temple_count !== undefined) {
                 this.templeCounters[player_id].setValue(args.temple_count);
             }
-            // Update prediction panel if active
-            this.refreshPredictionPanelIfActive();
         },
         notif_leaderRecovered: function(args) {
             const player_id = args.player_id;
@@ -2662,32 +2470,92 @@ function (dojo, declare,) {
                 this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
             }
         },
-        notif_cardResolved: function(args) {
+        notif_cardResolved: async function(args) {
             const card_id = args.card_id;
             const card_type = args.card_type;
             const card_type_arg = args.card_type_arg;
-            // Move card from played stock to resolved stock
+            
+            console.log(`Resolving card ${card_id} (type ${card_type}, type_arg ${card_type_arg})`);
+            
+            // Move card from played stock to resolved stock with animation
             const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
             
-            // Add to resolved stock (card was already removed from played in cardBeingResolved)
-            if (this['resolved']) {
+            if (this['played'] && this['resolved']) {
+                // Check if card exists in played stock
+                const playedItems = this['played'].getAllItems();
+                const cardInPlayed = playedItems.find(item => item.id == card_id);
+                
+                if (!cardInPlayed) {
+                    console.warn(`Card ${card_id} not found in played stock`);
+                    return;
+                }
+                
+                // Get source element before adding to destination
+                const sourceElement = document.getElementById(`played_item_${card_id}`);
+                
+                if (!sourceElement) {
+                    console.warn(`Source element not found for card ${card_id}`);
+                    // Just move without animation
+                    this['played'].removeFromStockById(card_id);
+                    this['resolved'].addToStockWithId(uniqueId, card_id);
+                    this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
+                    await new Promise(resolve => setTimeout(resolve, 700));
+                    return;
+                }
+                
+                // Add to resolved stock
                 this['resolved'].addToStockWithId(uniqueId, card_id);
+                
+                // Get destination element
+                const destElement = document.getElementById(`resolved_item_${card_id}`);
+                
+                // Animate if both elements exist
+                if (destElement) {
+                    // Use BGA's slideToObject for smooth animation
+                    const destRect = destElement.getBoundingClientRect();
+                    const sourceRect = sourceElement.getBoundingClientRect();
+                    
+                    // Temporarily position the destination at the source location
+                    destElement.style.transform = `translate(${sourceRect.left - destRect.left}px, ${sourceRect.top - destRect.top}px)`;
+                    destElement.style.transition = 'none';
+                    
+                    // Force reflow
+                    destElement.offsetHeight;
+                    
+                    // Animate to final position
+                    setTimeout(() => {
+                        destElement.style.transition = 'transform 600ms ease-in-out';
+                        destElement.style.transform = 'translate(0, 0)';
+                    }, 50);
+                    
+                    // Remove from played stock after animation starts
+                    setTimeout(() => {
+                        if (this['played']) {
+                            this['played'].removeFromStockById(card_id);
+                        }
+                    }, 100);
+                } else {
+                    console.warn(`Destination element not found for card ${card_id}`);
+                    // Remove from played immediately if no animation
+                    this['played'].removeFromStockById(card_id);
+                }
+                
+                // Add tooltip
                 this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
                 
-                // Add delay after card is added to resolved area
-                setTimeout(() => {
-                    // Additional visual effects or next steps can be added here
-                    // The delay allows players to see the card move to resolved area
-                }, this.cardResolutionDelay);
+                // Wait for animation to complete before proceeding to next notification
+                await new Promise(resolve => setTimeout(resolve, 700));
             }
         },
         notif_cardBeingResolved: function(args) {
-            // This notification indicates a card is about to be resolved
-            // Remove the card from played stock when resolution begins
-            const card_id = args.card_id;
-            if (this['played'] && card_id) {
-                this['played'].removeFromStockById(card_id);
-            }
+            // This notification is sent before cardResolved
+            // We don't remove the card here - let cardResolved handle it with animation
+            // Just log for debugging if needed
+        },
+        notif_cardResolutionComplete: function(args) {
+            // Notification that all cards have been resolved
+            // No action needed, just acknowledge
+            console.log("Card resolution complete");
         },
         notif_resolvedCardsCleanup: function(args) {
             // Clear all cards from the resolved stock
@@ -2761,15 +2629,6 @@ function (dojo, declare,) {
                 }
             }
             // Note: Dead families don't go to atheist pool, they just disappear
-        },
-        ///////////////////////////////////////////////////
-        //// Utility Notifications
-        // Helper function to refresh prediction panel after counter updates
-        refreshPredictionPanelIfActive: function() {
-            if (this.predictionPanelEnabled && document.getElementById('prediction_panel') && 
-                document.getElementById('prediction_panel').style.display !== 'none') {
-                this.updatePredictionPanel();
-            }
         },
     });
 });

@@ -202,7 +202,7 @@ $machinestates = [
     ST_PHASE_THREE_RESOLVE_AMULETS => GameStateBuilder::create()
         ->name('phaseThreeResolveAmulets')
         ->description(clienttranslate('Some players may choose to use their amulets'))
-		->descriptionmyturn(clienttranslate('${you} must choose whether to use your amulet'))
+		->descriptionmyturn(clienttranslate('${you} must choose whether to use your amulet to avoid losing families'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
         ->action('stResolveAmulets')
         ->args('argResolveAmulets')

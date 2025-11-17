@@ -3655,6 +3655,33 @@ class Game extends \Table
         // Use custom queries to include played_by information and play_order for proper sorting
         $result["playedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM disaster_card WHERE card_location = 'played' ORDER BY play_order ASC");
         $result["playedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM bonus_card WHERE card_location = 'played' ORDER BY play_order ASC");
+        
+        // For resolving cards, include multiplier choice for global disasters
+        $result["resolvingDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'resolving'");
+        // Add multiplier choices for global disaster cards
+        foreach ($result["resolvingDisaster"] as &$card) {
+            if ((int)$card['type'] == 1) { // Global disaster
+                // Get all player choices for this card
+                $choices = $this->getCollectionFromDb("SELECT player_id, choice FROM global_disaster_choice WHERE card_id = " . $card['id']);
+                if (!empty($choices)) {
+                    // For simplicity, use the card owner's choice (or first available choice)
+                    $ownerChoice = null;
+                    foreach ($choices as $choice) {
+                        if ($choice['player_id'] == $card['played_by']) {
+                            $ownerChoice = $choice['choice'];
+                            break;
+                        }
+                    }
+                    // If owner choice not found, use first available
+                    if ($ownerChoice === null && !empty($choices)) {
+                        $ownerChoice = reset($choices)['choice'];
+                    }
+                    $card['multiplier'] = $ownerChoice ?: 'normal';
+                }
+            }
+        }
+        
+        $result["resolvingBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'resolving'");
         $result["resolvedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'resolved'");
         $result["resolvedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'resolved'");
 
@@ -3673,7 +3700,6 @@ class Game extends \Table
     {
         return [
             '100' => $this->tableOptions->get(100), // Quickstart Cards
-            '101' => $this->tableOptions->get(101), // Show End-Round Predictions
         ];
     }
 
