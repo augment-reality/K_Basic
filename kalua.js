@@ -39,6 +39,15 @@ function (dojo, declare,) {
                     <div id="resolvedCards" style="position: relative;">
                         <div class="kalua_played_resolved">RESOLVED CARDS:</div>
                         <div id="resolvedCardsContent"></div>
+                        <div id="prediction_panel" style="display: none; position: absolute; top: 0; left: 100%; margin-left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000; max-width: 250px; min-width: 200px;">
+                            <div id="prediction_panel_header" style="font-weight: bold; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                                ⭐ Convert/Pray Predictions ✖
+                            </div>
+                            <div id="prediction_content"></div>
+                            <div style="font-size: 10px; margin-top: 5px; opacity: 0.7;">
+                                Based on current happiness & temples
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div id="player-tables" class="zone-container"></div>
@@ -53,6 +62,8 @@ function (dojo, declare,) {
             this.templeCounters = {};
             this.amuletCounters = {};
             this.familyCounters = {};
+            // Prediction panel settings
+            this.predictionPanelEnabled = false;
             // Auto-roll tracking to prevent multiple attempts
             this.autoRollAttempted = false;
             // HK Token movement timing variables
@@ -559,6 +570,49 @@ function (dojo, declare,) {
             if (gamedatas.round_leader) {
                 this.updateRoundLeaderIcons(null, gamedatas.round_leader);
             }
+            // Add prediction toggle button to the bottom right of resolved cards div
+            // Only if 'Show End-Round Predictions' game option is enabled (option 101 == 2)
+            const resolvedCardsDiv = document.getElementById('resolvedCards');
+            if (resolvedCardsDiv && this.isPredictionsEnabled()) {
+                resolvedCardsDiv.insertAdjacentHTML('beforeend', `
+                    <div id="prediction_toggle_panel" style="
+                        position: absolute; 
+                        bottom: 5px; 
+                        right: 5px; 
+                        background: rgba(240,240,240,0.95); 
+                        border-radius: 5px; 
+                        padding: 5px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    ">
+                        <button id="prediction_toggle_btn" style="
+                            padding: 4px 8px; 
+                            background: #4a90e2; 
+                            color: white; 
+                            border: none; 
+                            border-radius: 3px; 
+                            cursor: pointer; 
+                            font-size: 11px;
+                            white-space: nowrap;
+                        ">
+                            📊 Predictions
+                        </button>
+                    </div>
+                `);
+                // Add click event listener after creating the button
+                const toggleBtn = document.getElementById('prediction_toggle_btn');
+                if (toggleBtn) {
+                    toggleBtn.addEventListener('click', () => {
+                        this.togglePredictionPanel();
+                    });
+                }
+            }
+            // Add click event listener for prediction panel close button
+            const panelHeader = document.getElementById('prediction_panel_header');
+            if (panelHeader) {
+                panelHeader.addEventListener('click', () => {
+                    this.togglePredictionPanel();
+                });
+            }
             // Setup game notifications to handle (see "setupNotifications" method below)
             this.setupNotifications();
             // Load dice roll sound effect with explicit path
@@ -828,10 +882,17 @@ function (dojo, declare,) {
                     }
                     break;
                 case 'phaseThreePlayCard':
-                    // No special action needed
+                    // Show predictions when players are making decisions about cards
+                    // since the round might end and family redistribution will occur
+                    // Only if 'Show End-Round Predictions' game option is enabled
+                    if (this.isPredictionsEnabled()) {
+                        this.predictionPanelEnabled = true;
+                        this.showPredictionPanel();
+                    }
                     break;
                 case 'phaseFourConvertPray':
-                    // No special action needed
+                    // Hide predictions during the actual family redistribution
+                    this.hidePredictionPanel();
                     break;
                 default:
                     // Perform actions for unknown state
@@ -1769,6 +1830,8 @@ function (dojo, declare,) {
             // Use the player's sprite value from gamedatas to move the correct token
             const sprite = this.gamedatas.players[player_id].sprite;
             this.movetokens(sprite-1, 1);
+            // Update prediction panel if active
+            this.refreshPredictionPanelIfActive();
         },
         convertAtheists: function(player_id, num_atheists) {
             const atheistFamilies = this['atheists'];
@@ -1812,6 +1875,174 @@ function (dojo, declare,) {
             playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to current player's families
             this.familyCounters[player_id].incValue(1);
             this.familyCounters[target_player_id].incValue(-1);
+        },
+        // Calculate predicted family and happiness changes during convert/pray phase
+        calculatePrayConvertPredictions: function() {
+            const predictions = {};
+            const allPlayers = Object.values(this.gamedatas.players);
+            const happinessScores = {};
+            // Collect current happiness scores (including temple bonuses)
+            allPlayers.forEach(player => {
+                const currentHappiness = this.happinessCounters[player.id].getValue();
+                const templeCount = this.templeCounters[player.id].getValue();
+                // Happiness with temple bonus (clamped 0-10)
+                happinessScores[player.id] = Math.max(0, Math.min(10, currentHappiness + templeCount));
+            });
+            // Find lowest and highest happiness scores
+            const happinessValues = Object.values(happinessScores);
+            const happy_value_low = Math.min(...happinessValues);
+            const happy_value_high = Math.max(...happinessValues);
+            // Get high happiness players
+            const high_happiness_players = allPlayers.filter(player => 
+                happinessScores[player.id] === happy_value_high
+            );
+            const high_players = high_happiness_players.length;
+            // Calculate predictions for each player
+            allPlayers.forEach(player => {
+                const player_id = player.id;
+                const currentFamilies = this.familyCounters[player_id].getValue();
+                const currentPrayer = this.prayerCounters[player_id].getValue();
+                const currentHappiness = happinessScores[player_id]; // Already includes temple bonus
+                const templeCount = this.templeCounters[player_id].getValue();
+                let predictedFamilies = currentFamilies;
+                let predictedPrayer = currentPrayer;
+                let predictedHappiness = currentHappiness; // Already includes temple bonus
+                // Family redistribution (only if not everyone has same happiness)
+                if (happy_value_low !== happy_value_high) {
+                    if (happinessScores[player_id] === happy_value_low) {
+                        // Lose 2 families (or all if less than 2)
+                        const to_lose = Math.min(2, currentFamilies);
+                        predictedFamilies -= to_lose;
+                    } else if (happinessScores[player_id] !== happy_value_high) {
+                        // Lose 1 family (middle happiness)
+                        if (currentFamilies > 0) {
+                            predictedFamilies -= 1;
+                        }
+                    } else {
+                        // High happiness: receive families from the pool
+                        // Calculate total converted pool
+                        let converted_pool = 0;
+                        allPlayers.forEach(p => {
+                            const p_families = this.familyCounters[p.id].getValue();
+                            if (happinessScores[p.id] === happy_value_low) {
+                                converted_pool += Math.min(2, p_families);
+                            } else if (happinessScores[p.id] !== happy_value_high && p_families > 0) {
+                                converted_pool += 1;
+                            }
+                        });
+                        // Divide families among high happiness players
+                        const fams_to_happy = Math.floor(converted_pool / high_players);
+                        predictedFamilies += fams_to_happy;
+                    }
+                }
+                // Prayer calculation: 1 per 5 families + bonuses + temples
+                predictedPrayer += Math.floor(predictedFamilies / 5);
+                if (happinessScores[player_id] === happy_value_low) {
+                    predictedPrayer += 4;
+                } else if (happinessScores[player_id] !== happy_value_high) {
+                    predictedPrayer += 2;
+                }
+                predictedPrayer += templeCount; // Temple prayer bonus
+                predictions[player_id] = {
+                    familyChange: predictedFamilies - currentFamilies,
+                    prayerChange: predictedPrayer - currentPrayer,
+                    happinessChange: predictedHappiness - this.happinessCounters[player_id].getValue(), // Temple bonus effect
+                    predictedFamilies: predictedFamilies,
+                    predictedPrayer: predictedPrayer,
+                    predictedHappiness: predictedHappiness
+                };
+            });
+            return predictions;
+        },
+        // Update and show the prediction panel
+        updatePredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
+            const predictions = this.calculatePrayConvertPredictions();
+            const content = document.getElementById('prediction_content');
+            const panel = document.getElementById('prediction_panel');
+            if (!content || !panel) return;
+            let html = '';
+            Object.values(this.gamedatas.players).forEach(player => {
+                const prediction = predictions[player.id];
+                const playerName = player.name;
+                const isMe = player.id == this.player_id;
+                html += `<div style="margin-bottom: 3px; ${isMe ? 'font-weight: bold; color: #ffff80;' : ''}">`;
+                html += `<span style="color: ${this.fixPlayerColor(player.color)};">●</span> ${playerName}:<br>`;
+                // Family change
+                if (prediction.familyChange !== 0) {
+                    const familyColor = prediction.familyChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;👨‍👩‍👧‍👦 ${prediction.familyChange > 0 ? '+' : ''}${prediction.familyChange}<br>`;
+                }
+                // Prayer change
+                if (prediction.prayerChange !== 0) {
+                    const prayerColor = prediction.prayerChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;🙏 ${prediction.prayerChange > 0 ? '+' : ''}${prediction.prayerChange}<br>`;
+                }
+                // Happiness change
+                if (prediction.happinessChange !== 0) {
+                    const happinessColor = prediction.happinessChange > 0 ? '#80ff80' : '#ff8080';
+                    html += `&nbsp;&nbsp;😊 ${prediction.happinessChange > 0 ? '+' : ''}${prediction.happinessChange}<br>`;
+                }
+                html += `</div>`;
+            });
+            content.innerHTML = html;
+            panel.style.display = 'block';
+        },
+        // Helper function to check if end-round predictions are enabled
+        isPredictionsEnabled: function() {
+            // Check game options (standard BGA pattern)
+            if (this.gamedatas.game_options && this.gamedatas.game_options[101]) {
+                return this.gamedatas.game_options[101] == 2;
+            }
+            // Fallback: check if options are stored differently
+            if (this.gamedatas.options && this.gamedatas.options[101]) {
+                return this.gamedatas.options[101] == 2;
+            }
+            // Another fallback: check gameinfos (some BGA games store it here)
+            if (this.gamedatas.gameinfos && this.gamedatas.gameinfos.game_options && this.gamedatas.gameinfos.game_options[101]) {
+                return this.gamedatas.gameinfos.game_options[101] == 2;
+            }
+            
+            // Default to disabled if option not found
+            return false;
+        },
+        // Show prediction panel if appropriate game state
+        showPredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled() || !this.predictionPanelEnabled) return;
+            const panel = document.getElementById('prediction_panel');
+            if (panel) {
+                this.updatePredictionPanel();
+                panel.style.display = 'block';
+            }
+        },
+        // Hide prediction panel
+        hidePredictionPanel: function() {
+            const panel = document.getElementById('prediction_panel');
+            if (panel) {
+                panel.style.display = 'none';
+            }
+        },
+        // Toggle prediction panel visibility
+        togglePredictionPanel: function() {
+            // Check if 'Show End-Round Predictions' game option is enabled
+            if (!this.isPredictionsEnabled()) return;
+            this.predictionPanelEnabled = !this.predictionPanelEnabled;
+            const toggleButton = document.getElementById('prediction_toggle_btn');
+            if (this.predictionPanelEnabled) {
+                this.showPredictionPanel();
+                if (toggleButton) {
+                    toggleButton.style.background = '#28a745';
+                    toggleButton.innerHTML = '📊 Hide';
+                }
+            } else {
+                this.hidePredictionPanel();
+                if (toggleButton) {
+                    toggleButton.style.background = '#4a90e2';
+                    toggleButton.innerHTML = '📊 Predictions';
+                }
+            }
         },
         setupAmuletDecision: function() {
             /* Present amulet usage choice to the player */
@@ -2432,6 +2663,8 @@ function (dojo, declare,) {
             if (this.templeCounters[player_id] && args.temple_count !== undefined) {
                 this.templeCounters[player_id].setValue(args.temple_count);
             }
+            // Update prediction panel if active
+            this.refreshPredictionPanelIfActive();
         },
         notif_leaderRecovered: function(args) {
             const player_id = args.player_id;
@@ -2629,6 +2862,15 @@ function (dojo, declare,) {
                 }
             }
             // Note: Dead families don't go to atheist pool, they just disappear
+        },
+        ///////////////////////////////////////////////////
+        //// Utility Notifications
+        // Helper function to refresh prediction panel after counter updates
+        refreshPredictionPanelIfActive: function() {
+            if (this.predictionPanelEnabled && document.getElementById('prediction_panel') && 
+                document.getElementById('prediction_panel').style.display !== 'none') {
+                this.updatePredictionPanel();
+            }
         },
     });
 });

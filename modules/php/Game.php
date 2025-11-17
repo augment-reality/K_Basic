@@ -3700,6 +3700,7 @@ class Game extends \Table
     {
         return [
             '100' => $this->tableOptions->get(100), // Quickstart Cards
+            '101' => $this->tableOptions->get(101), // Show End-Round Predictions
         ];
     }
 
