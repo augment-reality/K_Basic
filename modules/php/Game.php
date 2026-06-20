@@ -745,9 +745,11 @@ class Game extends \Table
                 // Track statistics: amulet gained
                 $this->incStat(1, 'amulets_gained', $played_by);
                 
+                $new_amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $played_by");
                 $this->notifyAllPlayers('amuletIncremented', clienttranslate('${player_name} gained an amulet'), [
                     'player_id' => $played_by,
-                    'player_name' => $this->getPlayerNameById($played_by)
+                    'player_name' => $this->getPlayerNameById($played_by),
+                    'amulet_count' => $new_amulet_count
                 ]);
             }
             
@@ -1348,9 +1350,12 @@ class Game extends \Table
         } else {
             $this->bonusCards->moveCard($card_id, 'resolved');
         }
-        
-        // Move card from played to resolved stock without notification
-        // (Removed "has been resolved" notification as it was deemed superfluous)
+
+        $this->notifyAllPlayers('cardResolved', '', [
+            'card_id' => $card_id,
+            'card_type' => $card_type,
+            'card_type_arg' => $card_type_arg,
+        ]);
     }
     
     public function stSelectTarget(): void
@@ -1564,6 +1569,12 @@ class Game extends \Table
                         $current_family = $this->getFamilyCount($player_id);
                         $this->setFamilyCount($player_id, $current_family - $to_convert);
                         $converted_pool += $to_convert;
+                        $this->notifyAllPlayers('familiesLost',
+                            clienttranslate('${player_name} loses ${families_count} families (unhappy)'), [
+                                'player_id' => $player_id,
+                                'player_name' => $this->getPlayerNameById($player_id),
+                                'families_count' => $to_convert,
+                            ]);
                     }
                 } elseif ($happiness != $happy_value_high) {
                     $available_for_loss = $this->getAvailableFamiliesForLoss($player_id);
@@ -1571,6 +1582,12 @@ class Game extends \Table
                         $current_family = $this->getFamilyCount($player_id);
                         $this->setFamilyCount($player_id, $current_family - 1);
                         $converted_pool += 1;
+                        $this->notifyAllPlayers('familiesLost',
+                            clienttranslate('${player_name} loses 1 family (middling happiness)'), [
+                                'player_id' => $player_id,
+                                'player_name' => $this->getPlayerNameById($player_id),
+                                'families_count' => 1,
+                            ]);
                     }
                 }
             }
@@ -1579,7 +1596,17 @@ class Game extends \Table
             $fams_to_happy = intdiv($converted_pool, $high_players);
             $remainder = $converted_pool % $high_players;
             foreach ($high_happiness_players as $player_id) {
-                $this->getFromPool($player_id, $fams_to_happy);
+                if ($fams_to_happy > 0) {
+                    $this->getFromPool($player_id, $fams_to_happy);
+                    $this->notifyAllPlayers('familiesGained',
+                        clienttranslate('${player_name} gains ${families_count} families (happiest)'), [
+                            'player_id' => $player_id,
+                            'player_name' => $this->getPlayerNameById($player_id),
+                            'families_count' => $fams_to_happy,
+                        ]);
+                } else {
+                    $this->getFromPool($player_id, $fams_to_happy);
+                }
             }
 
             // Move remainder to atheist families (global_id = 101)
@@ -2532,11 +2559,13 @@ class Game extends \Table
                 // Track statistics: amulet used
                 $this->incStat(1, 'amulets_used', $player_id);
             
-            $this->notifyAllPlayers("amuletUsed", 
-                clienttranslate('${player_name} uses an amulet to avoid the disaster effects'), 
+            $new_amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $player_id");
+            $this->notifyAllPlayers("amuletUsed",
+                clienttranslate('${player_name} uses an amulet to avoid the disaster effects'),
                 [
                     'player_name' => $player_name,
                     'player_id' => $player_id,
+                    'amulet_count' => $new_amulet_count,
                     'preserve' => 1500 // Show message for 1.5 seconds
                 ]
             );
@@ -2852,12 +2881,15 @@ class Game extends \Table
         }
         
         // Notify all players about the discard
+        $total_cards_in_hand = $this->disasterCards->countCardInLocation("hand", $player_id)
+                             + $this->bonusCards->countCardInLocation("hand", $player_id);
         $this->notifyAllPlayers('cardDiscarded', clienttranslate('${player_name} discarded a card'), [
             'player_id' => $player_id,
             'player_name' => $this->getPlayerNameById($player_id),
             'card_id' => $card_id,
             'card_type' => $card['card_type'],
-            'card_type_arg' => $card['card_type_arg']
+            'card_type_arg' => $card['card_type_arg'],
+            'card_count' => $total_cards_in_hand
         ]);
         
         // Mark this player as having completed their discard
@@ -3631,6 +3663,11 @@ class Game extends \Table
         $atheistCount = (int)$this->getUniqueValueFromDb("SELECT global_value FROM global WHERE global_id = 101");
         $result["atheist_families"] = $atheistCount;
 
+        // Starting families total (5 per player + atheist starting count based on option 102)
+        $player_count = count($result["players"]);
+        $families_per_player = ($this->tableOptions->get(102) == 2) ? 1 : 3;
+        $result["starting_families_total"] = ($player_count * 5) + ($player_count * $families_per_player);
+
         // Add round leader information
         $result["round_leader"] = $this->getGameStateValue("roundLeader");
         $result["round_leader_played_card"] = $this->getGameStateValue("round_leader_played_card");
@@ -3650,7 +3687,7 @@ class Game extends \Table
         $result["playedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM bonus_card WHERE card_location = 'played' ORDER BY play_order ASC");
         
         // For resolving cards, include multiplier choice for global disasters
-        $result["resolvingDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'resolving'");
+        $result["resolvingDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM disaster_card WHERE card_location = 'resolving'");
         // Add multiplier choices for global disaster cards
         foreach ($result["resolvingDisaster"] as &$card) {
             if ((int)$card['type'] == 1) { // Global disaster
@@ -3674,9 +3711,9 @@ class Game extends \Table
             }
         }
         
-        $result["resolvingBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'resolving'");
-        $result["resolvedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM disaster_card WHERE card_location = 'resolved'");
-        $result["resolvedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by FROM bonus_card WHERE card_location = 'resolved'");
+        $result["resolvingBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM bonus_card WHERE card_location = 'resolving'");
+        $result["resolvedDisaster"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM disaster_card WHERE card_location = 'resolved' ORDER BY play_order ASC");
+        $result["resolvedBonus"] = $this->getCollectionFromDb("SELECT card_id as id, card_type as type, card_type_arg as type_arg, card_location as location, card_location_arg as location_arg, played_by, play_order FROM bonus_card WHERE card_location = 'resolved' ORDER BY play_order ASC");
 
         /* TODO get size of each players hand */
 
@@ -4129,12 +4166,15 @@ class Game extends \Table
         }
 
         // Always send public notification with card data (for real-time UI updates)
+        $total_cards_in_hand = $this->disasterCards->countCardInLocation("hand", $player_id)
+                             + $this->bonusCards->countCardInLocation("hand", $player_id);
         $notificationData = [
             'player_id' => $player_id,
             'player_name' => $this->getPlayerNameById($player_id),
             'card_id' => $card['id'],
             'card_type' => $card['type'],
-            'card_type_arg' => $card['type_arg']
+            'card_type_arg' => $card['type_arg'],
+            'card_count' => $total_cards_in_hand
         ];
 
         if (!$suppressNotifications) {

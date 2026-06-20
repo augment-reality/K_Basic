@@ -85,6 +85,50 @@
     text-align: center;
 }
 
+#convert-transit {
+    position: absolute;
+    top: 370px;
+    left: -1px;
+    right: -1px;
+    background: rgba(245, 235, 215, 0.97);
+    border: 1px solid #bbb;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    z-index: 5;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.transit-block {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0;
+}
+
+.transit-label {
+    font-size: 10px;
+    color: #666;
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.convert-transit-meeple {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    background-repeat: no-repeat;
+    background-size: auto;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.transit-meeple-died {
+    opacity: 0.35;
+    filter: grayscale(1);
+}
+
 #dice {
     min-width: 60px;
     width: 170px;
@@ -100,9 +144,8 @@
 
 #playedCards {
     width: 650px;
-    /* needs to hold five cards */
-    height: 225px;
-    /* Match card height plus header */
+    min-height: 225px;
+    height: auto;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -111,12 +154,10 @@
     margin: 10px;
 }
 
-
 #resolvedCards {
     width: 650px;
-    /* needs to hold five cards */
-    height: 210px;
-    /* Match card height plus header */
+    min-height: 210px;
+    height: auto;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -135,58 +176,7 @@
     margin-left: 0;
 }
 
-/* Commenting out individual icon rules that conflict with sprite system */
-/*
-#icon_h {
-    background-image: url('img/SidebarIcon_Happy_30_30.png');
-    width: 1em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-#icon_p {
-    background-image: url('img/SidebarIcon_Pray_30_30.png');  
-    width: 1em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-.kalua_icon_p {
-    background-image: url('img/SidebarIcon_Pray_30_30.png');  
-    width: 1em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-#icon_pg {
-    background-image: url('img/SidebarIcon_Pray_30_30_g.png');  
-    width: 1em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-.kalua_icon_pg {
-    background-image: url('img/SidebarIcon_Pray_30_30_g.png');  
-    width: 1em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-#icon_l {
-    background-image: url('img/SidebarIcon_Fam1_30_30.png');
-    width: 5em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-#icon_f {
-    background-image: url('img/SidebarIcon_Lead_30_30.png');
-    width: 1em;
-    height: 1em;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-*/
+
 /* Checkbox sprite setup using y-n.png */
 .checkbox-icon {
     display: inline-block;
@@ -332,24 +322,16 @@
 }
 
 .kalua_player_cards {
-    min-height: 200px;
-    /* Minimum height to accommodate cards + scrollbar */
-    height: auto !important;
-    /* Let it size to content */
-    max-height: none;
-    /* Remove max height restriction */
-    width: fit-content !important;
+    height: 215px !important;
+    width: 100%;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box;
-    /* Ensure padding and border are included in the height */
     display: flex;
-    /* Use flexbox instead of stock default positioning */
     flex-direction: row;
     flex-wrap: nowrap;
-    /* Critical: prevent wrapping */
     align-items: flex-start;
     gap: 5px;
     /* Space between cards */

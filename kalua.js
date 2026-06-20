@@ -31,6 +31,7 @@ define([
                     <div id="atheistFamilies"></div>
                     <div id="families-remaining-stat">Families remaining: <span id="families-remaining-count">0</span></div>
                     <div id="dice"></div>
+                    <div id="convert-transit" style="display:none;"></div>
                 </div>
                 <div id="card_areas">
                     <div id="playedCards">
@@ -304,11 +305,13 @@ define([
                 this['played'] = new ebg.stock();
                 this['played'].create(this, document.getElementById('playedCardsContent'), 120, 181.3);
                 this['played'].image_items_per_row = 5;
+                this['played'].item_margin = 8;
                 this['played'].setSelectionMode(0);
                 // Create stock for resolved cards
                 this['resolved'] = new ebg.stock();
                 this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 181.3);
                 this['resolved'].image_items_per_row = 5;
+                this['resolved'].item_margin = 8;
                 this['resolved'].setSelectionMode(0);
                 // Initialize card stock for each player card div   
                 Object.values(gamedatas.players).forEach(player => {
@@ -452,14 +455,10 @@ define([
                 this.updateCardGrouping(this.player_id);
                 /* Populate played cards from database */
                 Object.values(gamedatas.playedDisaster).forEach(card => {
-
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    // Override the itemType weight with play_order for proper sorting
-                    if (card.play_order !== undefined) {
-                        this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
-                    }
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
+                    const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
+                    const instanceTypeId = this.registerInstanceType(this['played'], card.id, uniqueId, weight);
+                    this['played'].addToStockWithId(instanceTypeId, card.id);
                     if (this['played'].items && this['played'].items[card.id]) {
                         this['played'].items[card.id].played_by = card.played_by;
                     }
@@ -467,14 +466,10 @@ define([
                     this.addPlayerBorderToCard(card.id, card.played_by, 'played');
                 });
                 Object.values(gamedatas.playedBonus).forEach(card => {
-
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    // Override the itemType weight with play_order for proper sorting
-                    if (card.play_order !== undefined) {
-                        this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
-                    }
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
+                    const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
+                    const instanceTypeId = this.registerInstanceType(this['played'], card.id, uniqueId, weight);
+                    this['played'].addToStockWithId(instanceTypeId, card.id);
                     if (this['played'].items && this['played'].items[card.id]) {
                         this['played'].items[card.id].played_by = card.played_by;
                     }
@@ -484,31 +479,25 @@ define([
                 /* Populate resolving cards - these are shown in played area during resolution */
                 Object.values(gamedatas.resolvingDisaster).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
+                    const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
+                    const instanceTypeId = this.registerInstanceType(this['played'], card.id, uniqueId, weight);
 
-                    // For global disasters, update the image position based on multiplier choice
+                    // For global disasters, patch the instance type's image position for the chosen multiplier
                     if (parseInt(card.type) === this.ID_GLOBAL_DISASTER && card.multiplier) {
                         const cardTypeArg = parseInt(card.type_arg);
                         let imagePos;
                         switch (card.multiplier) {
-                            case 'avoid':
-                                imagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);
-                                break;
-                            case 'double':
-                                imagePos = this.globalDisasterImageMappings.double(cardTypeArg);
-                                break;
+                            case 'avoid':  imagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);  break;
+                            case 'double': imagePos = this.globalDisasterImageMappings.double(cardTypeArg); break;
                             case 'normal':
-                            default:
-                                imagePos = this.globalDisasterImageMappings.normal(cardTypeArg);
-                                break;
+                            default:       imagePos = this.globalDisasterImageMappings.normal(cardTypeArg); break;
                         }
-                        // Update the item type's image position before adding the card
-                        if (this['played'].item_type && this['played'].item_type[uniqueId]) {
-                            this['played'].item_type[uniqueId].image_position = imagePos;
+                        if (this['played'].item_type_x && this['played'].item_type_x[instanceTypeId]) {
+                            this['played'].item_type_x[instanceTypeId].image_position = imagePos;
                         }
                     }
 
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
+                    this['played'].addToStockWithId(instanceTypeId, card.id);
                     if (this['played'].items && this['played'].items[card.id]) {
                         this['played'].items[card.id].played_by = card.played_by;
                     }
@@ -517,8 +506,9 @@ define([
                 });
                 Object.values(gamedatas.resolvingBonus).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
+                    const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
+                    const instanceTypeId = this.registerInstanceType(this['played'], card.id, uniqueId, weight);
+                    this['played'].addToStockWithId(instanceTypeId, card.id);
                     if (this['played'].items && this['played'].items[card.id]) {
                         this['played'].items[card.id].played_by = card.played_by;
                     }
@@ -528,12 +518,16 @@ define([
                 /* Populate resolved cards from database */
                 Object.values(gamedatas.resolvedDisaster).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    this['resolved'].addToStockWithId(uniqueId, card.id);
+                    const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
+                    const instanceTypeId = this.registerInstanceType(this['resolved'], card.id, uniqueId, weight);
+                    this['resolved'].addToStockWithId(instanceTypeId, card.id);
                     this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
                 });
                 Object.values(gamedatas.resolvedBonus).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    this['resolved'].addToStockWithId(uniqueId, card.id);
+                    const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
+                    const instanceTypeId = this.registerInstanceType(this['resolved'], card.id, uniqueId, weight);
+                    this['resolved'].addToStockWithId(instanceTypeId, card.id);
                     this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
                 });
                 /* Add cardbacks for other players' cards */
@@ -572,6 +566,7 @@ define([
                     // Optimize prayer token display for each player's current prayer count (redundant but safe)
                     this.optimizePrayerTokens(player.id, player.prayer);
                 });
+                this.startingFamiliesTotal = gamedatas.starting_families_total || 0;
                 this.updateFamiliesRemainingDisplay();
                 // Set initial round leader prayer icon to grayed version
                 if (gamedatas.round_leader) {
@@ -799,6 +794,12 @@ define([
             ///////////////////////////////////////////////////
             //// Game & client states
             onEnteringState: function (stateName, args) {
+                // Hide convert transit area on every state change except the convert phase itself
+                const convertTransit = document.getElementById('convert-transit');
+                if (convertTransit && stateName !== 'phaseFourConvertPray') {
+                    convertTransit.style.display = 'none';
+                    convertTransit.innerHTML = '';
+                }
                 switch (stateName) {
                     case 'phaseOneDraw':
                         if (this.isCurrentPlayerActive()) {
@@ -808,17 +809,6 @@ define([
                         // Existing code for phaseTwoActivateLeader
                         break;
                     case 'phaseThreeCheckGlobal':
-                        if (this.isCurrentPlayerActive()) {
-                            this.addActionButton('normal-btn', _('Normal Effect'), () => {
-                                this.bgaPerformAction('actNormalGlobal', {});
-                            });
-                            this.addActionButton('avoid-btn', _('Avoid (Cost: Prayer)'), () => {
-                                this.bgaPerformAction('actAvoidGlobal', {});
-                            });
-                            this.addActionButton('double-btn', _('Double (Cost: Prayer)'), () => {
-                                this.bgaPerformAction('actDoubleGlobal', {});
-                            });
-                        }
                         break;
                     case 'phaseThreeSelectTargets':
                         if (this.isCurrentPlayerActive()) {
@@ -892,8 +882,12 @@ define([
                         }
                         break;
                     case 'phaseFourConvertPray':
-                        // Hide predictions during the actual family redistribution
                         this.hidePredictionPanel();
+                        if (convertTransit) {
+                            // Notifications already fired and may have populated this div;
+                            // just make it visible — addTransitMeeples handles the header
+                            convertTransit.style.display = 'block';
+                        }
                         break;
                     default:
                         // Perform actions for unknown state
@@ -1151,6 +1145,23 @@ define([
                                 }
                             }
                             break;
+                        case 'phaseThreeCheckGlobal':
+                            this.addActionButton('normal-btn', _('Normal Effect'), () => {
+                                this.bgaPerformAction('actNormalGlobal', {});
+                            });
+                            this.addActionButton('avoid-btn', _(`Avoid (${args.avoid_cost} Prayer)`), () => {
+                                this.bgaPerformAction('actAvoidGlobal', {});
+                            });
+                            if (!args.can_avoid) {
+                                dojo.addClass('avoid-btn', 'disabled');
+                            }
+                            this.addActionButton('double-btn', _(`Double (${args.double_cost} Prayer)`), () => {
+                                this.bgaPerformAction('actDoubleGlobal', {});
+                            });
+                            if (!args.can_double) {
+                                dojo.addClass('double-btn', 'disabled');
+                            }
+                            break;
                         case 'phaseThreeResolveAmulets':
                             // Note: Do not call updatePageTitle() here as it causes infinite recursion
                             // The page title will be updated by the BGA framework automatically
@@ -1320,6 +1331,14 @@ define([
             },
             /* Maps card type (bonus, local disaster, global disaster) and type_id 
              * (which of those type cards it is) to a unique number*/
+            registerInstanceType: function (stock, card_id, uniqueId, weight) {
+                const instanceTypeId = 10000 + parseInt(card_id);
+                const base = stock.item_type_x ? stock.item_type_x[uniqueId] : null;
+                if (base) {
+                    stock.addItemType(instanceTypeId, weight, base.image, base.image_position);
+                }
+                return instanceTypeId;
+            },
             getCardUniqueId: function (type, type_id) {
                 /* Unique ids will be based on the type and type_id */
                 if (type == this.ID_GLOBAL_DISASTER) /* global disaster */ {
@@ -1832,6 +1851,37 @@ define([
                 // Update prediction panel if active
                 this.refreshPredictionPanelIfActive();
             },
+            addTransitMeeples: function (player_id, count, mode) {
+                // mode: 'lost', 'died', 'converted', 'gained'
+                const transit = document.getElementById('convert-transit');
+                if (!transit || count <= 0) return;
+                const labels = { lost: 'LOST', died: 'DIED', converted: 'CHANGED RELIGION', gained: 'NEW CONVERTS' };
+                const label = labels[mode] || mode.toUpperCase();
+                const sectionId = `transit-section-${mode}`;
+                // Find or create the section row for this type
+                let section = document.getElementById(sectionId);
+                if (!section) {
+                    section = document.createElement('div');
+                    section.id = sectionId;
+                    section.className = 'transit-block';
+                    const lbl = document.createElement('span');
+                    lbl.className = 'transit-label';
+                    lbl.textContent = label;
+                    section.appendChild(lbl);
+                    transit.appendChild(section);
+                }
+                // Append one chief token per family, colored by player sprite
+                const player = this.gamedatas.players[player_id];
+                const spriteIndex = player ? (player.sprite - 1) : 5;
+                const bgX = -(spriteIndex * 30);
+                for (let i = 0; i < count; i++) {
+                    const m = document.createElement('div');
+                    m.className = 'convert-transit-meeple' + (mode === 'died' ? ' transit-meeple-died' : '');
+                    m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
+                    m.style.backgroundPosition = `${bgX}px 0px`;
+                    section.appendChild(m);
+                }
+            },
             updateFamiliesRemainingDisplay: function () {
                 let total = 0;
                 for (const player_id in this.gamedatas.players) {
@@ -1839,8 +1889,15 @@ define([
                         total += this.familyCounters[player_id].getValue();
                     }
                 }
+                if (this['atheists']) {
+                    total += this['atheists'].getItemNumber(this.ID_AHTHIEST_STOCK);
+                }
                 const el = document.getElementById('families-remaining-count');
-                if (el) el.textContent = total;
+                if (el) {
+                    el.textContent = this.startingFamiliesTotal
+                        ? `${total}/${this.startingFamiliesTotal}`
+                        : total;
+                }
             },
             convertAtheists: function (player_id, num_atheists) {
                 const atheistFamilies = this['atheists'];
@@ -2136,13 +2193,15 @@ define([
                 this.bgaSetupPromiseNotifications();
                 // Add 0.5 second delays to card resolution notifications so players can follow along
                 this.notifqueue.setSynchronous('playerCountsChanged', 500);
-                this.notifqueue.setSynchronous('familiesConverted', 500);
-                this.notifqueue.setSynchronous('familiesDied', 500);
+                this.notifqueue.setSynchronous('familiesConverted', 1000);
+                this.notifqueue.setSynchronous('familiesDied', 1000);
+                this.notifqueue.setSynchronous('familiesGained', 200);
+                this.notifqueue.setSynchronous('familiesLost', 200);
                 this.notifqueue.setSynchronous('templeDestroyed', 500);
                 this.notifqueue.setSynchronous('leaderRecovered', 500);
                 this.notifqueue.setSynchronous('templeBuilt', 500);
                 this.notifqueue.setSynchronous('amuletGained', 500);
-                this.notifqueue.setSynchronous('cardResolved', 500); // Reduced to prevent timeout
+                // cardResolved is async and self-timed — no setSynchronous needed
                 // cardBeingResolved removed - it's now a no-op and doesn't need delay
                 this.notifqueue.setSynchronous('diceRolled', 500);
                 this.notifqueue.setSynchronous('amuletUsed', 500);
@@ -2279,10 +2338,12 @@ define([
                         this.updateCardbackGrouping(player_id);
                     }
                 }
-                /* Update counter with protection against negative values */
                 if (this.cardCounters[player_id]) {
-                    const currentValue = this.cardCounters[player_id].getValue();
-                    this.cardCounters[player_id].setValue(Math.max(0, currentValue + 1));
+                    if (args.card_count !== undefined) {
+                        this.cardCounters[player_id].setValue(args.card_count);
+                    } else {
+                        this.cardCounters[player_id].incValue(1);
+                    }
                 }
             },
             notif_quickstartCardsDealt: async function (args) {
@@ -2334,6 +2395,10 @@ define([
                 }
             },
             notif_cardPlayed: function (args) {
+                // Clear resolved cards from previous round when first new card is played
+                if (this['resolved'] && this['resolved'].getItemNumber() > 0) {
+                    this['resolved'].removeAll();
+                }
                 // Remove the card from the correct player's hand if the stock exists
                 const playerCardsStock = this[`${args.player_id}_cards`];
                 if (playerCardsStock) {
@@ -2355,12 +2420,11 @@ define([
                 // Add the card to the played stock
                 const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
                 if (this['played']) {
-                    // Set proper weight for play order sorting
-                    this['played'].changeItemsWeight(uniqueId, this.nextPlayOrder);
-                    this.nextPlayOrder++; // Increment for next card
+                    const instanceTypeId = this.registerInstanceType(this['played'], args.card_id, uniqueId, this.nextPlayOrder);
+                    this.nextPlayOrder++;
 
                     // The third parameter is the 'from' DOM ID which creates a flying animation from that element
-                    this['played'].addToStockWithId(uniqueId, args.card_id, `${args.player_id}_cards`);
+                    this['played'].addToStockWithId(instanceTypeId, args.card_id, `${args.player_id}_cards`);
                     
                     // Store player info and add tooltip with player information
                     if (this['played'].items && this['played'].items[args.card_id]) {
@@ -2506,7 +2570,11 @@ define([
 
                 // Decrement amulet counter
                 if (this.amuletCounters[player_id]) {
-                    this.amuletCounters[player_id].incValue(-1);
+                    if (args.amulet_count !== undefined) {
+                        this.amuletCounters[player_id].setValue(args.amulet_count);
+                    } else {
+                        this.amuletCounters[player_id].incValue(-1);
+                    }
                 }
 
                 // Remove one amulet from the kept cards display
@@ -2537,7 +2605,7 @@ define([
                 const player_name = args.player_name;
                 const player_id = args.player_id;
                 const result = args.result;
-                this.bgaPlaySound('dice_roll');
+                try { new Audio(g_gamethemeurl + 'sounds/kalua_dice_roll.ogg').play(); } catch(e) {}
                 // Wait 0.2 seconds before updating dice graphics
                 setTimeout(() => {
                     // Reset auto-roll flag when any player rolls dice
@@ -2580,7 +2648,11 @@ define([
                 const player_id = args.player_id;
                 // Update amulet counter
                 if (this.amuletCounters[player_id]) {
-                    this.amuletCounters[player_id].incValue(1);
+                    if (args.amulet_count !== undefined) {
+                        this.amuletCounters[player_id].setValue(args.amulet_count);
+                    } else {
+                        this.amuletCounters[player_id].incValue(1);
+                    }
                 }
                 // Add amulet card to kept area (kept_id = 1 for amulet, based on comment in setup)
                 const keptStock = this[`${player_id}_kept`];
@@ -2664,6 +2736,9 @@ define([
                 if (this.templeCounters[player_id] && args.temple_count !== undefined) {
                     this.templeCounters[player_id].setValue(args.temple_count);
                 }
+                if (this.amuletCounters[player_id] && args.amulet_count !== undefined) {
+                    this.amuletCounters[player_id].setValue(args.amulet_count);
+                }
                 // Update prediction panel if active
                 this.refreshPredictionPanelIfActive();
                 this.updateFamiliesRemainingDisplay();
@@ -2699,10 +2774,12 @@ define([
                     // Update cardback grouping after removing
                     this.updateCardbackGrouping(player_id);
                 }
-                // Update card counter (prevent negative values)
                 if (this.cardCounters[player_id]) {
-                    const currentValue = this.cardCounters[player_id].getValue();
-                    this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
+                    if (args.card_count !== undefined) {
+                        this.cardCounters[player_id].setValue(args.card_count);
+                    } else {
+                        this.cardCounters[player_id].incValue(-1);
+                    }
                 }
             },
             notif_cardResolved: async function (args) {
@@ -2728,18 +2805,22 @@ define([
                     // Get source element before adding to destination
                     const sourceElement = document.getElementById(`played_item_${card_id}`);
 
+                    // Register an instance type in resolved stock so same-type cards sort by resolve order
+                    const resolvedInstanceTypeId = this.registerInstanceType(this['resolved'], card_id, uniqueId, this.nextPlayOrder);
+                    this.nextPlayOrder++;
+
                     if (!sourceElement) {
                         console.warn(`Source element not found for card ${card_id}`);
                         // Just move without animation
                         this['played'].removeFromStockById(card_id);
-                        this['resolved'].addToStockWithId(uniqueId, card_id);
+                        this['resolved'].addToStockWithId(resolvedInstanceTypeId, card_id);
                         this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
                         await new Promise(resolve => setTimeout(resolve, 700));
                         return;
                     }
 
                     // Add to resolved stock
-                    this['resolved'].addToStockWithId(uniqueId, card_id);
+                    this['resolved'].addToStockWithId(resolvedInstanceTypeId, card_id);
 
                     // Get destination element
                     const destElement = document.getElementById(`resolved_item_${card_id}`);
@@ -2799,12 +2880,9 @@ define([
                 }
             },
             notif_allCardsCleanup: function (args) {
-                // Clear all cards from both played and resolved stocks
+                // Clear played cards; resolved cards persist until the first card of the new round is played
                 if (this['played']) {
                     this['played'].removeAll();
-                }
-                if (this['resolved']) {
-                    this['resolved'].removeAll();
                 }
             },
             notif_familiesConverted: function (args) {
@@ -2835,6 +2913,7 @@ define([
                 for (let i = 0; i < args.families_count; i++) {
                     this['atheists'].addToStock(this.ID_AHTHIEST_STOCK); // 5 = atheist meeple
                 }
+                this.addTransitMeeples(args.player_id, args.families_count, 'converted');
                 // Update prayer token display if prayer value is provided
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
@@ -2865,7 +2944,16 @@ define([
                     }
                 }
                 // Note: Dead families don't go to atheist pool, they just disappear
+                this.addTransitMeeples(args.player_id, args.families_count, 'died');
                 this.updateFamiliesRemainingDisplay();
+            },
+            notif_familiesLost: function (args) {
+                // Transit display only — playerCountsChanged handles counter/meeple updates
+                this.addTransitMeeples(args.player_id, args.families_count, 'lost');
+            },
+            notif_familiesGained: function (args) {
+                // Transit display only — playerCountsChanged handles counter/meeple updates
+                this.addTransitMeeples(args.player_id, args.families_count, 'gained');
             },
             ///////////////////////////////////////////////////
             //// Utility Notifications
