@@ -622,12 +622,6 @@ define([
                 }
                 // Setup game notifications to handle (see "setupNotifications" method below)
                 this.setupNotifications();
-                // Load dice roll sound effect with explicit path
-                try {
-                    this.sounds.load('dice_roll', 'Dice Roll Sound', g_gamethemeurl + 'img/dice_roll');
-                } catch (e) {
-                    console.warn('Could not load dice roll sound:', e);
-                }
                 // Force a final layout update for all player card stocks after setup
                 setTimeout(() => {
                     this.refreshPlayerCardLayouts();
@@ -2543,8 +2537,7 @@ define([
                 const player_name = args.player_name;
                 const player_id = args.player_id;
                 const result = args.result;
-                // Play dice roll sound effect
-                this.sounds.play('dice_roll');
+                this.bgaPlaySound('dice_roll');
                 // Wait 0.2 seconds before updating dice graphics
                 setTimeout(() => {
                     // Reset auto-roll flag when any player rolls dice

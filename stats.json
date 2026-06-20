@@ -37,11 +37,6 @@
       "name": "Believers converted (stolen)",
       "type": "int"
     },
-    "families_lost": {
-      "id": 22,
-      "name": "Families lost to disasters",
-      "type": "int"
-    },
     "families_died": {
       "id": 23,
       "name": "Families killed by disasters",
@@ -79,8 +74,8 @@
     },
     "leader_sacrificed": {
       "id": 30,
-      "name": "Leader sacrificed",
-      "type": "bool"
+      "name": "Times leader sacrificed",
+      "type": "int"
     },
     "cards_played": {
       "id": 31,

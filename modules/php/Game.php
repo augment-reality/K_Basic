@@ -1160,8 +1160,6 @@ class Game extends \Table
                     ]
                 );
                 
-                // Track statistics: families lost and families converted to atheism
-                $this->incStat($actual_converted, 'families_lost', $player_id);
                 $this->incStat($actual_converted, 'families_became_atheist', $player_id);
             } else if ($families_to_convert > 0) {
                 // Player was protected by having only their chief remaining
@@ -1212,8 +1210,6 @@ class Game extends \Table
                     ]
                 );
                 
-                // Track statistics: families lost and families that died
-                $this->incStat($actual_killed, 'families_lost', $player_id);
                 $this->incStat($actual_killed, 'families_died', $player_id);
             } else if ($families_to_kill > 0) {
                 // Player was protected by having only their chief remaining
@@ -1870,9 +1866,6 @@ class Game extends \Table
             self::DbQuery("UPDATE player SET player_family = player_family + $toConvert WHERE player_id = {$player_id}");
         }
 
-        // Track statistics: atheists converted
-        $this->incStat($toConvert, 'atheists_converted', $player_id);
-        
         // Track statistics: atheists converted
         $this->incStat($toConvert, 'atheists_converted', $player_id);
         
@@ -3812,7 +3805,6 @@ class Game extends \Table
         // Initialize player statistics for all players
         $this->initStat("player", "atheists_converted", 0);
         $this->initStat("player", "believers_converted", 0);
-        $this->initStat("player", "families_lost", 0);
         $this->initStat("player", "families_died", 0);
         $this->initStat("player", "families_became_atheist", 0);
         $this->initStat("player", "temples_built", 0);
@@ -4183,7 +4175,6 @@ class Game extends \Table
                 'name' => $player['player_name'],
                 'atheists_converted' => $this->getStat('atheists_converted', $player_id),
                 'believers_converted' => $this->getStat('believers_converted', $player_id),
-                'families_lost' => $this->getStat('families_lost', $player_id),
                 'families_died' => $this->getStat('families_died', $player_id),
                 'families_became_atheist' => $this->getStat('families_became_atheist', $player_id),
                 'temples_built' => $this->getStat('temples_built', $player_id),
