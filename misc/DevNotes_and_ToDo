@@ -5,24 +5,11 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 ----------------------------    To do   -------------------------------------------
 
--leader meeples not updating for everyone right away when sacrificed
-
-Not all card resolutions need an ending notification: Temple has been resolved is superfluous
-Longer delay after each card resolution, and between each hktoken move
-Merge notifications"Round has ended. Unhappy religions lose families and all religions pray." and "Card resolution complete. Proceeding to convert/pray phase"
--add padding to player cards?
-✓ prayer pool updates immediately after global disaster choices and card purchases
--test die roll sound
--add auto pass to non-round leader players who have no prayer during card playing?
--add text info to tooltip?
+-would be great to have visual representation of families getting moved around during convert phase
 -Review and consolidate messages
--add a preference to force players to sacrifice their leader after x turns to avoid endless games?
--add sounds https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds 
--undo buttons? Maybe just confirm buttons instead (convert/pray)?
--add game option to end game if all players family count is zero?
--For mobile: don't show tooltips, and move dice to right of main board?
--Group cards when a player has more than one of any specific card (maybe with BGA-Cards?)
--during initial card selection, maybe undo option? https://en.doc.boardgamearena.com/BGA_Studio_Cookbook#Out-of-turn_actions:_Un-pass
+-fix die roll sound https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds 
+-undo buttons? Maybe just confirm buttons instead (convert/pray)? https://en.doc.boardgamearena.com/BGA_Studio_Cookbook#Out-of-turn_actions:_Un-pass
+-For mobile: move dice to right of main board?
 
 FOR ALPHA DEPLOYMENT (BGA Pre-Release Checklist Issues):
 https://en.doc.boardgamearena.com/Pre-release_checklist

@@ -69,20 +69,12 @@
 
 #atheistFamilies {
     width: 400px;
+    /* Match the width of board_background */
     height: 170px;
+    /* Match the height of board_background */
     position: relative;
     margin-top: 20px;
-    overflow: hidden;
-}
-
-#families-remaining-stat {
-    position: absolute;
-    top: 255px;
-    left: 0;
-    right: 0;
-    font-size: 11px;
-    color: #ccc;
-    text-align: center;
+    /* Add margin to create a gap above the div */
 }
 
 #dice {
@@ -284,31 +276,39 @@
 
 .kalua_player_area {
     font-family: 'AHDN', Arial, sans-serif;
+    /* Use AHDN font with fallbacks */
     font-weight: 100;
+    /* Ultra-light weight */
     border: 1px solid #ccc;
     padding: 10px;
     margin: 10px;
     width: 700px;
     min-height: 210px;
+    /* Minimum height, but allow expansion */
     height: auto;
+    /* Allow automatic height expansion */
     background-color: #f9f9f9;
     border-radius: 5px;
     text-align: right;
     box-sizing: border-box;
+    /* Ensure padding and border are included in the width */
     display: inline-block;
     align-items: flex-start;
+    /* Changed from center to flex-start to prevent centering issues */
     overflow: visible;
+    /* Ensure content is not clipped */
 }
 
 .kalua_player_hand {
     min-height: 100px;
-    width: 100%;
+    min-width: 690px;
     max-height: fit-content;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box;
+    /* Ensure padding and border are included in the height */
     display: block;
 }
 
@@ -321,7 +321,7 @@
 
 .kalua_player_families {
     min-height: 40px;
-    width: 100%;
+    min-width: 600px;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -333,34 +333,22 @@
 
 .kalua_player_cards {
     min-height: 200px;
-    /* Minimum height to accommodate cards + scrollbar */
     height: auto !important;
-    /* Let it size to content */
     max-height: none;
-    /* Remove max height restriction */
-    width: fit-content !important;
+    width: 100% !important;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box;
-    /* Ensure padding and border are included in the height */
     display: flex;
-    /* Use flexbox instead of stock default positioning */
     flex-direction: row;
-    flex-wrap: nowrap;
-    /* Critical: prevent wrapping */
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 5px;
-    /* Space between cards */
-    overflow-x: auto;
-    /* Horizontal scrollbar when needed */
-    overflow-y: hidden;
-    /* No vertical scroll */
+    overflow: visible;
     margin-bottom: 5px;
-    /* Space between cards and bottom section */
     margin-top: 5px;
-    /* Space between cards and top section */
 }
 
 /* Override stock positioning for cards to work with flexbox */
@@ -680,6 +668,22 @@
     min-width: 18px;
     text-align: center;
     font-family: Arial, sans-serif;
+}
+
+/* Die badge overlaid on a resolving/resolved card to show the rolled result */
+.kalua-dice-badge {
+    position: absolute;
+    bottom: 4px;
+    width: 36px;
+    height: 36px;
+    background-image: url('img/d6_300_246.png');
+    /* Scale the full 300×246 sprite sheet so each cell is 36px wide */
+    background-size: 216px 180px;
+    background-repeat: no-repeat;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    z-index: 10;
+    pointer-events: none;
 }
 
 /* Completely hide duplicate stacked cards - remove from layout flow */

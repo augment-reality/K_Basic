@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "target": "es5",
+        "module": "none",
+        "lib": [
+            "dom",
+            "esnext"
+        ]
+    },
+    "include": [
+        "**/*.js",
+        "**/*.d.ts"
+    ]
+}

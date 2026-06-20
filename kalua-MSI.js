@@ -29,7 +29,6 @@ define([
                 <div id="board_background">
                     <div id="hkboard"></div>
                     <div id="atheistFamilies"></div>
-                    <div id="families-remaining-stat">Families remaining: <span id="families-remaining-count">0</span></div>
                     <div id="dice"></div>
                 </div>
                 <div id="card_areas">
@@ -74,6 +73,9 @@ define([
                 this.nextPlayOrder = 1000; // Start high to avoid conflicts with database play_order
                 // Card resolution timing variables
                 this.cardResolutionDelay = 800;    // Delay after card is added to resolved area
+                this.cardPlayedBy = {};            // card db-id → player_id
+                this.playedSlotToUniqueId = {};    // slot type id → card uniqueId (for onItemCreate lookup)
+                this.cardDiceResults = {};         // card db-id → [{playerId, sprite, result}]
 
 
                 // Card tooltips for Kalua (JS format)
@@ -245,11 +247,10 @@ define([
                     // Fix: image position should be 0-based (i-1)
                     this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i - 1);
                 }
-                // Add a die for each player matching their color
+                // Add a die for each player matching their color; restore rolled face on reload
                 Object.values(gamedatas.players).forEach(player => {
-                    // Calculate die face: each player's color row starts at (sprite-1)*6 + 1, show face 1 (first face of their color)
-                    const playerDieFace = ((player.sprite - 1) * 6) + 1;
-                    // Use player ID as unique die ID so we can update individual dice
+                    const rolledFace = (player.die && parseInt(player.die) > 0) ? parseInt(player.die) : 1;
+                    const playerDieFace = ((player.sprite - 1) * 6) + rolledFace;
                     this['dice'].addToStockWithId(playerDieFace, player.id);
                 });
                 // Initialize and create atheist families stock
@@ -305,11 +306,35 @@ define([
                 this['played'].create(this, document.getElementById('playedCardsContent'), 120, 181.3);
                 this['played'].image_items_per_row = 5;
                 this['played'].setSelectionMode(0);
+                this['played'].onItemCreate = (card_div, typeId, card_id) => {
+                    // Slot types (play_order + 1000) need a lookup to find the real card uniqueId
+                    const uniqueId = this.playedSlotToUniqueId[typeId] !== undefined
+                        ? this.playedSlotToUniqueId[typeId] : typeId;
+                    // Border first — safe synchronous op, must run before any possible throw
+                    const playedBy = this.cardPlayedBy[card_id];
+                    if (playedBy) this.addPlayerBorderToCard(card_div, playedBy, this['played'], card_id);
+                    // Tooltip deferred: addTooltipHtml can throw if element isn't fully laid out yet,
+                    // and a synchronous throw here would abort addToStockWithId mid-call
+                    const cardType = this.getCardTypeFromUniqueId(uniqueId);
+                    const cardTypeArg = this.getCardIdFromUniqueId(uniqueId);
+                    if (cardType && cardTypeArg) {
+                        const id = card_div.id;
+                        setTimeout(() => this.addCardTooltip(id, cardType, cardTypeArg), 0);
+                    }
+                };
                 // Create stock for resolved cards
                 this['resolved'] = new ebg.stock();
                 this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 181.3);
                 this['resolved'].image_items_per_row = 5;
                 this['resolved'].setSelectionMode(0);
+                this['resolved'].onItemCreate = (card_div, uniqueId, _card_id) => {
+                    const cardType = this.getCardTypeFromUniqueId(uniqueId);
+                    const cardTypeArg = this.getCardIdFromUniqueId(uniqueId);
+                    if (cardType && cardTypeArg) {
+                        const id = card_div.id;
+                        setTimeout(() => this.addCardTooltip(id, cardType, cardTypeArg), 0);
+                    }
+                };
                 // Initialize card stock for each player card div   
                 Object.values(gamedatas.players).forEach(player => {
                     // Create cardbacks stock using the cardbacks div
@@ -326,6 +351,14 @@ define([
                     this[`${player.id}_cards`].image_items_per_row = 5;
                     this[`${player.id}_cards`].setOverlap(0, 0); // No overlap for grouped cards
                     this[`${player.id}_cards`].autowidth = false;
+                    this[`${player.id}_cards`].onItemCreate = (card_div, uniqueId, _card_id) => {
+                        const cardType = this.getCardTypeFromUniqueId(uniqueId);
+                        const cardTypeArg = this.getCardIdFromUniqueId(uniqueId);
+                        if (cardType && cardTypeArg) {
+                            const id = card_div.id;
+                            setTimeout(() => this.addCardTooltip(id, cardType, cardTypeArg), 0);
+                        }
+                    };
 
                     // Only allow selection for the current player's own cards
                     if (player.id == this.player_id) {
@@ -452,90 +485,49 @@ define([
                 this.updateCardGrouping(this.player_id);
                 /* Populate played cards from database */
                 Object.values(gamedatas.playedDisaster).forEach(card => {
-
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    // Override the itemType weight with play_order for proper sorting
-                    if (card.play_order !== undefined) {
-                        this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
-                    }
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
-                    if (this['played'].items && this['played'].items[card.id]) {
-                        this['played'].items[card.id].played_by = card.played_by;
-                    }
-                    this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
-                    this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+                    this.addCardToPlayedStock(uniqueId, card.id, parseInt(card.play_order) || 0, card.played_by);
                 });
                 Object.values(gamedatas.playedBonus).forEach(card => {
-
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    // Override the itemType weight with play_order for proper sorting
-                    if (card.play_order !== undefined) {
-                        this['played'].changeItemsWeight(uniqueId, parseInt(card.play_order));
-                    }
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
-                    if (this['played'].items && this['played'].items[card.id]) {
-                        this['played'].items[card.id].played_by = card.played_by;
-                    }
-                    this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
-                    this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+                    this.addCardToPlayedStock(uniqueId, card.id, parseInt(card.play_order) || 0, card.played_by);
                 });
                 /* Populate resolving cards - these are shown in played area during resolution */
                 Object.values(gamedatas.resolvingDisaster).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-
-                    // For global disasters, update the image position based on multiplier choice
-                    if (parseInt(card.type) === this.ID_GLOBAL_DISASTER && card.multiplier) {
-                        const cardTypeArg = parseInt(card.type_arg);
-                        let imagePos;
-                        switch (card.multiplier) {
-                            case 'avoid':
-                                imagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);
-                                break;
-                            case 'double':
-                                imagePos = this.globalDisasterImageMappings.double(cardTypeArg);
-                                break;
-                            case 'normal':
-                            default:
-                                imagePos = this.globalDisasterImageMappings.normal(cardTypeArg);
-                                break;
-                        }
-                        // Update the item type's image position before adding the card
-                        if (this['played'].item_type && this['played'].item_type[uniqueId]) {
-                            this['played'].item_type[uniqueId].image_position = imagePos;
-                        }
-                    }
-
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
-                    if (this['played'].items && this['played'].items[card.id]) {
-                        this['played'].items[card.id].played_by = card.played_by;
-                    }
-                    this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
-                    this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+                    this.addCardToPlayedStock(uniqueId, card.id, parseInt(card.play_order) || 0, card.played_by, card.multiplier);
                 });
                 Object.values(gamedatas.resolvingBonus).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
-                    this['played'].addToStockWithId(uniqueId, card.id);
-                    // Store player info and add tooltip with player information
-                    if (this['played'].items && this['played'].items[card.id]) {
-                        this['played'].items[card.id].played_by = card.played_by;
-                    }
-                    this.addCardTooltipByUniqueId('played', uniqueId, card.played_by, card.id);
-                    this.addPlayerBorderToCard(card.id, card.played_by, 'played');
+                    this.addCardToPlayedStock(uniqueId, card.id, parseInt(card.play_order) || 0, card.played_by);
                 });
                 /* Populate resolved cards from database */
                 Object.values(gamedatas.resolvedDisaster).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                     this['resolved'].addToStockWithId(uniqueId, card.id);
-                    this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
                 });
                 Object.values(gamedatas.resolvedBonus).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                     this['resolved'].addToStockWithId(uniqueId, card.id);
-                    this.addCardTooltipByUniqueId('resolved', uniqueId, null, card.id);
                 });
+
+                /* Restore dice badges on reload: if dice were rolled for the current resolving card, re-attach badges */
+                const diceForCard = parseInt(gamedatas.dice_completed_for_card) || 0;
+                if (diceForCard > 0) {
+                    // Find that card in the played/resolving area
+                    const cardEl = document.getElementById(`playedCardsContent_item_${diceForCard}`);
+                    if (cardEl) {
+                        Object.values(gamedatas.players).forEach(player => {
+                            const rolled = parseInt(player.die) || 0;
+                            if (rolled > 0) {
+                                const sprite = parseInt(player.sprite);
+                                if (!this.cardDiceResults[diceForCard]) this.cardDiceResults[diceForCard] = [];
+                                this.cardDiceResults[diceForCard].push({ playerId: player.id, sprite, result: rolled });
+                                this.addDiceBadgeToCardElement(cardEl, player.id, sprite, rolled);
+                            }
+                        });
+                    }
+                }
                 /* Add cardbacks for other players' cards */
                 Object.values(gamedatas.players).forEach(player => {
                     if (player.id != this.player_id) {
@@ -572,7 +564,6 @@ define([
                     // Optimize prayer token display for each player's current prayer count (redundant but safe)
                     this.optimizePrayerTokens(player.id, player.prayer);
                 });
-                this.updateFamiliesRemainingDisplay();
                 // Set initial round leader prayer icon to grayed version
                 if (gamedatas.round_leader) {
                     this.updateRoundLeaderIcons(null, gamedatas.round_leader);
@@ -624,7 +615,7 @@ define([
                 this.setupNotifications();
                 // Load dice roll sound effect with explicit path
                 try {
-                    this.sounds.load('dice_roll', 'Dice Roll Sound', g_gamethemeurl + 'img/dice_roll');
+                    this.sounds.load('dice_roll', 'Dice Roll Sound', g_gamethemeurl + 'sounds/dice_roll');
                 } catch (e) {
                     console.warn('Could not load dice roll sound:', e);
                 }
@@ -704,104 +695,6 @@ define([
                 // Add combined tooltip
                 this.addTooltipHtml(elementId, fullTooltip, 350);
             },
-            addCardTooltipByUniqueId: function (stockName, uniqueId, playerId = null, cardId = null) {
-                const cardType = this.getCardTypeFromUniqueId(uniqueId);
-                const cardIdFromUnique = this.getCardIdFromUniqueId(uniqueId);
-                if (cardType && cardIdFromUnique !== null) {
-                    // Use BGA stock system's built-in tooltip functionality if available
-                    setTimeout(() => {
-                        // Use provided playerId or try to find it from stored data
-                        let finalPlayerId = playerId;
-                        if (this[stockName] && this[stockName].getAllItems) {
-                            const stockItems = this[stockName].getAllItems();
-                            let targetItem = null;
-
-                            // If we have a specific cardId, find that exact item
-                            if (cardId !== null) {
-                                targetItem = stockItems.find(item => item.id == cardId);
-                            } else {
-                                // Fallback: find the latest item with this uniqueId that doesn't have a tooltip
-                                const itemsWithType = stockItems.filter(item => item.type == uniqueId);
-                                for (let i = itemsWithType.length - 1; i >= 0; i--) {
-                                    const item = itemsWithType[i];
-                                    const elementId = this[stockName].getItemDivId(item.id);
-                                    const element = document.getElementById(elementId);
-                                    if (element && !element.hasAttribute('data-tooltip-added')) {
-                                        targetItem = item;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (targetItem) {
-                                const elementId = this[stockName].getItemDivId(targetItem.id);
-                                // Try to get player ID from stored data if not provided
-                                if (!finalPlayerId && this[stockName].items && this[stockName].items[targetItem.id] && this[stockName].items[targetItem.id].played_by) {
-                                    finalPlayerId = this[stockName].items[targetItem.id].played_by;
-                                }
-                                if (elementId) {
-                                    this.addCardTooltip(elementId, cardType, cardIdFromUnique, finalPlayerId);
-                                    return;
-                                }
-                            }
-                        }
-                        // Fallback to previous method
-                        this.addTooltipToLatestCard(stockName, uniqueId, cardType, cardIdFromUnique, finalPlayerId);
-                    }, 300);
-                }
-            },
-            addTooltipToLatestCard: function (stockName, uniqueId, cardType, cardId, playerId = null) {
-                // Find elements based on stock type
-                let allElements;
-                if (stockName.includes('_cards')) {
-                    // Player card stocks use the standard pattern
-                    allElements = document.querySelectorAll(`[id^="${stockName}_item_"]`);
-                } else if (stockName === 'played' || stockName === 'resolved') {
-                    // Played/resolved stocks use different patterns
-                    allElements = document.querySelectorAll(`[id*="${stockName}"] .stockitem, .${stockName} .stockitem, [class*="${stockName}"] .stockitem`);
-                    if (allElements.length === 0) {
-                        // Try broader patterns
-                        allElements = document.querySelectorAll(`[id*="${stockName}"][id*="item"], [class*="${stockName}"][class*="item"]`);
-                    }
-                } else {
-                    // Fallback to standard pattern
-                    allElements = document.querySelectorAll(`[id^="${stockName}_item_"]`);
-                }
-                // Find the latest element that doesn't have a tooltip yet
-                let targetElement = null;
-                for (let i = allElements.length - 1; i >= 0; i--) {
-                    const element = allElements[i];
-                    if (!element.hasAttribute('data-tooltip-added')) {
-                        targetElement = element;
-                        break;
-                    }
-                }
-                if (targetElement) {
-                    const elementId = targetElement.id || `${stockName}_${uniqueId}`;
-                    this.addCardTooltip(elementId, cardType, cardId, playerId);
-                    targetElement.setAttribute('data-tooltip-added', 'true');
-                    targetElement.setAttribute('data-unique-id', uniqueId);
-                    if (playerId) {
-                        targetElement.setAttribute('data-played-by', playerId);
-                    }
-                } else {
-                }
-            },
-            // Function to manually refresh tooltips for all visible cards
-            refreshAllCardTooltips: function () {
-                // Find all player card areas
-                const playerCardAreas = document.querySelectorAll('[id$="_cards_item_"]');
-                const playedCardsArea = document.querySelectorAll('[id^="played_item_"]');
-                // For each card element, try to determine what it should be
-                const allCardElements = [...playerCardAreas, ...playedCardsArea];
-                allCardElements.forEach((element) => {
-                    if (!element.hasAttribute('data-tooltip-added')) {
-                        // Add a generic "Card" tooltip for now - better than nothing
-                        this.addTooltip(element.id, "Card", "");
-                        element.setAttribute('data-tooltip-added', 'true');
-                    }
-                });
-            },
             ///////////////////////////////////////////////////
             //// Game & client states
             onEnteringState: function (stateName, args) {
@@ -815,15 +708,43 @@ define([
                         break;
                     case 'phaseThreeCheckGlobal':
                         if (this.isCurrentPlayerActive()) {
+                            const stateArgs  = args.args || {};
+                            const avoidCost  = stateArgs.avoid_cost  || 6;
+                            const doubleCost = stateArgs.double_cost || 12;
+                            const canAvoid   = !!stateArgs.can_avoid;
+                            const canDouble  = !!stateArgs.can_double;
+
                             this.addActionButton('normal-btn', _('Normal Effect'), () => {
                                 this.bgaPerformAction('actNormalGlobal', {});
                             });
-                            this.addActionButton('avoid-btn', _('Avoid (Cost: Prayer)'), () => {
-                                this.bgaPerformAction('actAvoidGlobal', {});
-                            });
-                            this.addActionButton('double-btn', _('Double (Cost: Prayer)'), () => {
-                                this.bgaPerformAction('actDoubleGlobal', {});
-                            });
+
+                            this.addActionButton('avoid-btn',
+                                _('Avoid') + ` (${avoidCost} ` + _('Prayer') + `)`,
+                                () => {
+                                    if (!canAvoid) {
+                                        this.showMessage(_(`Not enough prayer to avoid (need ${avoidCost})`), 'error');
+                                        return;
+                                    }
+                                    this.bgaPerformAction('actAvoidGlobal', {});
+                                }
+                            );
+                            if (!canAvoid) {
+                                dojo.addClass('avoid-btn', 'disabled');
+                            }
+
+                            this.addActionButton('double-btn',
+                                _('Double') + ` (${doubleCost} ` + _('Prayer') + `)`,
+                                () => {
+                                    if (!canDouble) {
+                                        this.showMessage(_(`Not enough prayer to double (need ${doubleCost})`), 'error');
+                                        return;
+                                    }
+                                    this.bgaPerformAction('actDoubleGlobal', {});
+                                }
+                            );
+                            if (!canDouble) {
+                                dojo.addClass('double-btn', 'disabled');
+                            }
                         }
                         break;
                     case 'phaseThreeSelectTargets':
@@ -986,8 +907,10 @@ define([
                             // Check if player should be automatically passed
                             const cardsInHand = this[`${this.player_id}_cards`].count();
                             const currentPrayer = this.prayerCounters[this.player_id].getValue();
-                            if (cardsInHand === 0 && currentPrayer < 5) {
+                            const isRoundLeader = this.player_id == this.gamedatas.round_leader;
+                            if (cardsInHand === 0 && currentPrayer < 5 && !isRoundLeader) {
                                 // Player has no cards and insufficient prayer to buy more - automatically pass
+                                // (Round leader is exempt: they always need to see convert/pass buttons)
                                 this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
                                 // Automatically trigger the pass action after a brief delay to show the message
                                 setTimeout(() => {
@@ -1109,61 +1032,38 @@ define([
                                     } else {
                                     }
                                 }, 50); // Very short delay just to ensure buttons are ready
-                            } else if (isAutoRoll && this.autoRollAttempted) {
-                            } else if (!isAutoRoll && this.isCurrentPlayerActive() && !this.autoRollAttempted) {
-                                // Set up a backup checker for auto-roll in case preferences load later
-                                let checkCount = 0;
-                                const maxChecks = 10;
-                                const checkInterval = setInterval(() => {
-                                    checkCount++;
-                                    const hasAutoClass = document.body.classList.contains('kalua_auto_dice');
-                                    if (hasAutoClass && !this.autoRollAttempted && this.gamedatas.gamestate.name === 'phaseThreeRollDice' && this.isCurrentPlayerActive()) {
-                                        this.autoRollAttempted = true;
-                                        clearInterval(checkInterval);
-                                        try {
-                                            this.bgaPerformAction('actRollDie', {});
-                                        } catch (error) {
-                                            console.error('Auto-roll action failed in backup checker:', error);
-                                        }
-                                    } else if (checkCount >= maxChecks || this.gamedatas.gamestate.name !== 'phaseThreeRollDice' || !this.isCurrentPlayerActive()) {
-                                        clearInterval(checkInterval);
-                                    }
-                                }, 200); // Check every 200ms
                             }
-                            const buttonText = isAutoRoll ? _('Roll Dice (Auto)') : _('Roll Dice');
-                            this.addActionButton('roll-dice-btn', buttonText, () => {
-                                // Only allow manual rolling if auto-roll is disabled
-                                if (!isAutoRoll) {
-                                    // Disable the button immediately to prevent double-clicks
+                            // Only show roll button to players who actually need to roll
+                            if (this.isCurrentPlayerActive()) {
+                                const buttonText = isAutoRoll ? _('Roll Dice (Auto)') : _('Roll Dice');
+                                this.addActionButton('roll-dice-btn', buttonText, () => {
+                                    if (!isAutoRoll && !this.autoRollAttempted) {
+                                        this.autoRollAttempted = true;
+                                        const rollBtn = document.getElementById('roll-dice-btn');
+                                        if (rollBtn) {
+                                            rollBtn.disabled = true;
+                                            rollBtn.style.opacity = '0.5';
+                                        }
+                                        this.bgaPerformAction('actRollDie', {});
+                                    }
+                                });
+                                if (isAutoRoll) {
                                     const rollBtn = document.getElementById('roll-dice-btn');
                                     if (rollBtn) {
                                         rollBtn.disabled = true;
-                                        rollBtn.style.opacity = '0.5';
+                                        rollBtn.style.backgroundColor = '#cccccc';
+                                        rollBtn.style.color = '#666666';
+                                        rollBtn.style.opacity = '0.6';
+                                        rollBtn.style.cursor = 'not-allowed';
+                                        rollBtn.title = _('Dice will roll automatically (auto-roll enabled in preferences)');
                                     }
-                                    this.bgaPerformAction('actRollDie', {});
-                                } else {
-                                }
-                            });
-                            // If auto-roll is enabled, disable the button and style it as inactive
-                            if (isAutoRoll) {
-                                const rollBtn = document.getElementById('roll-dice-btn');
-                                if (rollBtn) {
-                                    rollBtn.disabled = true;
-                                    rollBtn.style.backgroundColor = '#cccccc';
-                                    rollBtn.style.color = '#666666';
-                                    rollBtn.style.opacity = '0.6';
-                                    rollBtn.style.cursor = 'not-allowed';
-                                    rollBtn.title = _('Dice will roll automatically (auto-roll enabled in preferences)');
                                 }
                             }
                             break;
                         case 'phaseThreeResolveAmulets':
-                            // Note: Do not call updatePageTitle() here as it causes infinite recursion
-                            // The page title will be updated by the BGA framework automatically
-                            // Check if current player has amulets
-                            const currentPlayerId = this.player_id;
-                            const currentPlayerAmulets = this.gamedatas.players[currentPlayerId]?.amulet || 0;
-                            if (currentPlayerAmulets > 0) {
+                            // Only show amulet buttons to active players — the server already
+                            // filtered to only players who actually have amulets (stResolveAmulets)
+                            if (this.isCurrentPlayerActive()) {
                                 this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
                                     this.disableAmuletButtons();
                                     this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
@@ -1172,10 +1072,6 @@ define([
                                     this.disableAmuletButtons();
                                     this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
                                 });
-                            } else {
-                                // Player has no amulets, just waiting
-                                // Note: Do not call updatePageTitle() here as it causes infinite recursion
-                                // The page title will be updated by the BGA framework automatically
                             }
                             break;
                     }
@@ -1234,12 +1130,15 @@ define([
                     const groupIcon = document.createElement('div');
                     groupIcon.className = 'prayer_token_icon group';
 
-                    const groupMultiplier = document.createElement('div');
-                    groupMultiplier.className = 'prayer_token_multiplier';
-                    groupMultiplier.textContent = `×${fiveGroups}`;
-
                     groupDiv.appendChild(groupIcon);
-                    groupDiv.appendChild(groupMultiplier);
+
+                    if (fiveGroups > 1) {
+                        const groupMultiplier = document.createElement('div');
+                        groupMultiplier.className = 'prayer_token_multiplier';
+                        groupMultiplier.textContent = `×${fiveGroups}`;
+                        groupDiv.appendChild(groupMultiplier);
+                    }
+
                     prayerContent.appendChild(groupDiv);
                 }
 
@@ -1251,12 +1150,15 @@ define([
                     const singleIcon = document.createElement('div');
                     singleIcon.className = 'prayer_token_icon single';
 
-                    const singleMultiplier = document.createElement('div');
-                    singleMultiplier.className = 'prayer_token_multiplier';
-                    singleMultiplier.textContent = `×${singles}`;
-
                     singleDiv.appendChild(singleIcon);
-                    singleDiv.appendChild(singleMultiplier);
+
+                    if (singles > 1) {
+                        const singleMultiplier = document.createElement('div');
+                        singleMultiplier.className = 'prayer_token_multiplier';
+                        singleMultiplier.textContent = `×${singles}`;
+                        singleDiv.appendChild(singleMultiplier);
+                    }
+
                     prayerContent.appendChild(singleDiv);
                 }
 
@@ -1268,58 +1170,30 @@ define([
             ///////////////////////////////////////////////////
             //// Global disaster card image switching
             updateGlobalDisasterCardImage: function (cardId, cardTypeArg, multiplierChoice) {
-                // Get the unique ID for this global disaster card
-                const uniqueId = this.getCardUniqueId(this.ID_GLOBAL_DISASTER, cardTypeArg);
-                // Determine the new image position based on multiplier choice
                 let newImagePos;
                 switch (multiplierChoice) {
-                    case 'avoid':
-                        newImagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);
-                        break;
-                    case 'double':
-                        newImagePos = this.globalDisasterImageMappings.double(cardTypeArg);
-                        break;
-                    case 'normal':
-                    default:
-                        newImagePos = this.globalDisasterImageMappings.normal(cardTypeArg);
-                        break;
+                    case 'avoid':  newImagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);  break;
+                    case 'double': newImagePos = this.globalDisasterImageMappings.double(cardTypeArg); break;
+                    default:       newImagePos = this.globalDisasterImageMappings.normal(cardTypeArg); break;
                 }
 
-                console.log(`Updating card ${cardId} (type_arg ${cardTypeArg}) to ${multiplierChoice}: position ${newImagePos}`);
-
-                // Update the card image in the played cards stock
-                if (this['played'] && this['played'].item_type && this['played'].item_type[uniqueId]) {
-                    // Store original played_by data before removing
-                    let playedBy = null;
-                    if (this['played'].items && this['played'].items[cardId]) {
-                        playedBy = this['played'].items[cardId].played_by;
-                    }
-
-                    this['played'].item_type[uniqueId].image_position = newImagePos;
-
-                    // Force a visual update of the specific card if it exists in the played stock
+                // Cards in played stock use slot type IDs (play_order + 1000), not uniqueId.
+                // Find the item to get its actual slot type, then update + re-render in place.
+                if (this['played']) {
                     const playedItems = this['played'].getAllItems();
                     const targetItem = playedItems.find(item => item.id == cardId);
                     if (targetItem) {
-                        // Remove and re-add the item to force visual update
-                        this['played'].removeFromStockById(cardId);
-                        this['played'].addToStockWithId(uniqueId, cardId);
-
-                        // Restore played_by data
-                        if (playedBy && this['played'].items && this['played'].items[cardId]) {
-                            this['played'].items[cardId].played_by = playedBy;
+                        const slotTypeId = targetItem.type;
+                        if (this['played'].item_type && this['played'].item_type[slotTypeId]) {
+                            this['played'].item_type[slotTypeId].image_position = newImagePos;
+                            this['played'].removeFromStockById(cardId);
+                            this['played'].addToStockWithId(slotTypeId, cardId);
                         }
-
-                        // Re-add tooltip and player border
-                        setTimeout(() => {
-                            this.addCardTooltipByUniqueId('played', uniqueId, playedBy, cardId);
-                            if (playedBy) {
-                                this.addPlayerBorderToCard(cardId, playedBy, 'played');
-                            }
-                        }, 100);
                     }
                 }
-                // Update in resolved cards stock as well (in case it moves there later)
+
+                // Resolved stock uses standard uniqueId types
+                const uniqueId = this.getCardUniqueId(this.ID_GLOBAL_DISASTER, cardTypeArg);
                 if (this['resolved'] && this['resolved'].item_type && this['resolved'].item_type[uniqueId]) {
                     this['resolved'].item_type[uniqueId].image_position = newImagePos;
                 }
@@ -1340,194 +1214,55 @@ define([
                 /* TODO exception? */
                 return 0;
             },
+            // Returns the sprite position in Cards_600_1632_played.png for a given uniqueId.
+            // Global (1-10): positions 5-14; Local (11-15): positions 0-4; Bonus (16-22): positions 15-21
+            getPlayedImagePos: function (uniqueId) {
+                if (uniqueId >= 1  && uniqueId <= 10) return uniqueId + 4;   // global: card_id + 4
+                if (uniqueId >= 11 && uniqueId <= 15) return uniqueId - 11;  // local: card_id - 1
+                if (uniqueId >= 16 && uniqueId <= 22) return uniqueId - 1;   // bonus: card_id + 14
+                return 0;
+            },
+            // Registers a unique slot type in the played stock for one card at play_order position,
+            // then adds the card. Each slot type is independent so same-uniqueId cards sort correctly.
+            addCardToPlayedStock: function (uniqueId, cardId, playOrder, playedBy, multiplier) {
+                const slotTypeId = playOrder + 1000;
+                let imagePos = this.getPlayedImagePos(uniqueId);
+                // Apply multiplier override for global disasters in resolving state
+                if (multiplier && uniqueId >= 1 && uniqueId <= 10) {
+                    const cardTypeArg = this.getCardIdFromUniqueId(uniqueId);
+                    if (multiplier === 'avoid')  imagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);
+                    if (multiplier === 'double') imagePos = this.globalDisasterImageMappings.double(cardTypeArg);
+                }
+                this['played'].addItemType(slotTypeId, playOrder, g_gamethemeurl + 'img/Cards_600_1632_played.png', imagePos);
+                this.playedSlotToUniqueId[slotTypeId] = uniqueId;
+                this.cardPlayedBy[cardId] = playedBy;
+                this['played'].addToStockWithId(slotTypeId, cardId);
+            },
             playCardOnTable: function (player_id, color, value, card_id) {
-
-                // You played a card. If it exists in your hand, move card from there and remove
-                // corresponding item
                 this[`${player_id}_cards`].removeFromStockById(card_id);
                 if (this.cardCounters[player_id]) {
                     const currentValue = this.cardCounters[player_id].getValue();
                     this.cardCounters[player_id].setValue(Math.max(0, currentValue - 1));
                 }
-                // Update card grouping after removing card
                 this.updateCardGrouping(player_id);
-                // Add card to played cards area
-                const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value)); // Generate unique ID
-                this['played'].addToStockWithId(uniqueId, card_id); // Add card to played cards area  
-                // Store player info for this card for future reference
-                if (this['played'] && this['played'].items && this['played'].items[card_id]) {
-                    this['played'].items[card_id].played_by = player_id;
-                }
-                // Add tooltip with player information
-                setTimeout(() => {
-                    const cardType = this.getCardTypeFromUniqueId(uniqueId);
-                    const cardIdFromUnique = this.getCardIdFromUniqueId(uniqueId);
-                    if (cardType && cardIdFromUnique !== null) {
-                        // Find the DOM element for this card
-                        const stockItems = this['played'].getAllItems();
-
-                        const targetItem = Object.values(stockItems).find(item => item.type == uniqueId);
-                        if (targetItem) {
-                            const elementId = this['played'].getItemDivId(targetItem.id);
-                            if (elementId) {
-                                // Add tooltip with player information
-                                this.addCardTooltip(elementId, cardType, cardIdFromUnique, player_id);
-                            } else {
-
-                            }
-                        } else {
-
-                            // Try alternative approach - find by card_id directly
-                            const fallbackElementId = `played_item_${card_id}`;
-                            this.addCardTooltip(fallbackElementId, cardType, cardIdFromUnique, player_id);
-                        }
-                    } else {
-
-                    }
-                    // Add visual player indicator
-                    this.addPlayerIndicator(card_id, player_id, 'played');
-                }, 200);
+                const uniqueId = this.getCardUniqueId(parseInt(color), parseInt(value));
+                this.addCardToPlayedStock(uniqueId, card_id, this.nextPlayOrder, player_id);
+                this.nextPlayOrder++;
             },
-            // Add a simple colored indicator next to the card
-            addPlayerIndicator: function (card_id, player_id, stock_name) {
-                try {
-                    // Get player color
-                    let playerColor = '#4685FF'; // default blue
-                    let playerName = 'Unknown';
-                    if (this.gamedatas && this.gamedatas.players && this.gamedatas.players[player_id]) {
-                        playerColor = this.gamedatas.players[player_id].color;
-                        playerName = this.gamedatas.players[player_id].name;
-                        // Apply the same color fixing logic using helper function
-                        const originalColor = playerColor;
-                        playerColor = this.fixPlayerColor(playerColor);
-                        if (playerColor !== originalColor) {
-                        }
-                    }
-                    setTimeout(() => {
-                        // Find the card element
-                        const selectors = [
-                            `#${stock_name}_item_${card_id}`,
-                            `[id="${stock_name}_item_${card_id}"]`,
-                            `[id*="${stock_name}"][id*="item_${card_id}"]`
-                        ];
-                        let cardElement = null;
-                        for (let selector of selectors) {
-                            cardElement = document.querySelector(selector);
-                            if (cardElement) break;
-                        }
-                        if (cardElement) {
-                            // Remove any existing indicator
-                            const existingIndicator = cardElement.querySelector('.player-indicator');
-                            if (existingIndicator) {
-                                existingIndicator.remove();
-                            }
-                            // Create player indicator
-                            const indicator = document.createElement('div');
-                            indicator.className = 'player-indicator';
-                            indicator.style.cssText = `
-                            position: absolute;
-                            top: -5px;
-                            right: -5px;
-                            width: 20px;
-                            height: 20px;
-                            background-color: ${playerColor};
-                            border: 2px solid white;
-                            border-radius: 50%;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                            z-index: 10;
-                            cursor: help;
-                        `;
-                            indicator.title = `Played by ${playerName}`;
-                            // Ensure the card element has relative positioning
-                            if (getComputedStyle(cardElement).position === 'static') {
-                                cardElement.style.position = 'relative';
-                            }
-                            cardElement.appendChild(indicator);
-
-                        } else {
-                            console.warn(`Could not find card element for ${stock_name}_item_${card_id}`);
-                        }
-                    }, 150);
-                } catch (error) {
-                    console.error('Error in addPlayerIndicator:', error);
-                }
-            },
-            // Helper function to add player color border to cards
-            addPlayerBorderToCard: function (card_id, player_id, stock_name) {
-                if (!player_id || !this.gamedatas.players[player_id]) {
-                    console.warn(`No player data found for player ${player_id}`);
-                    return;
-                }
-                // Get player's fixed color using helper function
-                let fixedColor = this.gamedatas.players[player_id].color;
-                const originalColor = fixedColor;
-                fixedColor = this.fixPlayerColor(fixedColor);
-                if (fixedColor !== originalColor) {
-                } else {
-                }
-                // Apply CSS class using BGA Stock extraClasses functionality
+            // Add player color border to a card div (called from onItemCreate where div is guaranteed to exist)
+            addPlayerBorderToCard: function (card_div, player_id, stock, card_id) {
+                if (!player_id || !this.gamedatas.players[player_id]) return;
+                const fixedColor = this.fixPlayerColor(this.gamedatas.players[player_id].color);
                 const colorClass = this.getPlayerColorClass(fixedColor);
-                if (!colorClass) {
-                    console.warn(`No color class found for color ${fixedColor}`);
-                    return;
-                }
-                if (this[stock_name]) {
-                    // Use setTimeout to ensure the stock item exists, with retry logic
-                    const attemptBorderApplication = (attempt = 1, maxAttempts = 5) => {
-                        setTimeout(() => {
-                            let applied = false;
-                            // Method 1: Try BGA Stock addExtraClass method
-                            try {
-                                if (this[stock_name].addExtraClass) {
-                                    this[stock_name].addExtraClass(card_id, colorClass);
-
-                                    applied = true;
-                                }
-                            } catch (e) {
-                                console.warn('addExtraClass method failed:', e);
-                            }
-                            // Method 2: Try multiple DOM selector approaches
-                            if (!applied) {
-                                const selectors = [
-                                    `#${stock_name}_item_${card_id}`,
-                                    `[id="${stock_name}_item_${card_id}"]`,
-                                    `[id*="${stock_name}"][id*="item_${card_id}"]`,
-                                    `[id*="${card_id}"]`
-                                ];
-                                for (let selector of selectors) {
-                                    const cardElement = document.querySelector(selector);
-                                    if (cardElement) {
-                                        cardElement.classList.add(colorClass);
-
-                                        applied = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            // Method 3: Try finding by stock item class and data attributes
-                            if (!applied) {
-                                const stockElements = document.querySelectorAll(`.stockitem[data-card-id="${card_id}"], .stockitem[id*="${card_id}"]`);
-                                if (stockElements.length > 0) {
-                                    stockElements.forEach(element => {
-                                        element.classList.add(colorClass);
-
-                                    });
-                                    applied = true;
-                                }
-                            }
-                            if (!applied && attempt < maxAttempts) {
-
-                                attemptBorderApplication(attempt + 1, maxAttempts);
-                            } else if (!applied) {
-                                console.error(`Could not find or apply color class to card ${card_id} in stock ${stock_name} after ${maxAttempts} attempts`);
-                                // Log all possible elements for debugging
-                                const allElements = document.querySelectorAll(`[id*="${card_id}"]`);
-                            }
-                        }, attempt * 100); // Increase delay with each attempt
-                    };
-                    attemptBorderApplication();
+                if (colorClass) {
+                    // Register with stock so class persists through re-renders
+                    if (stock && card_id !== undefined && stock.addExtraClass) {
+                        stock.addExtraClass(card_id, colorClass);
+                    }
+                    card_div.classList.add(colorClass);
                 } else {
-                    console.warn(`Stock ${stock_name} not found`);
+                    // Fallback: apply box-shadow directly with the player's hex color
+                    card_div.style.boxShadow = `0 0 0 4px ${fixedColor}, 0 4px 8px rgba(0, 0, 0, 0.25)`;
                 }
             },
             // Helper function to get CSS class name based on player color
@@ -1546,9 +1281,11 @@ define([
                 if (!color) {
                     return '#4685FF'; // Default to blue if no color
                 }
-                // Ensure it starts with #
+                // Ensure it starts with # and normalize to uppercase
                 if (!color.startsWith('#')) {
-                    color = '#' + color;
+                    color = '#' + color.toUpperCase();
+                } else {
+                    color = color.toUpperCase();
                 }
                 // If color is truncated (length 6), fix it
                 if (color.length === 6) {
@@ -1581,14 +1318,11 @@ define([
                 return `rgba(${r}, ${g}, ${b}, ${alpha})`;
             },
             drawCard: function (player, card_id, card_type, card_type_arg) {
-                const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
-                this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
-                this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId, null, card_id); // Add tooltip
-                // Force layout update to ensure cards display properly
+                const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
+                this[`${player}_cards`].addToStockWithId(uniqueId, card_id);
                 if (this[`${player}_cards`]) {
                     this[`${player}_cards`].updateDisplay();
                 }
-                // Update card grouping to show counts
                 this.updateCardGrouping(player);
             },
             ///////////////////////////////////////////////////
@@ -1797,6 +1531,40 @@ define([
                     existingOverlay.remove();
                 }
             },
+
+            /**
+             * Attach (or refresh) a die badge on a card DOM element.
+             * Multiple players' dice stack right-to-left along the card's bottom edge.
+             */
+            addDiceBadgeToCardElement: function (cardEl, playerId, playerSprite, dieResult) {
+                if (!cardEl) return;
+                // Remove stale badge for this player first
+                const existing = cardEl.querySelector(`.kalua-dice-badge[data-player-id="${playerId}"]`);
+                if (existing) existing.remove();
+
+                const BADGE = 36;
+                const totalType = (playerSprite - 1) * 6 + dieResult; // 1-indexed sprite row × 6 + face
+                const col = (totalType - 1) % 6;
+                const row = Math.floor((totalType - 1) / 6);
+
+                const badge = document.createElement('div');
+                badge.className = 'kalua-dice-badge';
+                badge.dataset.playerId = playerId;
+                badge.style.backgroundPosition = `-${col * BADGE}px -${row * BADGE}px`;
+                // Stack right-to-left: count existing badges before appending
+                const stackIndex = cardEl.querySelectorAll('.kalua-dice-badge').length;
+                badge.style.right = `${2 + stackIndex * (BADGE + 2)}px`;
+                cardEl.appendChild(badge);
+            },
+
+            /** Transfer all tracked dice badges from one card element to another (played → resolved). */
+            transferDiceBadges: function (card_id) {
+                const results = this.cardDiceResults[card_id];
+                if (!results || results.length === 0) return;
+                const destEl = document.getElementById(`resolvedCardsContent_item_${card_id}`);
+                if (!destEl) return;
+                results.forEach(e => this.addDiceBadgeToCardElement(destEl, e.playerId, e.sprite, e.result));
+            },
             movetokens: function (tokenTypeToMove, desiredShift) {
                 let flag = false;
                 for (let x = 0; x <= 10; x++) {
@@ -1837,16 +1605,6 @@ define([
                 this.movetokens(sprite - 1, 1);
                 // Update prediction panel if active
                 this.refreshPredictionPanelIfActive();
-            },
-            updateFamiliesRemainingDisplay: function () {
-                let total = 0;
-                for (const player_id in this.gamedatas.players) {
-                    if (this.familyCounters[player_id]) {
-                        total += this.familyCounters[player_id].getValue();
-                    }
-                }
-                const el = document.getElementById('families-remaining-count');
-                if (el) el.textContent = total;
             },
             convertAtheists: function (player_id, num_atheists) {
                 const atheistFamilies = this['atheists'];
@@ -2113,7 +1871,7 @@ define([
                 }
             },
             sacrificeLeader: function (player_id, player_no, num_atheists) {
-                const playerFamilies = this[`fams_${this.player_id}`];
+                const playerFamilies = this[`fams_${player_id}`];
                 const atheistFamilies = this['atheists'];
                 for (let i = 0; i < num_atheists; i++) {
                     atheistFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from atheist families
@@ -2148,15 +1906,11 @@ define([
                 this.notifqueue.setSynchronous('leaderRecovered', 500);
                 this.notifqueue.setSynchronous('templeBuilt', 500);
                 this.notifqueue.setSynchronous('amuletGained', 500);
-                this.notifqueue.setSynchronous('cardResolved', 500); // Reduced to prevent timeout
+                this.notifqueue.setSynchronous('cardResolved', 1500);
                 // cardBeingResolved removed - it's now a no-op and doesn't need delay
                 this.notifqueue.setSynchronous('diceRolled', 500);
                 this.notifqueue.setSynchronous('amuletUsed', 500);
                 this.notifqueue.setSynchronous('amuletNotUsed', 500);
-                // Add tooltips to any cards that might have been missed
-                setTimeout(() => {
-                    this.refreshAllCardTooltips();
-                }, 1000);
             },
             onPlayerHandSelectionChanged: function () {
                 const selectedCards = this[`${this.player_id}_cards`].getSelectedItems();
@@ -2251,15 +2005,10 @@ define([
             },
             // Helper function to get card info from unique ID
             getCardInfoFromUniqueId: function (uniqueId) {
-                // Reverse the logic from getCardUniqueId
-                if (uniqueId >= 3001 && uniqueId <= 3007) {
-                    return { type: this.ID_BONUS, type_arg: uniqueId - 3000 };
-                } else if (uniqueId >= 2001 && uniqueId <= 2005) {
-                    return { type: this.ID_LOCAL_DISASTER, type_arg: uniqueId - 2000 };
-                } else if (uniqueId >= 1001 && uniqueId <= 1010) {
-                    return { type: this.ID_GLOBAL_DISASTER, type_arg: uniqueId - 1000 };
-                }
-                return { type: 0, type_arg: 0 };
+                return {
+                    type: this.getCardTypeFromUniqueId(uniqueId) || 0,
+                    type_arg: this.getCardIdFromUniqueId(uniqueId) || 0
+                };
             },
             notif_playerDrewCard: async function (args) {
                 const player_id = args.player_id;
@@ -2315,7 +2064,6 @@ define([
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
                 }
-                this.updateFamiliesRemainingDisplay();
             },
             notif_sacrificeLeader: async function (args) {
                 const player_id = args.player_id;
@@ -2323,7 +2071,6 @@ define([
                 const num_atheists = args.num_atheists;
                 const player_no = args.player_no;
                 this.sacrificeLeader(player_id, player_no, num_atheists);
-                this.updateFamiliesRemainingDisplay();
             },
             notif_convertBelievers: async function (args) {
                 const player_id = args.player_id;
@@ -2340,45 +2087,26 @@ define([
                 }
             },
             notif_cardPlayed: function (args) {
-                // Remove the card from the correct player's hand if the stock exists
                 const playerCardsStock = this[`${args.player_id}_cards`];
                 if (playerCardsStock) {
                     playerCardsStock.removeFromStockById(args.card_id);
-                    // Update card grouping after removing card
                     this.updateCardGrouping(args.player_id);
                 }
-                // Remove the cardback from other players' view
                 const cardbackStock = this[`${args.player_id}_cardbacks`];
                 if (cardbackStock) {
                     cardbackStock.removeFromStockById(args.card_id);
-                    // Update cardback grouping after removing
                     this.updateCardbackGrouping(args.player_id);
                 }
-                // Update card counter with exact count from server (prevents negative values)
                 if (this.cardCounters[args.player_id] && args.card_count !== undefined) {
                     this.cardCounters[args.player_id].setValue(Math.max(0, args.card_count));
                 }
-                // Add the card to the played stock
                 const uniqueId = this.getCardUniqueId(parseInt(args.card_type), parseInt(args.card_type_arg));
                 if (this['played']) {
-                    // Set proper weight for play order sorting
-                    this['played'].changeItemsWeight(uniqueId, this.nextPlayOrder);
-                    this.nextPlayOrder++; // Increment for next card
-
-                    // The third parameter is the 'from' DOM ID which creates a flying animation from that element
-                    this['played'].addToStockWithId(uniqueId, args.card_id, `${args.player_id}_cards`);
-                    
-                    // Store player info and add tooltip with player information
-                    if (this['played'].items && this['played'].items[args.card_id]) {
-                        this['played'].items[args.card_id].played_by = args.player_id;
-                    }
-                    this.addCardTooltipByUniqueId('played', uniqueId, args.player_id, args.card_id);
-                    // Add player color border to the played card
-                    this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
+                    this.addCardToPlayedStock(uniqueId, args.card_id, this.nextPlayOrder, args.player_id);
+                    this.nextPlayOrder++;
                 }
-                // Update prayer counter if prayer was spent
-                if (args.new_prayer_total !== undefined && this.prayerCounters[args.player_id]) {
-                    this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
+                if (args.new_prayer_total !== undefined) {
+                    this.updatePlayerPrayer(args.player_id, args.new_prayer_total);
                 }
             },
             notif_cardBought: function (args) {
@@ -2396,8 +2124,6 @@ define([
                     const playerCardsStock = this[`${this.player_id}_cards`];
                     if (playerCardsStock) {
                         playerCardsStock.addToStockWithId(uniqueId, card.id);
-                        this.addCardTooltipByUniqueId(`${this.player_id}_cards`, uniqueId, null, card.id);
-                        // Update card grouping after adding card
                         this.updateCardGrouping(this.player_id);
                     }
                 }
@@ -2539,28 +2265,35 @@ define([
             notif_diceRollRequired: function (args) {
                 // Players who need to roll dice will be prompted in the setupDiceRoll method
             },
-            notif_diceRolled: function (args) {
-                const player_name = args.player_name;
+            notif_diceRolled: async function (args) {
                 const player_id = args.player_id;
                 const result = args.result;
-                // Play dice roll sound effect
-                this.sounds.play('dice_roll');
-                // Wait 0.2 seconds before updating dice graphics
-                setTimeout(() => {
-                    // Reset auto-roll flag when any player rolls dice
-                    // This ensures each client is ready for the next dice roll state
-                    this.autoRollAttempted = false;
+                try {
+                    this.sounds.play('dice_roll');
+                } catch (e) {
+                    console.warn('Could not play dice roll sound:', e);
+                }
+                // Await the delay so BGA notification queue waits before processing next notification
+                await new Promise(resolve => setTimeout(resolve, 200));
+                if (player_id && this.gamedatas.players[player_id]) {
+                    const player = this.gamedatas.players[player_id];
+                    const sprite = parseInt(player.sprite);
+                    const playerDieFace = (sprite - 1) * 6 + result;
 
-                    // Update only the specific player's die
-                    if (player_id && this.gamedatas.players[player_id]) {
-                        const player = this.gamedatas.players[player_id];
-                        // Calculate which dice face to show: player's color row + rolled result
-                        const playerDieFace = ((player.sprite - 1) * 6) + result;
-                        // Remove the old die for this player and add the new result
-                        this['dice'].removeFromStockById(player_id);
-                        this['dice'].addToStockWithId(playerDieFace, player_id);
+                    // Update global dice stock
+                    this['dice'].removeFromStockById(player_id);
+                    this['dice'].addToStockWithId(playerDieFace, player_id);
+
+                    // Attach die badge to the resolving card element
+                    if (args.card_id) {
+                        const card_id = args.card_id;
+                        if (!this.cardDiceResults[card_id]) this.cardDiceResults[card_id] = [];
+                        this.cardDiceResults[card_id] = this.cardDiceResults[card_id].filter(e => e.playerId != player_id);
+                        this.cardDiceResults[card_id].push({ playerId: player_id, sprite, result });
+                        const cardEl = document.getElementById(`playedCardsContent_item_${card_id}`);
+                        this.addDiceBadgeToCardElement(cardEl, player_id, sprite, result);
                     }
-                }, 200); // 0.2 seconds delay
+                }
                 this.disableNextMoveSound();
             },
             notif_templeIncremented: function (args) {
@@ -2673,7 +2406,6 @@ define([
                 }
                 // Update prediction panel if active
                 this.refreshPredictionPanelIfActive();
-                this.updateFamiliesRemainingDisplay();
             },
             notif_leaderRecovered: function (args) {
                 const player_id = args.player_id;
@@ -2732,16 +2464,14 @@ define([
                         return;
                     }
 
-                    // Get source element before adding to destination
-                    const sourceElement = document.getElementById(`played_item_${card_id}`);
+                    // BGA stock element id format: {containerId}_item_{itemId}
+                    const sourceElement = document.getElementById(`playedCardsContent_item_${card_id}`);
 
                     if (!sourceElement) {
-                        console.warn(`Source element not found for card ${card_id}`);
-                        // Just move without animation
+                        // No animation — just move the card
                         this['played'].removeFromStockById(card_id);
                         this['resolved'].addToStockWithId(uniqueId, card_id);
-                        this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
-                        await new Promise(resolve => setTimeout(resolve, 700));
+                        await new Promise(resolve => setTimeout(resolve, 1500));
                         return;
                     }
 
@@ -2749,7 +2479,7 @@ define([
                     this['resolved'].addToStockWithId(uniqueId, card_id);
 
                     // Get destination element
-                    const destElement = document.getElementById(`resolved_item_${card_id}`);
+                    const destElement = document.getElementById(`resolvedCardsContent_item_${card_id}`);
 
                     // Animate if both elements exist
                     if (destElement) {
@@ -2782,17 +2512,19 @@ define([
                         this['played'].removeFromStockById(card_id);
                     }
 
-                    // Add tooltip
-                    this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
+                    // Transfer any dice badges from the played element to the resolved element
+                    setTimeout(() => this.transferDiceBadges(card_id), 150);
 
                     // Wait for animation to complete before proceeding to next notification
-                    await new Promise(resolve => setTimeout(resolve, 700));
+                    await new Promise(resolve => setTimeout(resolve, 1500));
                 }
             },
-            notif_cardBeingResolved: function (args) {
-                // This notification is sent before cardResolved
-                // We don't remove the card here - let cardResolved handle it with animation
-                // Just log for debugging if needed
+            notif_cardBeingResolved: async function (args) {
+                const card_name = args.card_name || '';
+                this.gamedatas.gamestate.description = _('Now resolving: ') + card_name;
+                this.gamedatas.gamestate.descriptionmyturn = this.gamedatas.gamestate.description;
+                this.updatePageTitle();
+                await new Promise(resolve => setTimeout(resolve, 2000));
             },
             notif_cardResolutionComplete: function (args) {
                 // Notification that all cards have been resolved
@@ -2804,6 +2536,7 @@ define([
                 if (this['resolved']) {
                     this['resolved'].removeAll();
                 }
+                this.cardDiceResults = {};
             },
             notif_allCardsCleanup: function (args) {
                 // Clear all cards from both played and resolved stocks
@@ -2813,6 +2546,7 @@ define([
                 if (this['resolved']) {
                     this['resolved'].removeAll();
                 }
+                this.cardDiceResults = {};
             },
             notif_familiesConverted: function (args) {
                 // Update family counter for the affected player
@@ -2846,7 +2580,6 @@ define([
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
                 }
-                this.updateFamiliesRemainingDisplay();
             },
             notif_familiesDied: function (args) {
                 // Update family counter for the affected player
@@ -2872,7 +2605,6 @@ define([
                     }
                 }
                 // Note: Dead families don't go to atheist pool, they just disappear
-                this.updateFamiliesRemainingDisplay();
             },
             ///////////////////////////////////////////////////
             //// Utility Notifications
