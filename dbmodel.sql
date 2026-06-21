@@ -46,10 +46,17 @@ ADD `player_happiness` INT(11) NOT NULL DEFAULT '5',
 ADD `player_prayer` INT(11) NOT NULL DEFAULT '5',
 ADD `player_family` INT(11) NOT NULL DEFAULT '0',
 ADD `player_chief` BOOLEAN NOT NULL DEFAULT '1',
-ADD `player_die` smallint(5) NOT NULL DEFAULT '0',
 ADD `player_temple` INT(11) NOT NULL DEFAULT '0',
 ADD `player_amulet` INT(11) NOT NULL DEFAULT '0',
 ADD `player_card_count` INT(11) NOT NULL DEFAULT '0';
+
+-- Per-player die results stored separately to avoid deadlocks with BGA's
+-- multiactive player management (which locks the player table internally).
+CREATE TABLE IF NOT EXISTS `dice_result` (
+  `player_id` INT(11) NOT NULL,
+  `die_value` smallint(5) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Table to track player choices for global disaster cards
 -- choice: 'normal' (default), 'avoid', 'double'

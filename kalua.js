@@ -66,11 +66,10 @@ define([
                 this.familyCounters = {};
                 // Prediction panel settings
                 this.predictionPanelEnabled = false;
-                // Auto-roll tracking to prevent multiple attempts
                 this.autoRollAttempted = false;
-                // HK Token movement timing variables
-                this.hkTokenMoveDelay = 1200;      // Delay before starting token movement
-                this.hkTokenTransferDelay = 200;  // Delay between remove and add operations
+                this.pendingAutoRoll = false;
+                // Tracks current happiness track position (0-10) for each token type (sprite-1)
+                this.hkTokenPositions = {};
                 // Play order tracking for proper card sorting
                 this.nextPlayOrder = 1000; // Start high to avoid conflicts with database play_order
                 // Card resolution timing variables
@@ -99,13 +98,13 @@ define([
                         5: "Lose 2 happiness, 1 family dies, destroy 1 temple. Prayer cost: 5.",
                     },
                     3: { // Bonus
-                        1: "Gain 2 happiness. Prayer cost: 2.",
-                        2: "Gain 4 happiness. Prayer cost: 5.",
-                        3: "Gain 1 happiness, convert to religion: roll d6. Prayer cost: 6.",
-                        4: "Gain happiness: roll d6. Prayer cost: 5.",
-                        5: "Gain 1 happiness, 1 family dies, recover leader. Prayer cost: 5.",
-                        6: "Build a temple, keep card. Prayer cost: 5.",
-                        7: "Gain amulets, keep card. Prayer cost: 4.",
+                        1: "Gain 2 happiness. Prayer cost: 2.",                                          // GoodWeather
+                        2: "Gain 1 happiness, convert to religion: roll d6. Prayer cost: 6.",            // Fertility
+                        3: "Gain amulets, keep card. Prayer cost: 4.",                                   // Amulets
+                        4: "Gain happiness: roll d6. Prayer cost: 5.",                                   // Festivities
+                        5: "Gain 1 happiness, 1 family dies, recover leader. Prayer cost: 5.",           // NewLeader
+                        6: "Gain 4 happiness. Prayer cost: 5.",                                          // DoubleHarvest
+                        7: "Build a temple, keep card. Prayer cost: 5.",                                 // Temple
                     }
                 };
 
@@ -294,9 +293,11 @@ define([
                 Object.values(gamedatas.players).forEach(player => {
                     // Ensure happiness is within 0-10 range
                     const happiness = Math.max(0, Math.min(10, player.happiness || 0));
-                    // Add the correct token type for this player color
+                    const tokenType = player.sprite - 1;
                     if (this[`hkToken_${happiness}`]) {
-                        this[`hkToken_${happiness}`].addToStock(player.sprite - 1);
+                        // Use tokenType as the stable item ID so movetokens can find it without scanning
+                        this[`hkToken_${happiness}`].addToStockWithId(tokenType, tokenType);
+                        this.hkTokenPositions[tokenType] = happiness;
                     } else {
                         console.error('Missing happiness token stock for happiness level:', happiness, 'player:', player);
                     }
@@ -356,6 +357,8 @@ define([
                     // Note: This will be updated in the setup phase with actual player.prayer value
                     this.optimizePrayerTokens(player.id, 5);
                 });
+                /* Build lookup table for registerInstanceType (keyed by uniqueId) */
+                this.cardTypeInfo = {};
                 /* Add local disaster cards */
                 const card_type_local_disaster = this.ID_LOCAL_DISASTER;
                 const num_local_disaster_cards = 5;
@@ -365,6 +368,7 @@ define([
                     this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', card_id - 1);
                     // Add to resolved cards stock
                     this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id - 1);
+                    this.cardTypeInfo[uniqueId] = { playedImage: g_gamethemeurl + 'img/Cards_600_1632_played.png', resolvedImage: g_gamethemeurl + 'img/Cards_600_907_compressed.png', imagePos: card_id - 1 };
                     Object.values(gamedatas.players).forEach(player => {
                         /* Note: image ID 0 - 4 for local disaster cards */
                         this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id - 1);
@@ -386,8 +390,9 @@ define([
                     const normalImagePos = this.globalDisasterImageMappings.normal(card_id);
                     // Add to played cards stock
                     this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', normalImagePos);
-                    // Add to resolved cards stock  
+                    // Add to resolved cards stock
                     this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
+                    this.cardTypeInfo[uniqueId] = { playedImage: g_gamethemeurl + 'img/Cards_600_1632_played.png', resolvedImage: g_gamethemeurl + 'img/Cards_600_907_compressed.png', imagePos: normalImagePos };
                     Object.values(gamedatas.players).forEach(player => {
                         /* Note: image ID 5 - 14 for normal global disaster cards, will be updated for avoid/double */
                         this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', normalImagePos);
@@ -402,6 +407,7 @@ define([
                     this['played'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_1632_played.png', card_id + 14);
                     // Add to resolved cards stock
                     this['resolved'].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 14);
+                    this.cardTypeInfo[uniqueId] = { playedImage: g_gamethemeurl + 'img/Cards_600_1632_played.png', resolvedImage: g_gamethemeurl + 'img/Cards_600_907_compressed.png', imagePos: card_id + 14 };
                     Object.values(gamedatas.players).forEach(player => {
                         /* Note: image ID 15-21 for bonus cards */
                         this[`${player.id}_cards`].addItemType(uniqueId, uniqueId, g_gamethemeurl + 'img/Cards_600_907_compressed.png', card_id + 14);
@@ -480,23 +486,17 @@ define([
                 Object.values(gamedatas.resolvingDisaster).forEach(card => {
                     const uniqueId = this.getCardUniqueId(parseInt(card.type), parseInt(card.type_arg));
                     const weight = card.play_order !== undefined ? parseInt(card.play_order) : uniqueId;
-                    const instanceTypeId = this.registerInstanceType(this['played'], card.id, uniqueId, weight);
-
-                    // For global disasters, patch the instance type's image position for the chosen multiplier
+                    // For global disasters, pass the multiplier image position directly so the instance type uses the right sprite
+                    let overrideImagePos;
                     if (parseInt(card.type) === this.ID_GLOBAL_DISASTER && card.multiplier) {
                         const cardTypeArg = parseInt(card.type_arg);
-                        let imagePos;
                         switch (card.multiplier) {
-                            case 'avoid':  imagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);  break;
-                            case 'double': imagePos = this.globalDisasterImageMappings.double(cardTypeArg); break;
-                            case 'normal':
-                            default:       imagePos = this.globalDisasterImageMappings.normal(cardTypeArg); break;
-                        }
-                        if (this['played'].item_type_x && this['played'].item_type_x[instanceTypeId]) {
-                            this['played'].item_type_x[instanceTypeId].image_position = imagePos;
+                            case 'avoid':  overrideImagePos = this.globalDisasterImageMappings.avoid(cardTypeArg);  break;
+                            case 'double': overrideImagePos = this.globalDisasterImageMappings.double(cardTypeArg); break;
+                            default:       overrideImagePos = this.globalDisasterImageMappings.normal(cardTypeArg); break;
                         }
                     }
-
+                    const instanceTypeId = this.registerInstanceType(this['played'], card.id, uniqueId, weight, overrideImagePos);
                     this['played'].addToStockWithId(instanceTypeId, card.id);
                     if (this['played'].items && this['played'].items[card.id]) {
                         this['played'].items[card.id].played_by = card.played_by;
@@ -827,44 +827,8 @@ define([
                         break;
                     case 'phaseThreeRollDice':
                         if (this.isCurrentPlayerActive()) {
-                            // Reset auto-roll tracking for this new state
                             this.autoRollAttempted = false;
-                            // Check if auto-roll dice preference is enabled
-
-
-                            // Primary method: Check CSS class (BGA preference system)
-                            let autoRollEnabled = document.body.classList.contains('kalua_auto_dice');
-                            if (!autoRollEnabled) {
-                                // Fallback: Check preference objects (for debugging)
-                                if (this.prefs && this.prefs[101]) {
-                                    if (this.prefs[101].value == 2) {
-                                        autoRollEnabled = true;
-                                    }
-                                } else if (this.player_preferences && this.player_preferences[101]) {
-                                    if (this.player_preferences[101].value == 2) {
-                                        autoRollEnabled = true;
-                                    }
-                                }
-                            }
-
-                            if (autoRollEnabled && !this.autoRollAttempted) {
-                                // Auto-roll dice preference is enabled
-                                this.autoRollAttempted = true;
-                                // Use immediate execution
-                                try {
-                                    this.bgaPerformAction('actRollDie', {});
-                                } catch (error) {
-                                    console.error('Auto-roll action failed:', error);
-                                    // Reset flag so onUpdateActionButtons can try
-                                    this.autoRollAttempted = false;
-                                    // Fall back to manual mode
-                                    this.setupDiceRoll();
-                                }
-                            } else if (!autoRollEnabled) {
-                                // Manual dice rolling
-                                this.setupDiceRoll();
-                            } else {
-                            }
+                            this.pendingAutoRoll = true; // onUpdateActionButtons will consume this
                         }
                         break;
                     case 'phaseThreeDiscard':
@@ -975,19 +939,32 @@ define([
                             const cardsInHand = this[`${this.player_id}_cards`].count();
                             const currentPrayer = this.prayerCounters[this.player_id].getValue();
                             if (cardsInHand === 0 && currentPrayer < 5) {
-                                // Player has no cards and insufficient prayer to buy more - automatically pass
-                                this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
-                                // Automatically trigger the pass action after a brief delay to show the message
-                                setTimeout(() => {
-                                    this.bgaPerformAction('actPlayCardPass', {});
-                                }, 2000);
-                                // Still show buttons but disable them to indicate automatic pass
-                                this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
-                                dojo.addClass('playCard-btn', 'disabled');
-                                this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => { }, 'red');
-                                dojo.addClass('buyCardReflex-btn', 'disabled');
-                                this.addActionButton('pass-btn', _('Passing Automatically...'), () => { }, 'gray');
-                                dojo.addClass('pass-btn', 'disabled');
+                                const isRoundLeader = this.player_id == this.gamedatas.round_leader;
+                                const canConvert = args && args.can_convert;
+                                if (isRoundLeader && canConvert) {
+                                    // Round leader with no cards must CONVERT to end the phase, not pass —
+                                    // passing without playing would loop back here indefinitely.
+                                    this.showMessage(_('You have no cards and insufficient prayer. Automatically ending the card phase.'), 'info');
+                                    setTimeout(() => {
+                                        this.bgaPerformAction('actSayConvert', {});
+                                    }, 2000);
+                                    this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
+                                    dojo.addClass('playCard-btn', 'disabled');
+                                    this.addActionButton('convert-btn', _('Converting Automatically...'), () => { }, 'green');
+                                    dojo.addClass('convert-btn', 'disabled');
+                                } else {
+                                    // Non-round-leader, or round leader who has already played and can now pass.
+                                    this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
+                                    setTimeout(() => {
+                                        this.bgaPerformAction('actPlayCardPass', {});
+                                    }, 2000);
+                                    this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
+                                    dojo.addClass('playCard-btn', 'disabled');
+                                    this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => { }, 'red');
+                                    dojo.addClass('buyCardReflex-btn', 'disabled');
+                                    this.addActionButton('pass-btn', _('Passing Automatically...'), () => { }, 'gray');
+                                    dojo.addClass('pass-btn', 'disabled');
+                                }
                                 return; // Skip normal button setup
                             }
                             this.addActionButton('playCard-btn', _('Play Card'), () => {
@@ -1083,20 +1060,17 @@ define([
                                     isAutoRoll = true;
                                 }
                             }
-                            // TRIGGER AUTO-ROLL HERE (when UI is fully ready) if not already attempted
-                            if (isAutoRoll && this.isCurrentPlayerActive() && !this.autoRollAttempted) {
+                            // onUpdateActionButtons is the "UI ready" signal — fire immediately if pending
+                            if (isAutoRoll && this.isCurrentPlayerActive() && this.pendingAutoRoll && !this.autoRollAttempted) {
+                                this.pendingAutoRoll = false;
                                 this.autoRollAttempted = true;
-                                // Use a small delay to ensure the action buttons are fully setup
-                                setTimeout(() => {
-                                    if (this.gamedatas.gamestate.name === 'phaseThreeRollDice' && this.isCurrentPlayerActive()) {
-                                        try {
-                                            this.bgaPerformAction('actRollDie', {});
-                                        } catch (error) {
-                                            console.error('Auto-roll action failed in onUpdateActionButtons:', error);
-                                        }
-                                    } else {
-                                    }
-                                }, 50); // Very short delay just to ensure buttons are ready
+                                try {
+                                    this.bgaPerformAction('actRollDie', {});
+                                } catch (error) {
+                                    console.error('Auto-roll failed:', error);
+                                    this.autoRollAttempted = false;
+                                    this.pendingAutoRoll = true; // retry next call
+                                }
                             } else if (isAutoRoll && this.autoRollAttempted) {
                             } else if (!isAutoRoll && this.isCurrentPlayerActive() && !this.autoRollAttempted) {
                                 // Set up a backup checker for auto-roll in case preferences load later
@@ -1331,11 +1305,13 @@ define([
             },
             /* Maps card type (bonus, local disaster, global disaster) and type_id 
              * (which of those type cards it is) to a unique number*/
-            registerInstanceType: function (stock, card_id, uniqueId, weight) {
+            registerInstanceType: function (stock, card_id, uniqueId, weight, imagePos) {
                 const instanceTypeId = 10000 + parseInt(card_id);
-                const base = stock.item_type_x ? stock.item_type_x[uniqueId] : null;
-                if (base) {
-                    stock.addItemType(instanceTypeId, weight, base.image, base.image_position);
+                const info = this.cardTypeInfo ? this.cardTypeInfo[uniqueId] : null;
+                if (info) {
+                    const isResolved = (stock === this['resolved']);
+                    const pos = (imagePos !== undefined) ? imagePos : info.imagePos;
+                    stock.addItemType(instanceTypeId, weight, isResolved ? info.resolvedImage : info.playedImage, pos);
                 }
                 return instanceTypeId;
             },
@@ -1555,6 +1531,18 @@ define([
                 return colorClassMap[color] || null;
             },
             // Helper function to fix truncated player colors consistently
+            addPlayerActionButton: function (id, player, callback) {
+                const color = this.fixPlayerColor(player.color);
+                this.addActionButton(id, player.name, callback);
+                const btn = document.getElementById(id);
+                if (btn) {
+                    // Use setProperty so !important is reliably applied.
+                    // 'background' shorthand also resets background-image, removing BGA's gradient.
+                    btn.style.setProperty('background', color, 'important');
+                    btn.style.setProperty('border-color', color, 'important');
+                    btn.style.setProperty('color', '#000', 'important');
+                }
+            },
             fixPlayerColor: function (color) {
                 if (!color) {
                     return '#4685FF'; // Default to blue if no color
@@ -1810,36 +1798,18 @@ define([
                     existingOverlay.remove();
                 }
             },
-            movetokens: function (tokenTypeToMove, desiredShift) {
-                let flag = false;
-                for (let x = 0; x <= 10; x++) {
-                    const tokens = this[`hkToken_${x}`].items;
-                    Object.values(tokens).forEach(token => {
-                        if (token.type == tokenTypeToMove && flag == false) {
-                            // Calculate target position
-                            let newdiv = x + desiredShift;
-                            if (newdiv < 0) newdiv = 0;
-                            if (newdiv > 10) newdiv = 10;
+            movetokens: function (tokenType, desiredShift) {
+                const currentPos = this.hkTokenPositions[tokenType];
+                if (currentPos === undefined) return;
 
-                            // Store token info before removal
-                            const tokenId = token.id;
-                            const tokenType = token.type;
+                const newPos = Math.max(0, Math.min(10, currentPos + desiredShift));
+                if (newPos === currentPos) return;
 
-                            // Add delay to make token movement visible
-                            setTimeout(() => {
-                                // First remove the token by ID (not by type)
-                                this[`hkToken_${x}`].removeFromStockById(tokenId);
-
-                                // Add to adjacent stock with slight additional delay
-                                setTimeout(() => {
-                                    this[`hkToken_${newdiv}`].addToStockWithId(tokenType, tokenId);
-                                }, this.hkTokenTransferDelay);
-                            }, this.hkTokenMoveDelay);
-
-                            flag = true; // only move one token
-                        }
-                    });
-                }
+                // Token ID is always equal to tokenType (set at setup time)
+                this[`hkToken_${currentPos}`].removeFromStockById(tokenType);
+                // Fly from the old column's div into the new one
+                this[`hkToken_${newPos}`].addToStockWithId(tokenType, tokenType, `hkboard_child_${currentPos}`);
+                this.hkTokenPositions[tokenType] = newPos;
             },
             giveSpeech: function (player_id) {
                 const currentValue = this.happinessCounters[player_id].getValue();
@@ -1916,7 +1886,7 @@ define([
                 // Get all players except the current player
                 const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id != this.player_id);
                 otherPlayers.forEach(player => {
-                    this.addActionButton(`target-player-${player.id}`, player.name, () => {
+                    this.addPlayerActionButton(`target-player-${player.id}`, player, () => {
                         this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
                     });
                 });
@@ -1929,8 +1899,8 @@ define([
                 const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id != this.player_id);
                 otherPlayers.forEach(player => {
                     /* TODO disable button if no families? but what if no one else has families? warning? */
-                    button = this.statusBar.addActionButton(player.name, () =>
-                        this.bgaPerformAction('actConvertBelievers', { target_player_id: player.id }))
+                    this.addPlayerActionButton(`convert-target-${player.id}`, player, () =>
+                        this.bgaPerformAction('actConvertBelievers', { target_player_id: player.id }));
                 });
             },
             convertBelievers: function (player_id, target_player_id) {
@@ -2202,10 +2172,16 @@ define([
                 this.notifqueue.setSynchronous('templeBuilt', 500);
                 this.notifqueue.setSynchronous('amuletGained', 500);
                 // cardResolved is async and self-timed — no setSynchronous needed
-                // cardBeingResolved removed - it's now a no-op and doesn't need delay
+                this.notifqueue.setSynchronous('cardBeingResolved', 800);
+                this.notifqueue.setSynchronous('cardResolutionComplete', 1500);
                 this.notifqueue.setSynchronous('diceRolled', 500);
                 this.notifqueue.setSynchronous('amuletUsed', 500);
                 this.notifqueue.setSynchronous('amuletNotUsed', 500);
+                // Hold the queue on the round-leader change so the phaseOneDraw gameStateChange
+                // (which visually activates the new leader) doesn't fire until after the
+                // end-of-round summary notifications have all had time to register.
+                this.notifqueue.setSynchronous('roundLeaderChanged', 2000);
+                this.notifqueue.setSynchronous('roundEnded', 500);
                 // Add tooltips to any cards that might have been missed
                 setTimeout(() => {
                     this.refreshAllCardTooltips();
@@ -2602,26 +2578,28 @@ define([
                 // Players who need to roll dice will be prompted in the setupDiceRoll method
             },
             notif_diceRolled: function (args) {
-                const player_name = args.player_name;
                 const player_id = args.player_id;
                 const result = args.result;
                 try { new Audio(g_gamethemeurl + 'sounds/kalua_dice_roll.ogg').play(); } catch(e) {}
-                // Wait 0.2 seconds before updating dice graphics
                 setTimeout(() => {
-                    // Reset auto-roll flag when any player rolls dice
-                    // This ensures each client is ready for the next dice roll state
-                    this.autoRollAttempted = false;
-
-                    // Update only the specific player's die
+                    // Update the rolling player's die face
                     if (player_id && this.gamedatas.players[player_id]) {
                         const player = this.gamedatas.players[player_id];
-                        // Calculate which dice face to show: player's color row + rolled result
                         const playerDieFace = ((player.sprite - 1) * 6) + result;
-                        // Remove the old die for this player and add the new result
                         this['dice'].removeFromStockById(player_id);
                         this['dice'].addToStockWithId(playerDieFace, player_id);
                     }
-                }, 200); // 0.2 seconds delay
+
+                    // If another player rolled and we're still active and haven't gone yet,
+                    // set the pending flag — onUpdateActionButtons will fire next (BGA calls it
+                    // when a multiactive peer completes) and will consume it.
+                    if (parseInt(player_id) !== parseInt(this.player_id)
+                            && this.isCurrentPlayerActive()
+                            && !this.autoRollAttempted
+                            && this.gamedatas.gamestate.name === 'phaseThreeRollDice') {
+                        this.pendingAutoRoll = true;
+                    }
+                }, 200);
                 this.disableNextMoveSound();
             },
             notif_templeIncremented: function (args) {
@@ -2810,8 +2788,6 @@ define([
                     this.nextPlayOrder++;
 
                     if (!sourceElement) {
-                        console.warn(`Source element not found for card ${card_id}`);
-                        // Just move without animation
                         this['played'].removeFromStockById(card_id);
                         this['resolved'].addToStockWithId(resolvedInstanceTypeId, card_id);
                         this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
@@ -2819,59 +2795,37 @@ define([
                         return;
                     }
 
-                    // Add to resolved stock
+                    // Capture clone appearance before touching the DOM
+                    const cs = window.getComputedStyle(sourceElement);
+                    const cloneHtml = `<div style="width:120px;height:181px;background-image:${cs.backgroundImage};background-position:${cs.backgroundPosition};background-size:${cs.backgroundSize};border-radius:4px;"></div>`;
+
+                    // Add to resolved stock silently, then hide it during the flight
                     this['resolved'].addToStockWithId(resolvedInstanceTypeId, card_id);
-
-                    // Get destination element
-                    const destElement = document.getElementById(`resolved_item_${card_id}`);
-
-                    // Animate if both elements exist
-                    if (destElement) {
-                        // Use BGA's slideToObject for smooth animation
-                        const destRect = destElement.getBoundingClientRect();
-                        const sourceRect = sourceElement.getBoundingClientRect();
-
-                        // Temporarily position the destination at the source location
-                        destElement.style.transform = `translate(${sourceRect.left - destRect.left}px, ${sourceRect.top - destRect.top}px)`;
-                        destElement.style.transition = 'none';
-
-                        // Force reflow
-                        destElement.offsetHeight;
-
-                        // Animate to final position
-                        setTimeout(() => {
-                            destElement.style.transition = 'transform 600ms ease-in-out';
-                            destElement.style.transform = 'translate(0, 0)';
-                        }, 50);
-
-                        // Remove from played stock after animation starts
-                        setTimeout(() => {
-                            if (this['played']) {
-                                this['played'].removeFromStockById(card_id);
-                            }
-                        }, 100);
-                    } else {
-                        console.warn(`Destination element not found for card ${card_id}`);
-                        // Remove from played immediately if no animation
-                        this['played'].removeFromStockById(card_id);
-                    }
-
-                    // Add tooltip
+                    const destEl = document.getElementById(`resolved_item_${card_id}`);
+                    if (destEl) destEl.style.visibility = 'hidden';
                     this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
 
-                    // Wait for animation to complete before proceeding to next notification
+                    // Fly a top-level clone so it renders above all other divs
+                    this.slideTemporaryObject(cloneHtml, 'game_play_area', `played_item_${card_id}`, `resolved_item_${card_id}`, 600, 0);
+
+                    // Remove source from played after slideTemporaryObject has read its position
+                    setTimeout(() => { this['played'] && this['played'].removeFromStockById(card_id); }, 50);
+
+                    // Reveal destination just as the clone lands
+                    setTimeout(() => { if (destEl) destEl.style.visibility = ''; }, 620);
+
                     await new Promise(resolve => setTimeout(resolve, 700));
                 }
             },
             notif_cardBeingResolved: function (args) {
-                // This notification is sent before cardResolved
-                // We don't remove the card here - let cardResolved handle it with animation
-                // Just log for debugging if needed
+                const msg = dojo.string.substitute(_('Now resolving: ${card_name}'), { card_name: args.card_name });
+                this.showMessage(msg, 'info');
             },
             notif_cardResolutionComplete: function (args) {
-                // Notification that all cards have been resolved
-                // No action needed, just acknowledge
-                console.log("Card resolution complete");
+                const msg = args.going_to_convert
+                    ? _('Card resolution complete. Proceeding to convert/pray phase')
+                    : _('Card resolution phase complete');
+                this.showMessage(msg, 'info');
             },
             notif_resolvedCardsCleanup: function (args) {
                 // Clear all cards from the resolved stock
