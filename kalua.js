@@ -58,6 +58,12 @@ define([
                 this.ID_LOCAL_DISASTER = 2;
                 this.ID_BONUS = 3;
                 this.ID_AHTHIEST_STOCK = 5;
+                // Prayer cost keyed by uniqueId (global 1-10=0, local 11-15, bonus 16-22)
+                this.CARD_PRAYER_COSTS = {
+                    1:0,  2:0,  3:0,  4:0,  5:0,  6:0,  7:0,  8:0,  9:0,  10:0,
+                    11:4, 12:5, 13:1, 14:3, 15:5,
+                    16:2, 17:6, 18:4, 19:5, 20:5, 21:5, 22:5
+                };
                 this.prayerCounters = {};
                 this.happinessCounters = {};
                 this.cardCounters = {};
@@ -67,44 +73,72 @@ define([
                 // Prediction panel settings
                 this.predictionPanelEnabled = false;
                 this.autoRollAttempted = false;
-                this.pendingAutoRoll = false;
+                this.playersWhoNeedToRoll = null; // null = diceRollRequired not yet received
+                this.diceRolledTracker = new Set();
+                this._autoRollFallbackTimer = null;
+                this._roundSummaryActive = false;
                 // Tracks current happiness track position (0-10) for each token type (sprite-1)
                 this.hkTokenPositions = {};
                 // Play order tracking for proper card sorting
                 this.nextPlayOrder = 1000; // Start high to avoid conflicts with database play_order
-                // Card resolution timing variables
-                this.cardResolutionDelay = 800;    // Delay after card is added to resolved area
+
+                // ── Timing constants ─────────────────────────────────────────────────────
+                // Animation durations
+                this.ANIM_MEEPLE_SLIDE   = 1600; // ms — flight time per meeple
+                this.ANIM_MEEPLE_STAGGER = 600;  // ms — gap between meeples in a multi-move
+                this.ANIM_MEEPLE_WAIT    = 1800; // ms — queue hold after all meeples land
+                this.ANIM_CARD_SLIDE     = 2400; // ms — flight time for card → resolved
+                this.ANIM_CARD_WAIT      = 2800; // ms — queue hold after card animation
+                // Notification queue hold times (setSynchronous)
+                this.QUEUE_PLAYER_COUNTS            = 500;
+                this.QUEUE_FAMILIES_DIED            = 1000;
+                this.QUEUE_FAMILIES_GAINED          = 200;
+                this.QUEUE_FAMILIES_LOST            = 200;
+                this.QUEUE_TEMPLE_DESTROYED         = 500;
+                this.QUEUE_LEADER_RECOVERED         = 500;
+                this.QUEUE_TEMPLE_BUILT             = 500;
+                this.QUEUE_AMULET_GAINED            = 500;
+                this.QUEUE_CARD_BEING_RESOLVED      = 800;
+                this.QUEUE_DICE_ROLLED              = 500;
+                this.QUEUE_AMULET_USED              = 500;
+                this.QUEUE_AMULET_NOT_USED          = 500;
+                this.QUEUE_ROUND_LEADER_CHANGED     = 2000;
+                this.QUEUE_ROUND_ENDED              = 500;
+                this.QUEUE_ROUND_SUMMARY_PAUSE      = 3500;
+                // Behavioural delays
+                this.AUTO_PASS_DELAY = 2000; // ms — pause before auto-pass/convert fires
+                // ─────────────────────────────────────────────────────────────────────────
 
 
                 // Card tooltips for Kalua (JS format)
                 this.CARD_TOOLTIPS = {
-                    1: { // Global Disaster
-                        1: "Lose 3 happiness, convert 1 to atheist, gain 3 prayer.",
-                        2: "Lose 3 happiness, convert 1 to atheist, gain 1 prayer.",
-                        3: "Lose 2 happiness, 1 family dies, gain 2 prayer.",
-                        4: "Lose 2 happiness, convert 1 to atheist, gain 1 prayer.",
-                        5: "Lose 2 happiness, convert 1 to atheist, gain 3 prayer.",
-                        6: "Convert 1 to atheist, gain 1 prayer.",
-                        7: "Lose 1 happiness, convert 1 to atheist, gain 1 prayer.",
-                        8: "Convert 1 to atheist, gain 1 prayer, happiness loss: roll d6.",
-                        9: "Lose 1 happiness, convert 1 to atheist, prayer gain: roll d6.",
-                        10: "Convert 1 to atheist, discard card, gain 1 prayer.",
+                    1: { // Global Disaster — order: happiness > prayer > convert > discard > death [> roll dice]
+                        1:  "Everyone: Lose 3 happiness, gain 3 prayer, convert 1 to atheist, 1 family dies.",         // Tsunami
+                        2:  "Everyone: Lose 3 happiness, gain 1 prayer, convert 1 to atheist, 1 family dies.",         // Famine
+                        3:  "Everyone: Lose 2 happiness, gain 2 prayer, 1 family dies.",                               // Floods
+                        4:  "Everyone: Lose 2 happiness, gain 1 prayer, convert 1 to atheist, 1 family dies.",         // MassiveFire
+                        5:  "Everyone: Lose 2 happiness, gain 3 prayer, convert 1 to atheist, 1 family dies.",         // Drought
+                        6:  "Everyone: Gain 1 prayer, convert 1 to atheist, 1 family dies.",                           // Death
+                        7:  "Everyone: Lose 1 happiness, gain 1 prayer, convert 1 to atheist, 1 family dies.",         // Thunderstorm
+                        8:  "Everyone: Gain 1 prayer, convert 1 to atheist, 1 family dies, happiness: roll d6.",       // Revenge
+                        9:  "Everyone: Lose 1 happiness, convert 1 to atheist, 1 family dies, prayer: roll d6.",       // Epidemic
+                        10: "Everyone: Gain 1 prayer, convert 1 to atheist, discard card, 1 family dies.",             // Riots
                     },
-                    2: { // Local Disaster
-                        1: "Lose 1 happiness, convert 1 to atheist, 1 family dies. Prayer cost: 4.",
-                        2: "Lose 3 happiness, 1 family dies. Prayer cost: 5.",
-                        3: "Lose 1 happiness, 1 family dies. Prayer cost: 1.",
-                        4: "Lose 2 happiness, 1 family dies. Prayer cost: 3.",
-                        5: "Lose 2 happiness, 1 family dies, destroy 1 temple. Prayer cost: 5.",
+                    2: { // Local Disaster — order: happiness > convert > death [> special]
+                        1: "Prayer cost: 4. Chosen target: Lose 1 happiness, convert 1 to atheist, 1 family dies.",    // Tornado
+                        2: "Prayer cost: 5. Chosen target: Lose 3 happiness, 1 family dies.",                          // Earthquake
+                        3: "Prayer cost: 1. Chosen target: Lose 1 happiness, 1 family dies.",                          // BadWeather
+                        4: "Prayer cost: 3. Chosen target: Lose 2 happiness, 1 family dies.",                          // Locust
+                        5: "Prayer cost: 5. Chosen target: Lose 2 happiness, 1 family dies, destroy 1 temple.",        // TempleDestroyed
                     },
-                    3: { // Bonus
-                        1: "Gain 2 happiness. Prayer cost: 2.",                                          // GoodWeather
-                        2: "Gain 1 happiness, convert to religion: roll d6. Prayer cost: 6.",            // Fertility
-                        3: "Gain amulets, keep card. Prayer cost: 4.",                                   // Amulets
-                        4: "Gain happiness: roll d6. Prayer cost: 5.",                                   // Festivities
-                        5: "Gain 1 happiness, 1 family dies, recover leader. Prayer cost: 5.",           // NewLeader
-                        6: "Gain 4 happiness. Prayer cost: 5.",                                          // DoubleHarvest
-                        7: "Build a temple, keep card. Prayer cost: 5.",                                 // Temple
+                    3: { // Bonus — order: happiness > prayer > convert > death > special [> roll dice]
+                        1: "Prayer cost: 2. You: Gain 2 happiness.",                                                    // GoodWeather
+                        2: "Prayer cost: 6. You: Gain 1 happiness, convert to religion: roll d6.",                      // Fertility
+                        3: "Prayer cost: 4. You: Gain amulets, keep card.",                                             // Amulets
+                        4: "Prayer cost: 5. You: Happiness: roll d6.",                                                  // Festivities
+                        5: "Prayer cost: 5. You: Gain 1 happiness, 1 family dies, recover leader.",                     // NewLeader
+                        6: "Prayer cost: 5. You: Gain 4 happiness.",                                                    // DoubleHarvest
+                        7: "Prayer cost: 5. You: Build a temple, keep card.",                                           // Temple
                     }
                 };
 
@@ -245,11 +279,11 @@ define([
                     // Fix: image position should be 0-based (i-1)
                     this[`dice`].addItemType(i, i, g_gamethemeurl + 'img/d6_300_246.png', i - 1);
                 }
-                // Add a die for each player matching their color
+                // Add a die for each player, restoring the last rolled value if available
                 Object.values(gamedatas.players).forEach(player => {
-                    // Calculate die face: each player's color row starts at (sprite-1)*6 + 1, show face 1 (first face of their color)
-                    const playerDieFace = ((player.sprite - 1) * 6) + 1;
-                    // Use player ID as unique die ID so we can update individual dice
+                    const diceRow = gamedatas.diceResults && gamedatas.diceResults[player.id];
+                    const rollValue = (diceRow && diceRow.die_value > 0) ? parseInt(diceRow.die_value) : 1;
+                    const playerDieFace = ((player.sprite - 1) * 6) + rollValue;
                     this['dice'].addToStockWithId(playerDieFace, player.id);
                 });
                 // Initialize and create atheist families stock
@@ -617,6 +651,10 @@ define([
                 }
                 // Setup game notifications to handle (see "setupNotifications" method below)
                 this.setupNotifications();
+                // Apply initial hand sort and re-apply whenever BGA flips the pref-103 CSS class
+                this.applyHandSort();
+                new MutationObserver(() => this.applyHandSort())
+                    .observe(document.body, { attributes: true, attributeFilter: ['class'] });
                 // Force a final layout update for all player card stocks after setup
                 setTimeout(() => {
                     this.refreshPlayerCardLayouts();
@@ -794,9 +832,9 @@ define([
             ///////////////////////////////////////////////////
             //// Game & client states
             onEnteringState: function (stateName, args) {
-                // Hide convert transit area on every state change except the convert phase itself
+                // Hide convert transit on state changes, but not while roundSummaryPause owns it
                 const convertTransit = document.getElementById('convert-transit');
-                if (convertTransit && stateName !== 'phaseFourConvertPray') {
+                if (convertTransit && stateName !== 'phaseFourConvertPray' && !this._roundSummaryActive) {
                     convertTransit.style.display = 'none';
                     convertTransit.innerHTML = '';
                 }
@@ -811,9 +849,7 @@ define([
                     case 'phaseThreeCheckGlobal':
                         break;
                     case 'phaseThreeSelectTargets':
-                        if (this.isCurrentPlayerActive()) {
-                            this.setupTargetSelection();
-                        }
+                        // Page title is set by descriptionmyturn in states.inc.php
                         break;
                     case 'phaseThreeResolveAmulets':
                         // Trigger action button setup
@@ -826,10 +862,20 @@ define([
                         // No player actions needed, just visual feedback
                         break;
                     case 'phaseThreeRollDice':
-                        if (this.isCurrentPlayerActive()) {
-                            this.autoRollAttempted = false;
-                            this.pendingAutoRoll = true; // onUpdateActionButtons will consume this
-                        }
+                        this.autoRollAttempted = false;
+                        this.diceRolledTracker = new Set();
+                        this.playersWhoNeedToRoll = null; // set when diceRollRequired arrives
+                        clearTimeout(this._autoRollFallbackTimer);
+                        this._autoRollFallbackTimer = setTimeout(() => {
+                            // Fires after 2s — breaks deadlock when all rolling players are auto-rollers
+                            if (!this.autoRollAttempted
+                                    && this.isCurrentPlayerActive()
+                                    && this.gamedatas.gamestate.name === 'phaseThreeRollDice'
+                                    && this.isAutoRollEnabled()) {
+                                this.autoRollAttempted = true;
+                                this.bgaPerformAction('actRollDie', {});
+                            }
+                        }, 2000);
                         break;
                     case 'phaseThreeDiscard':
                         if (this.isCurrentPlayerActive()) {
@@ -947,7 +993,7 @@ define([
                                     this.showMessage(_('You have no cards and insufficient prayer. Automatically ending the card phase.'), 'info');
                                     setTimeout(() => {
                                         this.bgaPerformAction('actSayConvert', {});
-                                    }, 2000);
+                                    }, this.AUTO_PASS_DELAY);
                                     this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
                                     dojo.addClass('playCard-btn', 'disabled');
                                     this.addActionButton('convert-btn', _('Converting Automatically...'), () => { }, 'green');
@@ -957,7 +1003,7 @@ define([
                                     this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
                                     setTimeout(() => {
                                         this.bgaPerformAction('actPlayCardPass', {});
-                                    }, 2000);
+                                    }, this.AUTO_PASS_DELAY);
                                     this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
                                     dojo.addClass('playCard-btn', 'disabled');
                                     this.addActionButton('buyCardReflex-btn', _('Buy Card (5 Prayer)'), () => { }, 'red');
@@ -1049,64 +1095,15 @@ define([
                             }
                             break;
                         case 'phaseThreeRollDice':
-                            // Check if auto-roll is enabled using CSS class (primary method)
-                            let isAutoRoll = document.body.classList.contains('kalua_auto_dice');
-                            if (!isAutoRoll) {
-                                // Fallback: Check preference objects
-
-                                if (this.prefs && this.prefs[101] && this.prefs[101].value == 2) {
-                                    isAutoRoll = true;
-                                } else if (this.player_preferences && this.player_preferences[101] && this.player_preferences[101].value == 2) {
-                                    isAutoRoll = true;
-                                }
-                            }
-                            // onUpdateActionButtons is the "UI ready" signal — fire immediately if pending
-                            if (isAutoRoll && this.isCurrentPlayerActive() && this.pendingAutoRoll && !this.autoRollAttempted) {
-                                this.pendingAutoRoll = false;
-                                this.autoRollAttempted = true;
-                                try {
-                                    this.bgaPerformAction('actRollDie', {});
-                                } catch (error) {
-                                    console.error('Auto-roll failed:', error);
-                                    this.autoRollAttempted = false;
-                                    this.pendingAutoRoll = true; // retry next call
-                                }
-                            } else if (isAutoRoll && this.autoRollAttempted) {
-                            } else if (!isAutoRoll && this.isCurrentPlayerActive() && !this.autoRollAttempted) {
-                                // Set up a backup checker for auto-roll in case preferences load later
-                                let checkCount = 0;
-                                const maxChecks = 10;
-                                const checkInterval = setInterval(() => {
-                                    checkCount++;
-                                    const hasAutoClass = document.body.classList.contains('kalua_auto_dice');
-                                    if (hasAutoClass && !this.autoRollAttempted && this.gamedatas.gamestate.name === 'phaseThreeRollDice' && this.isCurrentPlayerActive()) {
-                                        this.autoRollAttempted = true;
-                                        clearInterval(checkInterval);
-                                        try {
-                                            this.bgaPerformAction('actRollDie', {});
-                                        } catch (error) {
-                                            console.error('Auto-roll action failed in backup checker:', error);
-                                        }
-                                    } else if (checkCount >= maxChecks || this.gamedatas.gamestate.name !== 'phaseThreeRollDice' || !this.isCurrentPlayerActive()) {
-                                        clearInterval(checkInterval);
-                                    }
-                                }, 200); // Check every 200ms
-                            }
+                            const isAutoRoll = this.isAutoRollEnabled();
                             const buttonText = isAutoRoll ? _('Roll Dice (Auto)') : _('Roll Dice');
                             this.addActionButton('roll-dice-btn', buttonText, () => {
-                                // Only allow manual rolling if auto-roll is disabled
                                 if (!isAutoRoll) {
-                                    // Disable the button immediately to prevent double-clicks
                                     const rollBtn = document.getElementById('roll-dice-btn');
-                                    if (rollBtn) {
-                                        rollBtn.disabled = true;
-                                        rollBtn.style.opacity = '0.5';
-                                    }
+                                    if (rollBtn) { rollBtn.disabled = true; rollBtn.style.opacity = '0.5'; }
                                     this.bgaPerformAction('actRollDie', {});
-                                } else {
                                 }
                             });
-                            // If auto-roll is enabled, disable the button and style it as inactive
                             if (isAutoRoll) {
                                 const rollBtn = document.getElementById('roll-dice-btn');
                                 if (rollBtn) {
@@ -1136,13 +1133,27 @@ define([
                                 dojo.addClass('double-btn', 'disabled');
                             }
                             break;
+                        case 'phaseThreeSelectTargets':
+                            if (this.isCurrentPlayerActive()) {
+                                // BGA clears buttons before onUpdateActionButtons — rebuild target buttons here
+                                const availableTargets = (args && args.available_targets) || [];
+                                const otherPlayers = Object.values(this.gamedatas.players).filter(player => {
+                                    if (player.id == this.player_id) return false;
+                                    if (availableTargets.length > 0) {
+                                        return availableTargets.includes(parseInt(player.id));
+                                    }
+                                    return true;
+                                });
+                                otherPlayers.forEach(player => {
+                                    this.addPlayerActionButton(`target-player-${player.id}`, player, () => {
+                                        this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
+                                    });
+                                });
+                            }
+                            break;
                         case 'phaseThreeResolveAmulets':
-                            // Note: Do not call updatePageTitle() here as it causes infinite recursion
-                            // The page title will be updated by the BGA framework automatically
-                            // Check if current player has amulets
-                            const currentPlayerId = this.player_id;
-                            const currentPlayerAmulets = this.gamedatas.players[currentPlayerId]?.amulet || 0;
-                            if (currentPlayerAmulets > 0) {
+                            // args.can_use_amulet comes from argResolveAmulets() - always current
+                            if (args && args.can_use_amulet) {
                                 this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
                                     this.disableAmuletButtons();
                                     this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
@@ -1151,10 +1162,6 @@ define([
                                     this.disableAmuletButtons();
                                     this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
                                 });
-                            } else {
-                                // Player has no amulets, just waiting
-                                // Note: Do not call updatePageTitle() here as it causes infinite recursion
-                                // The page title will be updated by the BGA framework automatically
                             }
                             break;
                     }
@@ -1574,6 +1581,51 @@ define([
                 console.warn(`Unknown color format: ${color}, defaulting to blue`);
                 return '#4685FF'; // Default to blue
             },
+            applyHandSort: function () {
+                const stock = this[`${this.player_id}_cards`];
+                if (!stock || !stock.item_type) return;
+                const sortByCost = document.body.classList.contains('kalua_sort_by_cost')
+                    || (this.prefs && this.prefs[103] && this.prefs[103].value == 2)
+                    || (this.player_preferences && this.player_preferences[103] && this.player_preferences[103].value == 2);
+                for (const typeId in stock.item_type) {
+                    const id = parseInt(typeId);
+                    const newWeight = sortByCost
+                        ? (this.CARD_PRAYER_COSTS[id] ?? 99) * 100 + id
+                        : id;
+                    stock.item_type[typeId].weight = newWeight;
+                    // BGA stock items cache their weight at insertion time;
+                    // update each existing item directly so updateDisplay() re-sorts correctly.
+                    if (stock.items) {
+                        for (const itemId in stock.items) {
+                            if (stock.items[itemId] && parseInt(stock.items[itemId].type) === id) {
+                                stock.items[itemId].weight = newWeight;
+                            }
+                        }
+                    }
+                }
+                stock.updateDisplay();
+                this.updateCardGrouping(this.player_id);
+            },
+            isAutoRollEnabled: function () {
+                return document.body.classList.contains('kalua_auto_dice')
+                    || (this.prefs && this.prefs[101] && this.prefs[101].value == 2)
+                    || (this.player_preferences && this.player_preferences[101] && this.player_preferences[101].value == 2);
+            },
+            _checkAutoRoll: function () {
+                if (!this.isAutoRollEnabled()) return;
+                if (this.autoRollAttempted) return;
+                if (this.gamedatas.gamestate.name !== 'phaseThreeRollDice') return;
+                if (!this.isCurrentPlayerActive()) return;
+                if (this.playersWhoNeedToRoll === null) return; // diceRollRequired not yet received
+                // Fire only after all OTHER players who need to roll have already rolled
+                const myId = parseInt(this.player_id);
+                const othersWhoNeedToRoll = this.playersWhoNeedToRoll.filter(id => id !== myId);
+                if (othersWhoNeedToRoll.every(id => this.diceRolledTracker.has(id))) {
+                    this.autoRollAttempted = true;
+                    clearTimeout(this._autoRollFallbackTimer);
+                    this.bgaPerformAction('actRollDie', {});
+                }
+            },
             // Helper function to convert hex color to rgba
             hexToRgba: function (hex, alpha) {
                 const r = parseInt(hex.slice(1, 3), 16);
@@ -1798,6 +1850,10 @@ define([
                     existingOverlay.remove();
                 }
             },
+            slideMeepleAnim: function (fromEl, toEl) {
+                const cloneHtml = `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:-150px 0px;"></div>`;
+                this.slideTemporaryObject(cloneHtml, 'game_play_area', fromEl, toEl, this.ANIM_MEEPLE_SLIDE, 0);
+            },
             movetokens: function (tokenType, desiredShift) {
                 const currentPos = this.hkTokenPositions[tokenType];
                 if (currentPos === undefined) return;
@@ -1807,8 +1863,7 @@ define([
 
                 // Token ID is always equal to tokenType (set at setup time)
                 this[`hkToken_${currentPos}`].removeFromStockById(tokenType);
-                // Fly from the old column's div into the new one
-                this[`hkToken_${newPos}`].addToStockWithId(tokenType, tokenType, `hkboard_child_${currentPos}`);
+                this[`hkToken_${newPos}`].addToStockWithId(tokenType, tokenType);
                 this.hkTokenPositions[tokenType] = newPos;
             },
             giveSpeech: function (player_id) {
@@ -1869,13 +1924,25 @@ define([
                         : total;
                 }
             },
-            convertAtheists: function (player_id, num_atheists) {
+            convertAtheists: async function (player_id, num_atheists) {
                 const atheistFamilies = this['atheists'];
                 const playerFamilies = this[`fams_${player_id}`];
                 for (let i = 0; i < num_atheists; i++) {
-                    atheistFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from atheist families
-                    playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to player's families
+                    const items = atheistFamilies.getAllItems();
+                    const meeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
+                    if (meeple) {
+                        const fromElId = `atheistFamilies_item_${meeple.id}`;
+                        this.slideMeepleAnim(fromElId, `${player_id}_families`);
+                        atheistFamilies.removeFromStockById(meeple.id);
+                        setTimeout(() => playerFamilies.addToStock(this.ID_AHTHIEST_STOCK), this.ANIM_MEEPLE_SLIDE);
+                    } else {
+                        playerFamilies.addToStock(this.ID_AHTHIEST_STOCK);
+                    }
+                    if (i < num_atheists - 1) {
+                        await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                    }
                 }
+                await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
                 this.familyCounters[player_id].incValue(num_atheists);
             },
             setupTargetSelection: function () {
@@ -1883,8 +1950,16 @@ define([
                 this.gamedatas.gamestate.descriptionmyturn = _('Choose a player to target with your disaster: ');
                 this.updatePageTitle();
                 this.statusBar.removeActionButtons();
-                // Get all players except the current player
-                const otherPlayers = Object.values(this.gamedatas.players).filter(player => player.id != this.player_id);
+                const args = this.gamedatas.gamestate.args || {};
+                const availableTargets = args.available_targets;
+                // If server provided a specific target list, restrict to it; otherwise all other players
+                const otherPlayers = Object.values(this.gamedatas.players).filter(player => {
+                    if (player.id == this.player_id) return false;
+                    if (availableTargets && availableTargets.length > 0) {
+                        return availableTargets.includes(parseInt(player.id));
+                    }
+                    return true;
+                });
                 otherPlayers.forEach(player => {
                     this.addPlayerActionButton(`target-player-${player.id}`, player, () => {
                         this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
@@ -1903,11 +1978,21 @@ define([
                         this.bgaPerformAction('actConvertBelievers', { target_player_id: player.id }));
                 });
             },
-            convertBelievers: function (player_id, target_player_id) {
+            convertBelievers: async function (player_id, target_player_id) {
                 const targetFamilies = this[`fams_${target_player_id}`];
                 const playerFamilies = this[`fams_${player_id}`];
-                targetFamilies.removeFromStock(this.ID_AHTHIEST_STOCK); // Remove from target player's families
-                playerFamilies.addToStock(this.ID_AHTHIEST_STOCK); // Add to current player's families
+                const items = targetFamilies.getAllItems();
+                const meeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
+                if (meeple) {
+                    const fromElId = `${target_player_id}_families_item_${meeple.id}`;
+                    this.slideMeepleAnim(fromElId, `${player_id}_families`);
+                    targetFamilies.removeFromStockById(meeple.id);
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_SLIDE));
+                    playerFamilies.addToStock(this.ID_AHTHIEST_STOCK);
+                } else {
+                    targetFamilies.removeFromStock(this.ID_AHTHIEST_STOCK);
+                    playerFamilies.addToStock(this.ID_AHTHIEST_STOCK);
+                }
                 this.familyCounters[player_id].incValue(1);
                 this.familyCounters[target_player_id].incValue(-1);
             },
@@ -2161,27 +2246,26 @@ define([
             setupNotifications: function () {
                 // automatically listen to the notifications, based on the `notif_xxx` function on this class.
                 this.bgaSetupPromiseNotifications();
-                // Add 0.5 second delays to card resolution notifications so players can follow along
-                this.notifqueue.setSynchronous('playerCountsChanged', 500);
-                this.notifqueue.setSynchronous('familiesConverted', 1000);
-                this.notifqueue.setSynchronous('familiesDied', 1000);
-                this.notifqueue.setSynchronous('familiesGained', 200);
-                this.notifqueue.setSynchronous('familiesLost', 200);
-                this.notifqueue.setSynchronous('templeDestroyed', 500);
-                this.notifqueue.setSynchronous('leaderRecovered', 500);
-                this.notifqueue.setSynchronous('templeBuilt', 500);
-                this.notifqueue.setSynchronous('amuletGained', 500);
+                // Queue hold times — durations live in the timing block at the top of the constructor
+                this.notifqueue.setSynchronous('playerCountsChanged',        this.QUEUE_PLAYER_COUNTS);
+                this.notifqueue.setSynchronous('familiesDied',               this.QUEUE_FAMILIES_DIED);
+                this.notifqueue.setSynchronous('familiesGained',             this.QUEUE_FAMILIES_GAINED);
+                this.notifqueue.setSynchronous('familiesLost',               this.QUEUE_FAMILIES_LOST);
+                this.notifqueue.setSynchronous('templeDestroyed',            this.QUEUE_TEMPLE_DESTROYED);
+                this.notifqueue.setSynchronous('leaderRecovered',            this.QUEUE_LEADER_RECOVERED);
+                this.notifqueue.setSynchronous('templeBuilt',                this.QUEUE_TEMPLE_BUILT);
+                this.notifqueue.setSynchronous('amuletGained',               this.QUEUE_AMULET_GAINED);
                 // cardResolved is async and self-timed — no setSynchronous needed
-                this.notifqueue.setSynchronous('cardBeingResolved', 800);
-                this.notifqueue.setSynchronous('cardResolutionComplete', 1500);
-                this.notifqueue.setSynchronous('diceRolled', 500);
-                this.notifqueue.setSynchronous('amuletUsed', 500);
-                this.notifqueue.setSynchronous('amuletNotUsed', 500);
+                this.notifqueue.setSynchronous('cardBeingResolved',          this.QUEUE_CARD_BEING_RESOLVED);
+                this.notifqueue.setSynchronous('diceRolled',                 this.QUEUE_DICE_ROLLED);
+                this.notifqueue.setSynchronous('amuletUsed',                 this.QUEUE_AMULET_USED);
+                this.notifqueue.setSynchronous('amuletNotUsed',              this.QUEUE_AMULET_NOT_USED);
                 // Hold the queue on the round-leader change so the phaseOneDraw gameStateChange
                 // (which visually activates the new leader) doesn't fire until after the
                 // end-of-round summary notifications have all had time to register.
-                this.notifqueue.setSynchronous('roundLeaderChanged', 2000);
-                this.notifqueue.setSynchronous('roundEnded', 500);
+                this.notifqueue.setSynchronous('roundLeaderChanged',         this.QUEUE_ROUND_LEADER_CHANGED);
+                this.notifqueue.setSynchronous('roundEnded',                 this.QUEUE_ROUND_ENDED);
+                // roundSummaryPause is async and self-timed — no setSynchronous needed
                 // Add tooltips to any cards that might have been missed
                 setTimeout(() => {
                     this.refreshAllCardTooltips();
@@ -2341,7 +2425,7 @@ define([
                 const player_id = args.player_id;
                 const player_name = args.player_name;
                 const num_atheists = args.num_atheists;
-                this.convertAtheists(player_id, num_atheists);
+                await this.convertAtheists(player_id, num_atheists);
                 // Update prayer token display if prayer value is provided
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
@@ -2361,7 +2445,7 @@ define([
                 const player_name = args.player_name;
                 const target_id = args.target_id;
                 const target_name = args.target_name;
-                this.convertBelievers(player_id, target_id);
+                await this.convertBelievers(player_id, target_id);
                 // Update prayer token display if prayer value is provided for either player
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
@@ -2575,29 +2659,24 @@ define([
                 // For example, a brief animation or highlighting of the player's board
             },
             notif_diceRollRequired: function (args) {
-                // Players who need to roll dice will be prompted in the setupDiceRoll method
+                this.playersWhoNeedToRoll = (args.players_rolling || []).map(id => parseInt(id));
+                this._checkAutoRoll();
             },
             notif_diceRolled: function (args) {
                 const player_id = args.player_id;
                 const result = args.result;
                 try { new Audio(g_gamethemeurl + 'sounds/kalua_dice_roll.ogg').play(); } catch(e) {}
                 setTimeout(() => {
-                    // Update the rolling player's die face
                     if (player_id && this.gamedatas.players[player_id]) {
                         const player = this.gamedatas.players[player_id];
                         const playerDieFace = ((player.sprite - 1) * 6) + result;
                         this['dice'].removeFromStockById(player_id);
                         this['dice'].addToStockWithId(playerDieFace, player_id);
                     }
-
-                    // If another player rolled and we're still active and haven't gone yet,
-                    // set the pending flag — onUpdateActionButtons will fire next (BGA calls it
-                    // when a multiactive peer completes) and will consume it.
-                    if (parseInt(player_id) !== parseInt(this.player_id)
-                            && this.isCurrentPlayerActive()
-                            && !this.autoRollAttempted
-                            && this.gamedatas.gamestate.name === 'phaseThreeRollDice') {
-                        this.pendingAutoRoll = true;
+                    this.diceRolledTracker.add(parseInt(player_id));
+                    // Check if all manual players have rolled so we can auto-roll
+                    if (parseInt(player_id) !== parseInt(this.player_id)) {
+                        this._checkAutoRoll();
                     }
                 }, 200);
                 this.disableNextMoveSound();
@@ -2791,7 +2870,7 @@ define([
                         this['played'].removeFromStockById(card_id);
                         this['resolved'].addToStockWithId(resolvedInstanceTypeId, card_id);
                         this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
-                        await new Promise(resolve => setTimeout(resolve, 700));
+                        await new Promise(resolve => setTimeout(resolve, this.ANIM_CARD_WAIT));
                         return;
                     }
 
@@ -2806,25 +2885,70 @@ define([
                     this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
 
                     // Fly a top-level clone so it renders above all other divs
-                    this.slideTemporaryObject(cloneHtml, 'game_play_area', `played_item_${card_id}`, `resolved_item_${card_id}`, 600, 0);
+                    this.slideTemporaryObject(cloneHtml, 'game_play_area', `played_item_${card_id}`, `resolved_item_${card_id}`, this.ANIM_CARD_SLIDE, 0);
 
                     // Remove source from played after slideTemporaryObject has read its position
                     setTimeout(() => { this['played'] && this['played'].removeFromStockById(card_id); }, 50);
 
                     // Reveal destination just as the clone lands
-                    setTimeout(() => { if (destEl) destEl.style.visibility = ''; }, 620);
+                    setTimeout(() => { if (destEl) destEl.style.visibility = ''; }, this.ANIM_CARD_SLIDE + 50);
 
-                    await new Promise(resolve => setTimeout(resolve, 700));
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_CARD_WAIT));
                 }
+            },
+            notif_roundSummaryPause: async function (args) {
+                const transit = document.getElementById('convert-transit');
+                if (!transit) return;
+                // Clear stale content from prior rounds before rebuilding
+                transit.innerHTML = '';
+                this._roundSummaryActive = true;
+                transit.style.display = 'block';
+
+                // Add a prayer row for every player
+                let prayerSection = document.getElementById('transit-section-prayer');
+                if (!prayerSection) {
+                    prayerSection = document.createElement('div');
+                    prayerSection.id = 'transit-section-prayer';
+                    prayerSection.className = 'transit-block';
+                    const lbl = document.createElement('span');
+                    lbl.className = 'transit-label';
+                    lbl.textContent = 'PRAYER';
+                    prayerSection.appendChild(lbl);
+                    transit.appendChild(prayerSection);
+                }
+                const summary = args.summary || [];
+                if (summary.length > 0) {
+                    summary.forEach(p => {
+                        const entry = document.createElement('span');
+                        entry.className = 'transit-prayer-entry';
+                        const sign = p.prayer_delta >= 0 ? '+' : '';
+                        entry.textContent = `${p.player_name}: ${sign}${p.prayer_delta}`;
+                        prayerSection.appendChild(entry);
+                    });
+                } else {
+                    const ph = document.createElement('span');
+                    ph.className = 'transit-prayer-entry';
+                    ph.textContent = '—';
+                    prayerSection.appendChild(ph);
+                }
+
+                // If no family-related sections exist, add a placeholder
+                const familySections = ['lost', 'died', 'gained', 'converted'].map(
+                    mode => document.getElementById(`transit-section-${mode}`)
+                ).filter(Boolean);
+                if (familySections.length === 0) {
+                    const ph = document.createElement('div');
+                    ph.className = 'transit-block transit-placeholder';
+                    ph.textContent = 'No family changes this round.';
+                    transit.insertBefore(ph, prayerSection);
+                }
+                await new Promise(resolve => setTimeout(resolve, this.QUEUE_ROUND_SUMMARY_PAUSE));
+                this._roundSummaryActive = false;
+                transit.style.display = 'none';
+                transit.innerHTML = '';
             },
             notif_cardBeingResolved: function (args) {
                 const msg = dojo.string.substitute(_('Now resolving: ${card_name}'), { card_name: args.card_name });
-                this.showMessage(msg, 'info');
-            },
-            notif_cardResolutionComplete: function (args) {
-                const msg = args.going_to_convert
-                    ? _('Card resolution complete. Proceeding to convert/pray phase')
-                    : _('Card resolution phase complete');
                 this.showMessage(msg, 'info');
             },
             notif_resolvedCardsCleanup: function (args) {
@@ -2839,65 +2963,37 @@ define([
                     this['played'].removeAll();
                 }
             },
-            notif_familiesConverted: function (args) {
-                // Update family counter for the affected player
+            notif_familiesConverted: async function (args) {
                 if (this.familyCounters[args.player_id]) {
                     this.familyCounters[args.player_id].setValue(args.families_remaining);
                 }
-
-                // Visually handle family conversion in the meeple display
                 const playerFamilies = this[`fams_${args.player_id}`];
                 if (playerFamilies && args.families_count > 0) {
-                    // Remove regular family meeples (NEVER remove chief meeple)
                     for (let i = 0; i < args.families_count; i++) {
-                        // Only remove atheist-type meeples (ID_AHTHIEST_STOCK = 5)
-                        // Chief meeples have IDs 0-4 (player.sprite - 1) and should never be removed here
-                        if (playerFamilies.count() > 0) {
-                            const items = playerFamilies.getAllItems();
-                            // Find a regular family meeple (not the chief) to remove
-                            const regularMeeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
-                            if (regularMeeple) {
-                                playerFamilies.removeFromStockById(regularMeeple.id);
-                            }
+                        const items = playerFamilies.getAllItems();
+                        const meeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
+                        if (meeple) {
+                            const fromElId = `${args.player_id}_families_item_${meeple.id}`;
+                            this.slideMeepleAnim(fromElId, 'atheistFamilies');
+                            playerFamilies.removeFromStockById(meeple.id);
+                            // Add to atheist pool as clone lands
+                            setTimeout(() => this['atheists'].addToStock(this.ID_AHTHIEST_STOCK), this.ANIM_MEEPLE_SLIDE);
+                        }
+                        if (i < args.families_count - 1) {
+                            await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
                         }
                     }
-                }
-
-                // Add converted families to atheist stock
-                for (let i = 0; i < args.families_count; i++) {
-                    this['atheists'].addToStock(this.ID_AHTHIEST_STOCK); // 5 = atheist meeple
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
                 }
                 this.addTransitMeeples(args.player_id, args.families_count, 'converted');
-                // Update prayer token display if prayer value is provided
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
                 }
                 this.updateFamiliesRemainingDisplay();
             },
             notif_familiesDied: function (args) {
-                // Update family counter for the affected player
-                if (this.familyCounters[args.player_id]) {
-                    this.familyCounters[args.player_id].setValue(args.families_remaining);
-                }
-
-                // Visually handle family death in the meeple display
-                const playerFamilies = this[`fams_${args.player_id}`];
-                if (playerFamilies && args.families_count > 0) {
-                    // Remove regular family meeples (NEVER remove chief meeple)
-                    for (let i = 0; i < args.families_count; i++) {
-                        // Only remove atheist-type meeples (ID_AHTHIEST_STOCK = 5)  
-                        // Chief meeples have IDs 0-4 (player.sprite - 1) and should never be removed here
-                        if (playerFamilies.count() > 0) {
-                            const items = playerFamilies.getAllItems();
-                            // Find a regular family meeple (not the chief) to remove
-                            const regularMeeple = items.find(item => item.type === this.ID_AHTHIEST_STOCK);
-                            if (regularMeeple) {
-                                playerFamilies.removeFromStockById(regularMeeple.id);
-                            }
-                        }
-                    }
-                }
-                // Note: Dead families don't go to atheist pool, they just disappear
+                // playerCountsChanged (fired just before this) handles counter + meeple stock removal.
+                // This handler only drives the "died" transit animation.
                 this.addTransitMeeples(args.player_id, args.families_count, 'died');
                 this.updateFamiliesRemainingDisplay();
             },

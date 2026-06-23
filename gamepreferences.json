@@ -43,5 +43,20 @@
       }
     },
     "default": 2
+  },
+  "103": {
+    "name": "Sort hand by",
+    "needReload": false,
+    "values": {
+      "1": {
+        "name": "Card type",
+        "cssPref": "kalua_sort_by_type"
+      },
+      "2": {
+        "name": "Prayer cost",
+        "cssPref": "kalua_sort_by_cost"
+      }
+    },
+    "default": 1
   }
 }
