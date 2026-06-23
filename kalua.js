@@ -191,8 +191,6 @@ define([
                             if (colorClass) {
                                 nameElement.classList.add('kalua_player_name_colored');
                             }
-                        } else {
-                            console.warn('Could not apply color - nameElement:', !!nameElement, 'fixedColor:', fixedColor);
                         }
                     }, 100);
                 });
@@ -332,8 +330,6 @@ define([
                         // Use tokenType as the stable item ID so movetokens can find it without scanning
                         this[`hkToken_${happiness}`].addToStockWithId(tokenType, tokenType);
                         this.hkTokenPositions[tokenType] = happiness;
-                    } else {
-                        console.error('Missing happiness token stock for happiness level:', happiness, 'player:', player);
                     }
                 });
                 // Create stock for played cards
@@ -468,8 +464,6 @@ define([
                             this[`${player.id}_kept`].addToStock(2);
                         }
 
-                    } else {
-                        console.error('No kept stock found during initialization for player', player.id);
                     }
                     /* TODO get each player's hand length to update counters */
                     element = $(`panel_l_${player.id}`);
@@ -926,6 +920,9 @@ define([
                         // Clean up any state-specific elements when leaving phaseOneDraw
                         // Do not add action buttons here - buttons should only be added in onUpdateActionButtons
                         break;
+                    case 'phaseThreePlayCard':
+                        clearTimeout(this._autoPassTimer);
+                        break;
                     default:
                         // Perform actions for unknown state
                         break;
@@ -991,7 +988,7 @@ define([
                                     // Round leader with no cards must CONVERT to end the phase, not pass —
                                     // passing without playing would loop back here indefinitely.
                                     this.showMessage(_('You have no cards and insufficient prayer. Automatically ending the card phase.'), 'info');
-                                    setTimeout(() => {
+                                    this._autoPassTimer = setTimeout(() => {
                                         this.bgaPerformAction('actSayConvert', {});
                                     }, this.AUTO_PASS_DELAY);
                                     this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
@@ -1001,7 +998,7 @@ define([
                                 } else {
                                     // Non-round-leader, or round leader who has already played and can now pass.
                                     this.showMessage(_('You have no cards and insufficient prayer to buy more. Automatically passing your turn.'), 'info');
-                                    setTimeout(() => {
+                                    this._autoPassTimer = setTimeout(() => {
                                         this.bgaPerformAction('actPlayCardPass', {});
                                     }, this.AUTO_PASS_DELAY);
                                     this.addActionButton('playCard-btn', _('Play Card'), () => { }, 'red');
@@ -1192,8 +1189,6 @@ define([
                 if (this.prayerCounters[playerId]) {
                     this.prayerCounters[playerId].setValue(newPrayerValue);
                     this.optimizePrayerTokens(playerId, newPrayerValue);
-                } else {
-                    console.warn(`No prayer counter found for player ${playerId}`);
                 }
             },
             ///////////////////////////////////////////////////
@@ -1201,7 +1196,6 @@ define([
             optimizePrayerTokens: function (playerId, targetCount) {
                 const prayerContent = document.getElementById(`${playerId}_PrayerContent`);
                 if (!prayerContent) {
-                    console.warn(`No prayer content found for player ${playerId}`);
                     return;
                 }
 
@@ -1271,7 +1265,6 @@ define([
                         break;
                 }
 
-                console.log(`Updating card ${cardId} (type_arg ${cardTypeArg}) to ${multiplierChoice}: position ${newImagePos}`);
 
                 // Update the card image in the played cards stock
                 if (this['played'] && this['played'].item_type && this['played'].item_type[uniqueId]) {
@@ -1440,18 +1433,14 @@ define([
                             }
                             cardElement.appendChild(indicator);
 
-                        } else {
-                            console.warn(`Could not find card element for ${stock_name}_item_${card_id}`);
                         }
                     }, 150);
                 } catch (error) {
-                    console.error('Error in addPlayerIndicator:', error);
                 }
             },
             // Helper function to add player color border to cards
             addPlayerBorderToCard: function (card_id, player_id, stock_name) {
                 if (!player_id || !this.gamedatas.players[player_id]) {
-                    console.warn(`No player data found for player ${player_id}`);
                     return;
                 }
                 // Get player's fixed color using helper function
@@ -1464,7 +1453,6 @@ define([
                 // Apply CSS class using BGA Stock extraClasses functionality
                 const colorClass = this.getPlayerColorClass(fixedColor);
                 if (!colorClass) {
-                    console.warn(`No color class found for color ${fixedColor}`);
                     return;
                 }
                 if (this[stock_name]) {
@@ -1480,7 +1468,6 @@ define([
                                     applied = true;
                                 }
                             } catch (e) {
-                                console.warn('addExtraClass method failed:', e);
                             }
                             // Method 2: Try multiple DOM selector approaches
                             if (!applied) {
@@ -1514,16 +1501,10 @@ define([
                             if (!applied && attempt < maxAttempts) {
 
                                 attemptBorderApplication(attempt + 1, maxAttempts);
-                            } else if (!applied) {
-                                console.error(`Could not find or apply color class to card ${card_id} in stock ${stock_name} after ${maxAttempts} attempts`);
-                                // Log all possible elements for debugging
-                                const allElements = document.querySelectorAll(`[id*="${card_id}"]`);
                             }
                         }, attempt * 100); // Increase delay with each attempt
                     };
                     attemptBorderApplication();
-                } else {
-                    console.warn(`Stock ${stock_name} not found`);
                 }
             },
             // Helper function to get CSS class name based on player color
@@ -1578,7 +1559,6 @@ define([
                 }
                 // For any other case, try to map it to a known color
                 const allColors = ['#4685FF', '#C22D2D', '#C8CA25', '#2EA232', '#913CB3'];
-                console.warn(`Unknown color format: ${color}, defaulting to blue`);
                 return '#4685FF'; // Default to blue
             },
             applyHandSort: function () {
@@ -1650,11 +1630,8 @@ define([
                 setTimeout(() => {
                     const cardStock = this[`${player_id}_cards`];
                     if (!cardStock || !cardStock.items) {
-                        console.log('No card stock or items for player', player_id);
                         return;
                     }
-
-                    console.log('Updating card grouping for player', player_id);
 
                     // Group cards by type and track which one to keep visible
                     const cardsByType = {};
@@ -1668,7 +1645,6 @@ define([
                         cardsByType[uniqueId].push(item);
                     });
 
-                    console.log('Cards grouped by type:', cardsByType);
 
                     // Store hidden cards to restore later
                     if (!this.hiddenCardsByPlayer) {
@@ -1696,8 +1672,7 @@ define([
                                     cardElement.classList.remove('card-hidden-duplicate');
 
                                     if (count > 1) {
-                                        console.log('Adding count', count, 'to first card', item.id, 'of type', uniqueId);
-                                        this.addCardCountOverlay(cardElement, count);
+                                            this.addCardCountOverlay(cardElement, count);
                                         cardElement.classList.add('has-card-count');
                                     } else {
                                         this.removeCardCountOverlay(cardElement);
@@ -1705,7 +1680,6 @@ define([
                                     }
                                 } else {
                                     // Duplicate card - completely hide it
-                                    console.log('Hiding duplicate card', item.id, 'of type', uniqueId);
                                     cardElement.classList.add('card-hidden-duplicate');
                                     cardElement.style.display = 'none';
                                     this.removeCardCountOverlay(cardElement);
@@ -1739,11 +1713,8 @@ define([
                 setTimeout(() => {
                     const cardbackStock = this[`${player_id}_cardbacks`];
                     if (!cardbackStock || !cardbackStock.items) {
-                        console.log(`No cardback stock or items for player ${player_id}`);
                         return;
                     }
-
-                    console.log(`Updating cardback grouping for player ${player_id}`);
 
                     // Group cardbacks by type
                     const cardbacksByType = {};
@@ -1757,7 +1728,6 @@ define([
                         cardbacksByType[uniqueId].push(item);
                     });
 
-                    console.log(`Cardbacks grouped by type for player ${player_id}:`, cardbacksByType);
 
                     // Store hidden cardbacks to restore later if needed
                     if (!this.hiddenCardbacksByPlayer) {
@@ -2697,8 +2667,6 @@ define([
 
                     keptStock.addToStock(2);
 
-                } else {
-                    console.error('No kept stock found for player', player_id);
                 }
             },
             notif_amuletIncremented: function (args) {
@@ -2717,8 +2685,6 @@ define([
 
                     keptStock.addToStock(1);
 
-                } else {
-                    console.error('No kept stock found for player', player_id);
                 }
             },
             notif_templeDestroyed: function (args) {
@@ -2844,7 +2810,6 @@ define([
                 const card_type = args.card_type;
                 const card_type_arg = args.card_type_arg;
 
-                console.log(`Resolving card ${card_id} (type ${card_type}, type_arg ${card_type_arg})`);
 
                 // Move card from played stock to resolved stock with animation
                 const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg));
@@ -2855,7 +2820,6 @@ define([
                     const cardInPlayed = playedItems.find(item => item.id == card_id);
 
                     if (!cardInPlayed) {
-                        console.warn(`Card ${card_id} not found in played stock`);
                         return;
                     }
 
@@ -2912,7 +2876,7 @@ define([
                     prayerSection.className = 'transit-block';
                     const lbl = document.createElement('span');
                     lbl.className = 'transit-label';
-                    lbl.textContent = 'PRAYER';
+                    lbl.textContent = _('PRAYER');
                     prayerSection.appendChild(lbl);
                     transit.appendChild(prayerSection);
                 }
@@ -2939,7 +2903,7 @@ define([
                 if (familySections.length === 0) {
                     const ph = document.createElement('div');
                     ph.className = 'transit-block transit-placeholder';
-                    ph.textContent = 'No family changes this round.';
+                    ph.textContent = _('No family changes this round.');
                     transit.insertBefore(ph, prayerSection);
                 }
                 await new Promise(resolve => setTimeout(resolve, this.QUEUE_ROUND_SUMMARY_PAUSE));

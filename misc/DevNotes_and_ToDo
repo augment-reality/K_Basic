@@ -7,9 +7,5 @@ It can contains notes, docs, tools, tests, data files, etc...
 
 -would be great to have visual representation of families getting moved around during convert phase
 -Review and consolidate messages
--fix die roll sound https://en.doc.boardgamearena.com/Game_interface_logic:_yourgamename.js#Sounds 
 -undo buttons? Maybe just confirm buttons instead (convert/pray)? https://en.doc.boardgamearena.com/BGA_Studio_Cookbook#Out-of-turn_actions:_Un-pass
 -For mobile: move dice to right of main board?
-
-FOR ALPHA DEPLOYMENT (BGA Pre-Release Checklist Issues):
-https://en.doc.boardgamearena.com/Pre-release_checklist

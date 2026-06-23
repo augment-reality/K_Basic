@@ -1630,8 +1630,14 @@ class Game extends \Table
             }
         }
 
-        // Game ends when at most one religion still has families (chief alone doesn't count).
-        $religions_with_families = count(array_filter($playerData, fn($row) => (int)$row['player_family'] > 0));
+        // Game ends when at most one religion still has actual families
+        // (chief alone does not count as an active family count).
+        $religions_with_families = count(array_filter($playerData, function($row) {
+            $family_count = (int)$row['player_family'];
+            $has_chief = (int)$row['player_chief'];
+            $actual_families = $family_count - ($has_chief > 0 ? 1 : 0);
+            return $actual_families > 0;
+        }));
         if ($religions_with_families <= 1) {
             $this->gamestate->nextState('gameOver');
             return;
