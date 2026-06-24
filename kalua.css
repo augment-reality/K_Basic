@@ -81,7 +81,9 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(92vw, 1000px);
+    width: fit-content;
+    min-width: 360px;
+    max-width: min(92vw, 1000px);
     max-height: 88vh;
     overflow-y: auto;
     background: rgba(245, 238, 220, 0.97);

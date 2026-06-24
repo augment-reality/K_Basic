@@ -1615,6 +1615,8 @@ define([
                     this._removeTimerCancel();
                     onFire();
                 } else {
+                    // Stop any timer running on a different button, then arm this one
+                    this.stopActionTimer();
                     this.startActionTimer(buttonId, this.ACTION_TIMER_SECONDS, onFire);
                 }
             },
@@ -1648,7 +1650,15 @@ define([
                     }
                 };
                 this._actionTimers[buttonId] = { timerId: setInterval(tick, 1000), spanId };
-                this.addActionButton('kalua-cancel-timer-btn', _('Cancel'), () => this.stopActionTimer(), 'red');
+                // Insert cancel button directly after the armed button (addActionButton unreliable from click handlers)
+                const cancelBtn = document.createElement('a');
+                cancelBtn.id = 'kalua-cancel-timer-btn';
+                cancelBtn.className = 'bgabutton bgabutton_red';
+                cancelBtn.textContent = _('Cancel');
+                cancelBtn.style.cursor = 'pointer';
+                cancelBtn.addEventListener('click', () => this.stopActionTimer());
+                cancelBtn.style.marginLeft = '10px';
+                btn.insertAdjacentElement('afterend', cancelBtn);
                 tick();
             },
             _removeTimerCancel: function () {
@@ -1976,7 +1986,7 @@ define([
                 });
                 otherPlayers.forEach(player => {
                     this.addPlayerActionButton(`target-player-${player.id}`, player, () => {
-                        this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
+                        this.armButton(`target-player-${player.id}`, () => this.bgaPerformAction('actSelectPlayer', { player_id: player.id }));
                     });
                 });
             },
@@ -1990,6 +2000,10 @@ define([
                     /* TODO disable button if no families? but what if no one else has families? warning? */
                     this.addPlayerActionButton(`convert-target-${player.id}`, player, () =>
                         this.bgaPerformAction('actConvertBelievers', { target_player_id: player.id }));
+                });
+                this.addActionButton('cancel-convert-target-btn', _('← Go Back'), () => {
+                    this.statusBar.removeActionButtons();
+                    this.onUpdateActionButtons(this.gamedatas.gamestate.name, this.gamedatas.gamestate.args);
                 });
             },
             convertBelievers: async function (player_id, target_player_id) {
@@ -2926,7 +2940,7 @@ define([
                 colHeaders.appendChild(famLabel);
                 panel.appendChild(colHeaders);
 
-                const snapshot = [...args.snapshot].sort((a, b) => a.happiness - b.happiness);
+                const snapshot = [...args.snapshot].sort((a, b) => b.happiness - a.happiness);
                 const happyHigh = args.happy_high;
                 const happyLow  = args.happy_low;
                 const allEqual  = happyHigh === happyLow;
