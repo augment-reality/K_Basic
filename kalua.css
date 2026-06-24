@@ -13,17 +13,6 @@
  *
  */
 
-/* Custom font declaration for AHDN */
-
-@font-face {
-    font-family: 'AHDN';
-    src: url('img/AHDN.ttf') format('truetype');
-    font-weight: 100;
-    /* Ultra-light weight */
-    font-style: normal;
-}
-
-
 #game_play_area {
     display: flex;
     flex-direction: row;
@@ -85,48 +74,199 @@
     text-align: center;
 }
 
-#convert-transit {
-    position: absolute;
-    top: 370px;
-    left: -1px;
-    right: -1px;
-    background: rgba(245, 235, 215, 0.97);
+/* ── Family Exchange Panel (end-of-round happiness redistribution) ── */
+
+#family-exchange {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 1000px);
+    max-height: 88vh;
+    overflow-y: auto;
+    background: rgba(245, 238, 220, 0.97);
+    color: #333;
     border: 1px solid #bbb;
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    padding: 6px 10px;
-    font-size: 11px;
-    z-index: 5;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    border-radius: 11px;
+    padding: 18px 25px;
+    box-sizing: border-box;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-.transit-block {
+.fex-header {
+    font-size: 20px;
+    font-weight: 700;
+    color: #666;
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding-bottom: 11px;
+    margin-bottom: 7px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.fex-row {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin: 2px 0;
+    gap: 9px;
+    margin: 5px 0;
 }
 
-.transit-label {
-    font-size: 10px;
-    color: #666;
+.fex-row-left {
+    display: flex;
+    flex-direction: column;
+    min-width: 198px;
+    max-width: 198px;
+}
+
+.fex-player-name {
+    font-size: 18px;
+    color: #555;
     white-space: nowrap;
-    min-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.convert-transit-meeple {
-    display: inline-block;
+.fex-hap-bracket {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.fex-hap-pill {
+    font-size: 14px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.07);
+    color: rgba(0, 0, 0, 0.28);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.fex-hap-low  { background: #b33; color: #fff; }
+.fex-hap-mid  { background: #b76020; color: #fff; }
+.fex-hap-high { background: #3a7a3a; color: #fff; }
+
+.fex-meeples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    flex: 1;
+    min-height: 30px;
+}
+
+.fex-meeple {
     width: 30px;
     height: 30px;
     background-repeat: no-repeat;
-    background-size: auto;
-    vertical-align: middle;
     flex-shrink: 0;
 }
 
-.transit-meeple-died {
-    opacity: 0.35;
-    filter: grayscale(1);
+.fex-role-badge {
+    font-size: 22px;
+    font-weight: bold;
+    min-width: 32px;
+    text-align: right;
+}
+
+.fex-badge-happy   { color: #3a7a3a; }
+.fex-badge-mid     { color: #b76020; }
+.fex-badge-unhappy { color: #b33; }
+
+#fex-pool {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.fex-pool-label {
+    font-size: 18px;
+    color: #777;
+    min-width: 72px;
+    padding-top: 5px;
+}
+
+#fex-pool-meeples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 30px;
+    flex: 1;
+}
+
+.fex-equal-msg {
+    font-size: 18px;
+    color: #888;
+    font-style: italic;
+}
+
+.fex-col-headers {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.fex-col-hap {
+    min-width: 198px;
+    max-width: 198px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #999;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.fex-col-fam {
+    font-size: 14px;
+    font-weight: 700;
+    color: #999;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    flex: 1;
+}
+
+@keyframes fex-pulse-lost {
+    0%, 100% { background: transparent; }
+    35%, 65% { background: rgba(183, 51, 51, 0.18); }
+}
+
+@keyframes fex-pulse-gained {
+    0%, 100% { background: transparent; }
+    35%, 65% { background: rgba(58, 122, 58, 0.18); }
+}
+
+.fex-pulse-lost {
+    animation: fex-pulse-lost 0.7s ease 2;
+    border-radius: 5px;
+}
+
+.fex-pulse-gained {
+    animation: fex-pulse-gained 0.7s ease 2;
+    border-radius: 5px;
+}
+
+.fex-prayer-icon {
+    width: 29px;
+    height: 29px;
+    vertical-align: middle;
+    margin: 0 4px;
+}
+
+.fex-prayer-badge {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #555;
+    white-space: nowrap;
+    margin-left: 6px;
 }
 
 #dice {

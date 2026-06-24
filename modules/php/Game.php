@@ -18,10 +18,11 @@ use CardType;
 use GlobalDisasterCard;
 use LocalDisasterCard;
 
-require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
 require_once("constants.inc.php");
 
-class Game extends \Table
+use Bga\GameFramework\Table;
+
+class Game extends Table
 {
     private static array $CARD_TYPES;
     private $disasterCards;
@@ -55,10 +56,8 @@ class Game extends \Table
         ]);          
 
         //Make two decks: bonus and disaster
-        $this->disasterCards = $this->getNew( "module.common.deck" );
-        $this->disasterCards->init( "disaster_card" );
-        $this->bonusCards = $this->getNew( "module.common.deck" );
-        $this->bonusCards->init( "bonus_card" );
+        $this->disasterCards = $this->bga->deckFactory->createDeck( "disaster_card" );
+        $this->bonusCards = $this->bga->deckFactory->createDeck( "bonus_card" );
         
     }
 
@@ -880,24 +879,32 @@ class Game extends \Table
                 $multiplier = 2.0;
             }
             
-            // For normal effect, apply silently and send generic notification afterwards
+            // Apply effects without per-player sidebar messages — the globalEffectApplied
+            // summary below covers the whole group; amulet exceptions are called out separately.
             if ($choice === 'normal') {
-                $this->applyCardEffects($player_id, $player_effects); // Apply without notification
+                $this->applyCardEffects($player_id, $player_effects, true);
             } else {
-                // Apply effects to this player with the calculated multiplier (with individual notifications)
-                $this->applyEffectsToPlayer($player_id, $player_effects, $multiplier, $choice);
+                $this->applyEffectsToPlayer($player_id, $player_effects, $multiplier, $choice, true);
             }
         }
         
-        // Send generic notification for normal global effects
+        // Send summary notification for global effects
         if ($choice === 'normal') {
             $effect_text = $this->getEffectsText($effects);
-            $this->notifyAllPlayers('globalEffectApplied', 
-                clienttranslate('All players ${effect_type}: ${effect_text}'), [
+            $this->notifyAllPlayers('globalEffectApplied',
+                clienttranslate('All players (normal): ${effect_text}'), [
                     'effect_text' => $effect_text,
-                    'effect_type' => $this->getEffectTypeText($effects),
                     'effects' => $effects,
                     'multiplier' => 1.0,
+                    'choice' => $choice
+                ]);
+        } elseif ($choice === 'double') {
+            $effect_text = $this->getEffectsText($effects);
+            $this->notifyAllPlayers('globalEffectApplied',
+                clienttranslate('All players (doubled — 2× base effects): ${effect_text}'), [
+                    'effect_text' => $effect_text,
+                    'effects' => $effects,
+                    'multiplier' => 2.0,
                     'choice' => $choice
                 ]);
         }
@@ -925,7 +932,7 @@ class Game extends \Table
     /**
      * Apply effects to a specific player
      */
-    private function applyEffectsToPlayer(int $player_id, array $effects, float $multiplier, string $choice_type): void
+    private function applyEffectsToPlayer(int $player_id, array $effects, float $multiplier, string $choice_type, bool $silent = false): void
     {
         $effects_to_apply = [];
         
@@ -973,7 +980,7 @@ class Game extends \Table
 
         // Apply the calculated effects using the existing applyCardEffects method
         if (!empty($effects_to_apply)) {
-            $this->applyCardEffects($player_id, $effects_to_apply);
+            $this->applyCardEffects($player_id, $effects_to_apply, $silent);
             
             // Determine if this is a bonus card (positive effects) or disaster card (negative effects)
             $has_positive_effects = isset($effects['prayer_effect']) || isset($effects['happiness_effect']);
@@ -999,30 +1006,13 @@ class Game extends \Table
                 }
             }
             
-            $this->notifyAllPlayers('effectApplied', $message_key, [
-                'player_id' => $player_id,
-                'player_name' => $this->getPlayerNameById($player_id),
-                'effect_text' => $this->getEffectsText($effects_to_apply),
-                'effects' => $effects_to_apply,
-                'multiplier' => $multiplier,
-                'choice' => $choice_type
-            ]);
-        } elseif ($multiplier === 0.0) {
-            // Notify about protection even if no effects would apply
-            $this->notifyAllPlayers('effectApplied', 
-                clienttranslate('${player_name} is protected from the disaster effects'), [
-                    'player_id' => $player_id,
-                    'player_name' => $this->getPlayerNameById($player_id),
-                    'multiplier' => $multiplier,
-                    'choice' => $choice_type
-                ]);
         }
     }
     
     /**
      * Apply card effects to a specific player
      */
-    private function applyCardEffects(int $player_id, array $effects): void
+    private function applyCardEffects(int $player_id, array $effects, bool $silent = false): void
     {
         $updates = [];
         
@@ -1082,23 +1072,20 @@ class Game extends \Table
                     'player_id' => $player_id
                 ], $player_data));
                 
-                // Notify about the conversion
-                $this->notifyAllPlayers('familiesConverted', 
-                    clienttranslate('${player_name} loses ${families_count} families to atheism'), [
+                $this->notifyAllPlayers('familiesConverted',
+                    $silent ? '' : clienttranslate('${player_name} loses ${families_count} families to atheism'), [
                         'player_id' => $player_id,
                         'player_name' => $this->getPlayerNameById($player_id),
                         'families_count' => $actual_converted,
                         'families_remaining' => $current_families - $actual_converted
                     ]
                 );
-                
                 $this->incStat($actual_converted, 'families_became_atheist', $player_id);
             } else if ($families_to_convert > 0) {
-                // Player was protected by having only their chief remaining
                 $has_chief = $this->getChiefCount($player_id);
                 if ($has_chief > 0 && $current_families <= 1) {
-                    $this->notifyAllPlayers('familiesConverted', 
-                        clienttranslate('${player_name}\'s chief is the only one left'), [
+                    $this->notifyAllPlayers('familiesConverted',
+                        $silent ? '' : clienttranslate('${player_name}\'s chief is the only one left'), [
                             'player_id' => $player_id,
                             'player_name' => $this->getPlayerNameById($player_id),
                             'families_count' => 0,
@@ -1132,23 +1119,20 @@ class Game extends \Table
                     'player_id' => $player_id
                 ], $player_data));
                 
-                // Notify about the deaths
-                $this->notifyAllPlayers('familiesDied', 
-                    clienttranslate('${player_name} loses ${families_count} families to death'), [
+                $this->notifyAllPlayers('familiesDied',
+                    $silent ? '' : clienttranslate('${player_name} loses ${families_count} families to death'), [
                         'player_id' => $player_id,
                         'player_name' => $this->getPlayerNameById($player_id),
                         'families_count' => $actual_killed,
                         'families_remaining' => $current_families - $actual_killed
                     ]
                 );
-                
                 $this->incStat($actual_killed, 'families_died', $player_id);
             } else if ($families_to_kill > 0) {
-                // Player was protected by having only their chief remaining
                 $has_chief = $this->getChiefCount($player_id);
                 if ($has_chief > 0 && $current_families <= 1) {
-                    $this->notifyAllPlayers('familiesDied', 
-                        clienttranslate('${player_name}\'s chief meeple is protected from death effects'), [
+                    $this->notifyAllPlayers('familiesDied',
+                        $silent ? '' : clienttranslate('${player_name}\'s chief meeple is protected from death effects'), [
                             'player_id' => $player_id,
                             'player_name' => $this->getPlayerNameById($player_id),
                             'families_count' => 0,
@@ -1174,7 +1158,7 @@ class Game extends \Table
                                                        FROM player WHERE player_id = $player_id");
                 $this->notifyAllPlayers('playerCountsChanged', '', array_merge(['player_id' => $player_id], $player_data));
                 $this->notifyAllPlayers('familiesGained',
-                    clienttranslate('${player_name} gains ${families_count} new believers'),
+                    $silent ? '' : clienttranslate('${player_name} gains ${families_count} new believers'),
                     [
                         'player_id'      => $player_id,
                         'player_name'    => $this->getPlayerNameById($player_id),
@@ -1233,37 +1217,37 @@ class Game extends \Table
     private function getEffectsText(array $effects): string
     {
         $effect_parts = [];
-        
+
         if (isset($effects['prayer_loss']) && $effects['prayer_loss'] > 0) {
             $effect_parts[] = "-{$effects['prayer_loss']} prayer";
         }
-        if (isset($effects['prayer_effect']) && $effects['prayer_effect'] > 0) {
-            $effect_parts[] = "+{$effects['prayer_effect']} prayer";
-        } elseif (isset($effects['prayer_effect']) && $effects['prayer_effect'] < 0) {
-            $effect_parts[] = "{$effects['prayer_effect']} prayer";
+        if (isset($effects['prayer_effect'])) {
+            if ($effects['prayer_effect'] === 'roll_d6') {
+                $effect_parts[] = '+dice prayer';
+            } elseif (is_numeric($effects['prayer_effect']) && $effects['prayer_effect'] > 0) {
+                $effect_parts[] = "+{$effects['prayer_effect']} prayer";
+            } elseif (is_numeric($effects['prayer_effect']) && $effects['prayer_effect'] < 0) {
+                $effect_parts[] = "{$effects['prayer_effect']} prayer";
+            }
         }
-        
-        if (isset($effects['faith_loss']) && $effects['faith_loss'] > 0) {
-            $effect_parts[] = "-{$effects['faith_loss']} faith";
+
+        if (isset($effects['happiness_effect'])) {
+            if ($effects['happiness_effect'] === 'roll_d6') {
+                $effect_parts[] = '±dice happiness';
+            } elseif (is_numeric($effects['happiness_effect']) && $effects['happiness_effect'] != 0) {
+                $sign = $effects['happiness_effect'] > 0 ? '+' : '';
+                $effect_parts[] = "{$sign}{$effects['happiness_effect']} happiness";
+            }
         }
-        
-        if (isset($effects['trade_loss']) && $effects['trade_loss'] > 0) {
-            $effect_parts[] = "-{$effects['trade_loss']} trade";
-        }
-        
-        if (isset($effects['culture_loss']) && $effects['culture_loss'] > 0) {
-            $effect_parts[] = "-{$effects['culture_loss']} culture";
-        }
-        
-        if (isset($effects['happiness_effect']) && $effects['happiness_effect'] != 0) {
-            $sign = $effects['happiness_effect'] > 0 ? '+' : '';
-            $effect_parts[] = "{$sign}{$effects['happiness_effect']} happiness";
-        }
-        
+
         if (isset($effects['family_dies']) && $effects['family_dies'] > 0) {
             $effect_parts[] = "{$effects['family_dies']} families die";
         }
-        
+
+        if (isset($effects['convert_to_atheist']) && $effects['convert_to_atheist'] > 0) {
+            $effect_parts[] = "1 family → atheist";
+        }
+
         return empty($effect_parts) ? 'no effects' : implode(', ', $effect_parts);
     }
     
@@ -1326,14 +1310,6 @@ class Game extends \Table
         $card_name = $this->getCardName($resolving_card);
         $active_player_id = $this->getActivePlayerId();
         
-        // Notify all players about target selection
-        $this->notifyAllPlayers("message", 
-            clienttranslate('${player_name} must select a target for ${card_name}'), 
-            [
-                'player_name' => $this->getPlayerNameById($active_player_id),
-                'card_name' => $card_name
-            ]
-        );
     }
 
     /**
@@ -1512,7 +1488,21 @@ class Game extends \Table
         // Count of players with highest happiness
         $high_players = count($high_happiness_players);
 
-
+        // Build pre-redistribution snapshot for the client family exchange panel
+        $snapshot = [];
+        foreach ($playerData as $player_id => $row) {
+            if ((int)$row['player_eliminated'] === 1) continue;
+            $snapshot[] = [
+                'player_id' => (int)$player_id,
+                'happiness' => (int)$happinessScores[$player_id],
+                'families'  => (int)$row['player_family'],
+            ];
+        }
+        $this->notifyAllPlayers('phaseConvertStart', '', [
+            'snapshot'   => $snapshot,
+            'happy_high' => $happy_value_high,
+            'happy_low'  => $happy_value_low,
+        ]);
 
         // Redistribute families, unless everyone has same happiness
         if ($happy_value_low != $happy_value_high) {
@@ -1623,7 +1613,11 @@ class Game extends \Table
                     $this->incStat(1, 'players_eliminated');
                     
                     // Increment score for all remaining (non-eliminated) players
-                    self::DbQuery("UPDATE player SET player_score = player_score + 1 WHERE player_eliminated = 0 AND player_id != $player_id");
+                    foreach ($playerData as $pid => $pdata) {
+                        if ((int)$pdata['player_eliminated'] === 0 && (int)$pid !== (int)$player_id) {
+                            $this->bga->playerScore->inc((int)$pid, 1);
+                        }
+                    }
                     
                 }
                 self::DbQuery("UPDATE player SET player_eliminated = 1 WHERE player_id = $player_id");
@@ -2191,7 +2185,7 @@ class Game extends \Table
         }
         
         // Save the current state to return to later
-        $this->setGameStateValue('saved_state', $this->gamestate->state_id());
+        $this->setGameStateValue('saved_state', $this->getCurrentStateId());
         $this->setGameStateValue('saved_active_player', $player_id);
         
         $this->gamestate->nextState('buyCardReflex');
@@ -2493,13 +2487,15 @@ class Game extends \Table
         $target_name = $all_players[$player_id]['player_name'];
         
         // Notify all players about the target selection
-        $this->notifyAllPlayers("targetSelected", 
-            clienttranslate('${card_name} will target ${target_name}'), 
+        $player_name = $this->getPlayerNameById((int)$played_by);
+        $this->notifyAllPlayers("targetSelected",
+            clienttranslate('${player_name}\'s ${card_name} targets ${target_name}'),
             [
-                'card_name' => $card_name,
-                'target_name' => $target_name,
+                'player_name'     => $player_name,
+                'card_name'       => $card_name,
+                'target_name'     => $target_name,
                 'target_player_id' => $player_id,
-                'card_id' => $resolving_card['id']
+                'card_id'         => $resolving_card['id']
             ]
         );
         
@@ -2633,30 +2629,47 @@ class Game extends \Table
             $this->applyGlobalDisasterEffects($card_id, $effects, $played_by);
         } else {
             // Handle local disasters and bonus cards with amulet consideration
-            $this->applyTargetedCardEffectsWithAmulets($card_id, $effects, $played_by, $target_player);
+            $this->applyTargetedCardEffectsWithAmulets($card, $effects, $played_by, $target_player);
         }
         
 
     }
 
-    private function applyTargetedCardEffectsWithAmulets(int $card_id, array $effects, ?int $played_by, ?int $target_player): void
+    private function applyTargetedCardEffectsWithAmulets(array $card, array $effects, ?int $played_by, ?int $target_player): void
     {
         if ($target_player !== null) {
-            // Check if the target player used an amulet
             $used_amulet = isset($this->playerUsedAmulet[$target_player]) && $this->playerUsedAmulet[$target_player];
-            
+
             if ($used_amulet) {
-                $this->notifyAllPlayers("message", 
-                    clienttranslate('${player_name} is protected from the disaster effects by an amulet'), 
+                $this->notifyAllPlayers("message",
+                    clienttranslate('${player_name} is protected from the disaster effects by an amulet'),
                     ['player_name' => $this->getPlayerNameById($target_player)]
                 );
-                // Skip applying harmful effects
+                // Amulet blocks harmful effects — still apply non-harmful ones (prayer, happiness) silently
+                $safe_effects = $effects;
+                $safe_effects['family_dies'] = 0;
+                $safe_effects['convert_to_atheist'] = 0;
+                if (!empty(array_filter($safe_effects))) {
+                    $this->applyEffectsToPlayer($target_player, $safe_effects, 1.0, 'normal', true);
+                }
             } else {
-                // Apply effects normally to the target
-                $this->applyEffectsToPlayer($target_player, $effects, 1.0, 'normal');
+                // Apply effects silently then send one combined summary line
+                $this->applyEffectsToPlayer($target_player, $effects, 1.0, 'normal', true);
+                $card_name   = $this->getCardName($card);
+                $target_name = $this->getPlayerNameById($target_player);
+                $effect_text = $this->getEffectsText($effects);
+                $this->notifyAllPlayers('localEffectApplied',
+                    clienttranslate('${card_name} hits ${target_name}: ${effect_text}'),
+                    [
+                        'card_name'   => $card_name,
+                        'target_name' => $target_name,
+                        'effect_text' => $effect_text,
+                        'effects'     => $effects
+                    ]
+                );
             }
         } else {
-            // Apply effects to the player who played the card (for bonus cards)
+            // Bonus card played to self — keep per-effect notifications for clarity
             if ($played_by !== null) {
                 $this->applyEffectsToPlayer($played_by, $effects, 1.0, 'normal');
             }
@@ -2736,17 +2749,16 @@ class Game extends \Table
             $players_to_affect = [$played_by];
         }
 
+        $isGlobal = ($card_type === CardType::GlobalDisaster->value);
+
         foreach ($players_to_affect as $player_id) {
-            // Skip players who used amulets (for harmful effects)
             $used_amulet = isset($this->playerUsedAmulet[$player_id]) && $this->playerUsedAmulet[$player_id];
-            
-            // Create personalized effects for this player
+
             $player_effects = $effects;
-            
-            // Replace "roll_d6" with actual dice result for this player
+
             $dice_result = (int)$this->getUniqueValueFromDb("SELECT die_value FROM dice_result WHERE player_id = $player_id");
             if ($dice_result === 0) {
-                $dice_result = 1; // Default to 1 if no result stored
+                $dice_result = 1;
             }
 
             if ($player_effects['happiness_effect'] === "roll_d6") {
@@ -2758,13 +2770,25 @@ class Game extends \Table
             if ($player_effects['convert_to_religion'] === "roll_d6") {
                 $player_effects['convert_to_religion'] = $dice_result;
             }
-            
-            // Apply effects to this player considering amulet usage
-            $this->applyEffectsToPlayerWithAmulet($player_id, $player_effects, $used_amulet);
+
+            // Global disasters suppress per-player family log lines — summary sent below
+            $this->applyEffectsToPlayerWithAmulet($player_id, $player_effects, $used_amulet, $isGlobal);
+        }
+
+        // One summary line for global disasters (dice results vary but base effects are the same)
+        if ($isGlobal) {
+            $effect_text = $this->getEffectsText($effects);
+            $this->notifyAllPlayers('globalEffectApplied',
+                clienttranslate('All players (normal): ${effect_text}'), [
+                    'effect_text' => $effect_text,
+                    'effects'     => $effects,
+                    'multiplier'  => 1.0,
+                    'choice'      => 'normal'
+                ]);
         }
     }
 
-    private function applyEffectsToPlayerWithAmulet(int $player_id, array $effects, bool $used_amulet): void
+    private function applyEffectsToPlayerWithAmulet(int $player_id, array $effects, bool $used_amulet, bool $silent = false): void
     {
         // If player used an amulet, protect them from harmful effects
         if ($used_amulet) {
@@ -2794,7 +2818,7 @@ class Game extends \Table
         }
         
         // Apply the (potentially modified) effects to the player
-        $this->applyEffectsToPlayer($player_id, $effects, 1.0, 'normal');
+        $this->applyEffectsToPlayer($player_id, $effects, 1.0, 'normal', $silent);
     }
 
     public function actDiscard(int $card_id): void
@@ -3809,6 +3833,8 @@ class Game extends \Table
             'player_id' => $initial_leader,
             'player_name' => $this->getPlayerNameById($initial_leader)
         ]);
+
+        return ST_QUICK_DRAW;
     }
 
     /**
@@ -4049,11 +4075,11 @@ class Game extends \Table
 
     // set aux score (tie breaker)
     function dbSetAuxScore($player_id, $score) {
-        $this->DbQuery("UPDATE player SET player_score_aux=$score WHERE player_id='$player_id'");
+        $this->bga->playerScoreAux->set((int)$player_id, (int)$score);
     }
     // set score
     function dbSetScore($player_id, $count) {
-        $this->DbQuery("UPDATE player SET player_score='$count' WHERE player_id='$player_id'");
+        $this->bga->playerScore->set((int)$player_id, (int)$count);
     }
 
     /* Helpers */
@@ -4066,7 +4092,7 @@ class Game extends \Table
         
         if ($type != STR_CARD_TYPE_DISASTER && $type != STR_CARD_TYPE_BONUS)
         {
-            throw new \BgaVisibleSystemException($this->_("Unknown card type " + $type));
+            throw new \BgaVisibleSystemException(clienttranslate('Unknown card type: ') . $type);
         }
 
         

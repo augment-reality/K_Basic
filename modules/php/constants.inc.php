@@ -3,8 +3,6 @@
 /*
  * State constants
  */
-const ST_BGA_GAME_SETUP = 1;
-
 /* Game setup states */
 const ST_QUICK_DRAW = 10;
 const ST_INITIAL_DRAW = 11;

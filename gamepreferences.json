@@ -58,5 +58,20 @@
       }
     },
     "default": 1
+  },
+  "104": {
+    "name": "Timed confirmation",
+    "needReload": false,
+    "values": {
+      "1": {
+        "name": "No timed confirmation",
+        "cssPref": "kalua_no_timed_confirm"
+      },
+      "2": {
+        "name": "Prompt with countdown",
+        "cssPref": "kalua_timed_confirm"
+      }
+    },
+    "default": 2
   }
 }

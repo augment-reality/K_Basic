@@ -24,11 +24,7 @@ use Bga\GameFramework\StateType;
 
 $machinestates = [
 
-    // The initial state. Please do not modify.
-
-    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_QUICK_DRAW)->build(),
-
-        /* Quickstart setup */
+    /* Quickstart setup */
     ST_QUICK_DRAW => GameStateBuilder::create()
         ->name('quickDraw')
         ->description(clienttranslate('Dealing quickstart cards to all players'))

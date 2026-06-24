@@ -31,7 +31,7 @@ define([
                     <div id="atheistFamilies"></div>
                     <div id="families-remaining-stat">Families remaining: <span id="families-remaining-count">0</span></div>
                     <div id="dice"></div>
-                    <div id="convert-transit" style="display:none;"></div>
+                    <div id="family-exchange" style="display:none;"></div>
                 </div>
                 <div id="card_areas">
                     <div id="playedCards">
@@ -83,10 +83,13 @@ define([
                 this.nextPlayOrder = 1000; // Start high to avoid conflicts with database play_order
 
                 // ── Timing constants ─────────────────────────────────────────────────────
+                // Action timer
+                this.ACTION_TIMER_SECONDS = 4;   // countdown shown on action buttons
                 // Animation durations
                 this.ANIM_MEEPLE_SLIDE   = 1600; // ms — flight time per meeple
                 this.ANIM_MEEPLE_STAGGER = 600;  // ms — gap between meeples in a multi-move
                 this.ANIM_MEEPLE_WAIT    = 1800; // ms — queue hold after all meeples land
+                this.ANIM_POOL_PAUSE     = 2500; // ms — pause after pool fills before distribution
                 this.ANIM_CARD_SLIDE     = 2400; // ms — flight time for card → resolved
                 this.ANIM_CARD_WAIT      = 2800; // ms — queue hold after card animation
                 // Notification queue hold times (setSynchronous)
@@ -195,7 +198,7 @@ define([
                     }, 100);
                 });
                 // Add notice for hidden players preference
-                if (this.prefs[100] && this.prefs[100].value == 1) {
+                if (this.bga.userPreferences.get(100) == 1) {
                     const hiddenCount = Object.keys(gamedatas.players).length - 1;
                     if (hiddenCount > 0) {
                         document.getElementById('player-tables').insertAdjacentHTML('beforeend', `
@@ -797,6 +800,7 @@ define([
                         break;
                     }
                 }
+
                 if (targetElement) {
                     const elementId = targetElement.id || `${stockName}_${uniqueId}`;
                     this.addCardTooltip(elementId, cardType, cardId, playerId);
@@ -826,11 +830,10 @@ define([
             ///////////////////////////////////////////////////
             //// Game & client states
             onEnteringState: function (stateName, args) {
-                // Hide convert transit on state changes, but not while roundSummaryPause owns it
-                const convertTransit = document.getElementById('convert-transit');
-                if (convertTransit && stateName !== 'phaseFourConvertPray' && !this._roundSummaryActive) {
-                    convertTransit.style.display = 'none';
-                    convertTransit.innerHTML = '';
+                const familyExchange = document.getElementById('family-exchange');
+                if (familyExchange && !this._roundSummaryActive) {
+                    familyExchange.style.display = 'none';
+                    familyExchange.innerHTML = '';
                 }
                 switch (stateName) {
                     case 'phaseOneDraw':
@@ -887,11 +890,7 @@ define([
                         break;
                     case 'phaseFourConvertPray':
                         this.hidePredictionPanel();
-                        if (convertTransit) {
-                            // Notifications already fired and may have populated this div;
-                            // just make it visible — addTransitMeeples handles the header
-                            convertTransit.style.display = 'block';
-                        }
+                        // family-exchange panel is built and shown by notif_phaseConvertStart
                         break;
                     default:
                         // Perform actions for unknown state
@@ -903,6 +902,7 @@ define([
                 }, 50);
             },
             onLeavingState: function (stateName) {
+                this.stopActionTimer();
                 switch (stateName) {
                     case 'Initial_Draw':
                         if (this.isCurrentPlayerActive()) {
@@ -959,10 +959,10 @@ define([
                         case 'phaseTwoActivateLeader':
                             if (this.isCurrentPlayerActive()) {
                                 this.addActionButton('giveSpeech-btn', _('Give a Speech'), () => {
-                                    this.bgaPerformAction("actGiveSpeech");
+                                    this.armButton('giveSpeech-btn', () => this.bgaPerformAction("actGiveSpeech"));
                                 });
                                 this.addActionButton('convertAtheist-btn', _('Convert Atheists'), () => {
-                                    this.bgaPerformAction("actConvertAtheists");
+                                    this.armButton('convertAtheist-btn', () => this.bgaPerformAction("actConvertAtheists"));
                                 });
                                 /* check if there are enough atheists and disable the button if there aren't */
                                 if (this['atheists'].count() == 0) {
@@ -970,10 +970,18 @@ define([
                                     dojo.addClass('convertAtheist-btn', 'disabled');
                                 }
                                 this.addActionButton('convertBeliever-btn', _('Convert Believer'), () => {
-                                    this.chooseConvertTarget()
+                                    this.armButton('convertBeliever-btn', () => this.chooseConvertTarget());
                                 });
                                 this.addActionButton('sacrificeLeader-btn', _('Sacrifice Leader'), () => {
-                                    this.bgaPerformAction("actSacrificeLeader");
+                                    const famCount = this.familyCounters[this.player_id] ? this.familyCounters[this.player_id].getValue() : 0;
+                                    if (famCount > 2) {
+                                        this.confirmationDialog(
+                                            dojo.string.substitute(_('You have ${n} families. Sacrificing your leader is most effective with 2 or fewer. Are you sure?'), { n: famCount }),
+                                            () => this.bgaPerformAction("actSacrificeLeader")
+                                        );
+                                    } else {
+                                        this.bgaPerformAction("actSacrificeLeader");
+                                    }
                                 });
                             }
                             break;
@@ -1143,7 +1151,7 @@ define([
                                 });
                                 otherPlayers.forEach(player => {
                                     this.addPlayerActionButton(`target-player-${player.id}`, player, () => {
-                                        this.bgaPerformAction('actSelectPlayer', { player_id: player.id });
+                                        this.armButton(`target-player-${player.id}`, () => this.bgaPerformAction('actSelectPlayer', { player_id: player.id }));
                                     });
                                 });
                             }
@@ -1152,12 +1160,10 @@ define([
                             // args.can_use_amulet comes from argResolveAmulets() - always current
                             if (args && args.can_use_amulet) {
                                 this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
-                                    this.disableAmuletButtons();
-                                    this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
+                                    this.armButton('use-amulet-btn', () => { this.disableAmuletButtons(); this.bgaPerformAction('actAmuletChoose', { use_amulet: true }); });
                                 });
                                 this.addActionButton('no-amulet-btn', _('Do Not Use Amulet'), () => {
-                                    this.disableAmuletButtons();
-                                    this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
+                                    this.armButton('no-amulet-btn', () => { this.disableAmuletButtons(); this.bgaPerformAction('actAmuletChoose', { use_amulet: false }); });
                                 });
                             }
                             break;
@@ -1564,9 +1570,14 @@ define([
             applyHandSort: function () {
                 const stock = this[`${this.player_id}_cards`];
                 if (!stock || !stock.item_type) return;
-                const sortByCost = document.body.classList.contains('kalua_sort_by_cost')
-                    || (this.prefs && this.prefs[103] && this.prefs[103].value == 2)
-                    || (this.player_preferences && this.player_preferences[103] && this.player_preferences[103].value == 2);
+                const sortByType = document.body.classList.contains('kalua_sort_by_type')
+                    || (this.bga.userPreferences.get(103) == 1)
+                    || (this.player_preferences && this.player_preferences[103] && this.player_preferences[103].value == 1);
+                const sortByCost = !sortByType && (
+                    document.body.classList.contains('kalua_sort_by_cost')
+                    || (this.bga.userPreferences.get(103) == 2)
+                    || (this.player_preferences && this.player_preferences[103] && this.player_preferences[103].value == 2)
+                );
                 for (const typeId in stock.item_type) {
                     const id = parseInt(typeId);
                     const newWeight = sortByCost
@@ -1588,8 +1599,73 @@ define([
             },
             isAutoRollEnabled: function () {
                 return document.body.classList.contains('kalua_auto_dice')
-                    || (this.prefs && this.prefs[101] && this.prefs[101].value == 2)
+                    || (this.bga.userPreferences.get(101) == 2)
                     || (this.player_preferences && this.player_preferences[101] && this.player_preferences[101].value == 2);
+            },
+            isTimedConfirmEnabled: function () {
+                if (document.body.classList.contains('kalua_no_timed_confirm')) return false;
+                if (this.bga.userPreferences.get(104) == 1) return false;
+                if (this.player_preferences && this.player_preferences[104] && this.player_preferences[104].value == 1) return false;
+                return true;
+            },
+            armButton: function (buttonId, onFire) {
+                if (this._actionTimers && this._actionTimers[buttonId]) {
+                    // Already armed — second click fires immediately
+                    this._stopOneTimer(buttonId);
+                    this._removeTimerCancel();
+                    onFire();
+                } else {
+                    this.startActionTimer(buttonId, this.ACTION_TIMER_SECONDS, onFire);
+                }
+            },
+            startActionTimer: function (buttonId, seconds, onFire) {
+                if (!this._actionTimers) this._actionTimers = {};
+                this._stopOneTimer(buttonId);
+                try { if (!this.isTimedConfirmEnabled()) { onFire && onFire(); return; } } catch(e) { return; }
+                const btn = document.getElementById(buttonId);
+                if (!btn) return;
+                let remaining = Math.max(1, Math.floor(seconds));
+                const spanId = 'kalua-timer-' + buttonId;
+                const getSpan = () => {
+                    let s = document.getElementById(spanId);
+                    if (!s) {
+                        s = document.createElement('span');
+                        s.id = spanId;
+                        s.style.opacity = '0.75';
+                        btn.appendChild(s);
+                    }
+                    return s;
+                };
+                const tick = () => {
+                    if (!document.getElementById(buttonId)) { this._stopOneTimer(buttonId); this._removeTimerCancel(); return; }
+                    if (remaining > 0) {
+                        getSpan().textContent = ' (' + remaining + ')';
+                        remaining--;
+                    } else {
+                        this._stopOneTimer(buttonId);
+                        this._removeTimerCancel();
+                        onFire && onFire();
+                    }
+                };
+                this._actionTimers[buttonId] = { timerId: setInterval(tick, 1000), spanId };
+                this.addActionButton('kalua-cancel-timer-btn', _('Cancel'), () => this.stopActionTimer(), 'red');
+                tick();
+            },
+            _removeTimerCancel: function () {
+                const btn = document.getElementById('kalua-cancel-timer-btn');
+                if (btn) btn.remove();
+            },
+            _stopOneTimer: function (buttonId) {
+                if (!this._actionTimers || !this._actionTimers[buttonId]) return;
+                clearInterval(this._actionTimers[buttonId].timerId);
+                const span = document.getElementById(this._actionTimers[buttonId].spanId);
+                if (span) span.remove();
+                delete this._actionTimers[buttonId];
+            },
+            stopActionTimer: function () {
+                if (!this._actionTimers) return;
+                Object.keys(this._actionTimers).forEach(id => this._stopOneTimer(id));
+                this._removeTimerCancel();
             },
             _checkAutoRoll: function () {
                 if (!this.isAutoRollEnabled()) return;
@@ -1617,9 +1693,8 @@ define([
                 const uniqueId = this.getCardUniqueId(parseInt(card_type), parseInt(card_type_arg)); // Generate unique ID
                 this[`${player}_cards`].addToStockWithId(uniqueId, card_id); // Add card to player's hand
                 this.addCardTooltipByUniqueId(`${player}_cards`, uniqueId, null, card_id); // Add tooltip
-                // Force layout update to ensure cards display properly
-                if (this[`${player}_cards`]) {
-                    this[`${player}_cards`].updateDisplay();
+                if (player == this.player_id) {
+                    this.applyHandSort();
                 }
                 // Update card grouping to show counts
                 this.updateCardGrouping(player);
@@ -1845,37 +1920,6 @@ define([
                 this.movetokens(sprite - 1, 1);
                 // Update prediction panel if active
                 this.refreshPredictionPanelIfActive();
-            },
-            addTransitMeeples: function (player_id, count, mode) {
-                // mode: 'lost', 'died', 'converted', 'gained'
-                const transit = document.getElementById('convert-transit');
-                if (!transit || count <= 0) return;
-                const labels = { lost: 'LOST', died: 'DIED', converted: 'CHANGED RELIGION', gained: 'NEW CONVERTS' };
-                const label = labels[mode] || mode.toUpperCase();
-                const sectionId = `transit-section-${mode}`;
-                // Find or create the section row for this type
-                let section = document.getElementById(sectionId);
-                if (!section) {
-                    section = document.createElement('div');
-                    section.id = sectionId;
-                    section.className = 'transit-block';
-                    const lbl = document.createElement('span');
-                    lbl.className = 'transit-label';
-                    lbl.textContent = label;
-                    section.appendChild(lbl);
-                    transit.appendChild(section);
-                }
-                // Append one chief token per family, colored by player sprite
-                const player = this.gamedatas.players[player_id];
-                const spriteIndex = player ? (player.sprite - 1) : 5;
-                const bgX = -(spriteIndex * 30);
-                for (let i = 0; i < count; i++) {
-                    const m = document.createElement('div');
-                    m.className = 'convert-transit-meeple' + (mode === 'died' ? ' transit-meeple-died' : '');
-                    m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
-                    m.style.backgroundPosition = `${bgX}px 0px`;
-                    section.appendChild(m);
-                }
             },
             updateFamiliesRemainingDisplay: function () {
                 let total = 0;
@@ -2140,12 +2184,10 @@ define([
                 this.updatePageTitle();
                 this.statusBar.removeActionButtons();
                 this.addActionButton('use-amulet-btn', _('Use Amulet'), () => {
-                    this.disableAmuletButtons();
-                    this.bgaPerformAction('actAmuletChoose', { use_amulet: true });
+                    this.armButton('use-amulet-btn', () => { this.disableAmuletButtons(); this.bgaPerformAction('actAmuletChoose', { use_amulet: true }); });
                 });
                 this.addActionButton('no-amulet-btn', _('Do Not Use Amulet'), () => {
-                    this.disableAmuletButtons();
-                    this.bgaPerformAction('actAmuletChoose', { use_amulet: false });
+                    this.armButton('no-amulet-btn', () => { this.disableAmuletButtons(); this.bgaPerformAction('actAmuletChoose', { use_amulet: false }); });
                 });
             },
             disableAmuletButtons: function () {
@@ -2218,9 +2260,8 @@ define([
                 this.bgaSetupPromiseNotifications();
                 // Queue hold times — durations live in the timing block at the top of the constructor
                 this.notifqueue.setSynchronous('playerCountsChanged',        this.QUEUE_PLAYER_COUNTS);
-                this.notifqueue.setSynchronous('familiesDied',               this.QUEUE_FAMILIES_DIED);
-                this.notifqueue.setSynchronous('familiesGained',             this.QUEUE_FAMILIES_GAINED);
-                this.notifqueue.setSynchronous('familiesLost',               this.QUEUE_FAMILIES_LOST);
+                // familiesDied is an async handler — promise-based timing, no setSynchronous needed
+                // familiesGained and familiesLost are async handlers — promise-based timing, no setSynchronous needed
                 this.notifqueue.setSynchronous('templeDestroyed',            this.QUEUE_TEMPLE_DESTROYED);
                 this.notifqueue.setSynchronous('leaderRecovered',            this.QUEUE_LEADER_RECOVERED);
                 this.notifqueue.setSynchronous('templeBuilt',                this.QUEUE_TEMPLE_BUILT);
@@ -2570,8 +2611,11 @@ define([
                 }
             },
             notif_targetSelected: function (args) {
-                // The target selection is complete, the game will continue with card resolution
-                // No specific UI updates needed here as the game will transition to the next state
+                // No UI update needed; the sidebar log message is sufficient
+            },
+            notif_localEffectApplied: function (args) {
+                // No UI update needed; familiesDied/familiesConverted handle animations,
+                // playerCountsChanged handles counters — this notification exists for the log text only
             },
             notif_amuletDecision: function (args) {
                 // Store which players have amulets for reference
@@ -2860,56 +2904,124 @@ define([
                     await new Promise(resolve => setTimeout(resolve, this.ANIM_CARD_WAIT));
                 }
             },
-            notif_roundSummaryPause: async function (args) {
-                const transit = document.getElementById('convert-transit');
-                if (!transit) return;
-                // Clear stale content from prior rounds before rebuilding
-                transit.innerHTML = '';
-                this._roundSummaryActive = true;
-                transit.style.display = 'block';
+            notif_phaseConvertStart: function (args) {
+                const panel = document.getElementById('family-exchange');
+                if (!panel) return;
+                panel.innerHTML = '';
 
-                // Add a prayer row for every player
-                let prayerSection = document.getElementById('transit-section-prayer');
-                if (!prayerSection) {
-                    prayerSection = document.createElement('div');
-                    prayerSection.id = 'transit-section-prayer';
-                    prayerSection.className = 'transit-block';
-                    const lbl = document.createElement('span');
-                    lbl.className = 'transit-label';
-                    lbl.textContent = _('PRAYER');
-                    prayerSection.appendChild(lbl);
-                    transit.appendChild(prayerSection);
-                }
-                const summary = args.summary || [];
-                if (summary.length > 0) {
-                    summary.forEach(p => {
-                        const entry = document.createElement('span');
-                        entry.className = 'transit-prayer-entry';
-                        const sign = p.prayer_delta >= 0 ? '+' : '';
-                        entry.textContent = `${p.player_name}: ${sign}${p.prayer_delta}`;
-                        prayerSection.appendChild(entry);
+                const header = document.createElement('div');
+                header.className = 'fex-header';
+                header.textContent = _('FAMILY EXCHANGE');
+                panel.appendChild(header);
+
+                const colHeaders = document.createElement('div');
+                colHeaders.className = 'fex-col-headers';
+                const hapLabel = document.createElement('span');
+                hapLabel.className = 'fex-col-hap';
+                hapLabel.textContent = _('HAPPINESS');
+                colHeaders.appendChild(hapLabel);
+                const famLabel = document.createElement('span');
+                famLabel.className = 'fex-col-fam';
+                famLabel.textContent = _('FAMILIES');
+                colHeaders.appendChild(famLabel);
+                panel.appendChild(colHeaders);
+
+                const snapshot = [...args.snapshot].sort((a, b) => a.happiness - b.happiness);
+                const happyHigh = args.happy_high;
+                const happyLow  = args.happy_low;
+                const allEqual  = happyHigh === happyLow;
+
+                snapshot.forEach(p => {
+                    const player = this.gamedatas.players[p.player_id];
+                    const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
+                    const bgX = -(spriteIndex * 30);
+
+                    const row = document.createElement('div');
+                    row.className = 'fex-row';
+                    row.id = `fex-row-${p.player_id}`;
+
+                    // Left: name + LOW/MID/HIGH bracket indicator
+                    const left = document.createElement('div');
+                    left.className = 'fex-row-left';
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'fex-player-name';
+                    nameEl.textContent = player ? player.name : '';
+                    left.appendChild(nameEl);
+                    const bracketDiv = document.createElement('div');
+                    bracketDiv.className = 'fex-hap-bracket';
+                    ['low', 'mid', 'high'].forEach(key => {
+                        const pill = document.createElement('span');
+                        pill.className = 'fex-hap-pill';
+                        pill.textContent = key.toUpperCase();
+                        if (!allEqual) {
+                            const active =
+                                (key === 'low'  && p.happiness === happyLow) ||
+                                (key === 'high' && p.happiness === happyHigh) ||
+                                (key === 'mid'  && p.happiness !== happyHigh && p.happiness !== happyLow);
+                            if (active) pill.classList.add(`fex-hap-${key}`);
+                        }
+                        bracketDiv.appendChild(pill);
                     });
-                } else {
-                    const ph = document.createElement('span');
-                    ph.className = 'transit-prayer-entry';
-                    ph.textContent = '—';
-                    prayerSection.appendChild(ph);
+                    left.appendChild(bracketDiv);
+                    row.appendChild(left);
+
+                    // Meeple strip
+                    const meepDiv = document.createElement('div');
+                    meepDiv.className = 'fex-meeples';
+                    meepDiv.id = `fex-meeples-${p.player_id}`;
+                    for (let i = 0; i < p.families; i++) {
+                        const m = document.createElement('div');
+                        m.className = 'fex-meeple';
+                        m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
+                        m.style.backgroundPosition = `${bgX}px 0px`;
+                        meepDiv.appendChild(m);
+                    }
+                    row.appendChild(meepDiv);
+
+                    panel.appendChild(row);
+                });
+
+                // Pool section
+                const poolSection = document.createElement('div');
+                poolSection.id = 'fex-pool';
+                const poolLabel = document.createElement('span');
+                poolLabel.className = 'fex-pool-label';
+                poolLabel.textContent = allEqual ? _('No exchange — equal happiness') : _('POOL');
+                poolSection.appendChild(poolLabel);
+                if (!allEqual) {
+                    const poolMeeples = document.createElement('div');
+                    poolMeeples.id = 'fex-pool-meeples';
+                    poolSection.appendChild(poolMeeples);
+                }
+                panel.appendChild(poolSection);
+
+                panel.style.display = 'block';
+            },
+            notif_roundSummaryPause: async function (args) {
+                this._roundSummaryActive = true;
+
+                const panel = document.getElementById('family-exchange');
+                if (panel && panel.style.display !== 'none') {
+                    const iconUrl = `${g_gamethemeurl}img/Pray_138_138.png`;
+                    const summary = args.summary || [];
+                    summary.forEach(p => {
+                        const row = document.getElementById(`fex-row-${p.player_id}`);
+                        if (!row) return;
+                        const sign = p.prayer_delta >= 0 ? '+' : '';
+                        const badge = document.createElement('span');
+                        badge.className = 'fex-prayer-badge';
+                        badge.innerHTML = `<img src="${iconUrl}" class="fex-prayer-icon" alt="prayer">${sign}${p.prayer_delta}`;
+                        row.appendChild(badge);
+                    });
                 }
 
-                // If no family-related sections exist, add a placeholder
-                const familySections = ['lost', 'died', 'gained', 'converted'].map(
-                    mode => document.getElementById(`transit-section-${mode}`)
-                ).filter(Boolean);
-                if (familySections.length === 0) {
-                    const ph = document.createElement('div');
-                    ph.className = 'transit-block transit-placeholder';
-                    ph.textContent = _('No family changes this round.');
-                    transit.insertBefore(ph, prayerSection);
-                }
                 await new Promise(resolve => setTimeout(resolve, this.QUEUE_ROUND_SUMMARY_PAUSE));
                 this._roundSummaryActive = false;
-                transit.style.display = 'none';
-                transit.innerHTML = '';
+
+                if (panel) {
+                    panel.style.display = 'none';
+                    panel.innerHTML = '';
+                }
             },
             notif_cardBeingResolved: function (args) {
                 const msg = dojo.string.substitute(_('Now resolving: ${card_name}'), { card_name: args.card_name });
@@ -2949,25 +3061,117 @@ define([
                     }
                     await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
                 }
-                this.addTransitMeeples(args.player_id, args.families_count, 'converted');
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
                 }
                 this.updateFamiliesRemainingDisplay();
             },
-            notif_familiesDied: function (args) {
-                // playerCountsChanged (fired just before this) handles counter + meeple stock removal.
-                // This handler only drives the "died" transit animation.
-                this.addTransitMeeples(args.player_id, args.families_count, 'died');
+            notif_familiesDied: async function (args) {
+                const player = this.gamedatas.players[args.player_id];
+                const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
+                const bgX = -(spriteIndex * 30);
+                for (let i = 0; i < args.families_count; i++) {
+                    this.slideTemporaryObject(
+                        `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;opacity:0.35;filter:grayscale(1);"></div>`,
+                        'game_play_area',
+                        `${args.player_id}_families`,
+                        'hkboard',
+                        this.ANIM_MEEPLE_SLIDE, 0
+                    );
+                    if (i < args.families_count - 1) {
+                        await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                    }
+                }
+                await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
                 this.updateFamiliesRemainingDisplay();
             },
-            notif_familiesLost: function (args) {
-                // Transit display only — playerCountsChanged handles counter/meeple updates
-                this.addTransitMeeples(args.player_id, args.families_count, 'lost');
+            notif_familiesLost: async function (args) {
+                const meepDiv    = document.getElementById(`fex-meeples-${args.player_id}`);
+                const poolMeeples = document.getElementById('fex-pool-meeples');
+                const player = this.gamedatas.players[args.player_id];
+                const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
+                const bgX = -(spriteIndex * 30);
+                if (meepDiv && poolMeeples) {
+                    const row = document.getElementById(`fex-row-${args.player_id}`);
+                    if (row) {
+                        row.classList.remove('fex-pulse-lost', 'fex-pulse-gained');
+                        void row.offsetWidth;
+                        row.classList.add('fex-pulse-lost');
+                    }
+                    for (let i = 0; i < args.families_count; i++) {
+                        if (meepDiv.lastElementChild) meepDiv.lastElementChild.remove();
+                        this.slideTemporaryObject(
+                            `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;"></div>`,
+                            'game_play_area', `fex-meeples-${args.player_id}`, 'fex-pool-meeples',
+                            this.ANIM_MEEPLE_SLIDE, 0
+                        );
+                        const bgXCap = bgX;
+                        setTimeout(() => {
+                            const m = document.createElement('div');
+                            m.className = 'fex-meeple';
+                            m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
+                            m.style.backgroundPosition = `${bgXCap}px 0px`;
+                            poolMeeples.appendChild(m);
+                        }, this.ANIM_MEEPLE_SLIDE);
+                        if (i < args.families_count - 1) {
+                            await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                        }
+                    }
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                }
             },
-            notif_familiesGained: function (args) {
-                // Transit display only — playerCountsChanged handles counter/meeple updates
-                this.addTransitMeeples(args.player_id, args.families_count, 'gained');
+            notif_familiesGained: async function (args) {
+                const meepDiv    = document.getElementById(`fex-meeples-${args.player_id}`);
+                const poolMeeples = document.getElementById('fex-pool-meeples');
+                const player = this.gamedatas.players[args.player_id];
+                const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
+                const bgX = -(spriteIndex * 30);
+                if (meepDiv && poolMeeples) {
+                    // Pause to let pool fill settle before distributing
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_POOL_PAUSE));
+                    const row = document.getElementById(`fex-row-${args.player_id}`);
+                    if (row) {
+                        row.classList.remove('fex-pulse-lost', 'fex-pulse-gained');
+                        void row.offsetWidth;
+                        row.classList.add('fex-pulse-gained');
+                    }
+                    // Round-end gain: animate out of pool into player row
+                    for (let i = 0; i < args.families_count; i++) {
+                        if (poolMeeples.lastElementChild) poolMeeples.lastElementChild.remove();
+                        this.slideTemporaryObject(
+                            `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;"></div>`,
+                            'game_play_area', 'fex-pool-meeples', `fex-meeples-${args.player_id}`,
+                            this.ANIM_MEEPLE_SLIDE, 0
+                        );
+                        const bgXCap = bgX;
+                        setTimeout(() => {
+                            const m = document.createElement('div');
+                            m.className = 'fex-meeple';
+                            m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
+                            m.style.backgroundPosition = `${bgXCap}px 0px`;
+                            meepDiv.appendChild(m);
+                        }, this.ANIM_MEEPLE_SLIDE);
+                        if (i < args.families_count - 1) {
+                            await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                        }
+                    }
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                } else {
+                    // Mid-round gain (e.g. Fertility card) — slide from atheist pool to player
+                    const player = this.gamedatas.players[args.player_id];
+                    const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
+                    const bgX = -(spriteIndex * 30);
+                    for (let i = 0; i < args.families_count; i++) {
+                        this.slideTemporaryObject(
+                            `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;"></div>`,
+                            'game_play_area',
+                            'atheistFamilies',
+                            `${args.player_id}_families`,
+                            this.ANIM_MEEPLE_SLIDE, i * this.ANIM_MEEPLE_STAGGER
+                        );
+                    }
+                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_SLIDE + this.ANIM_MEEPLE_WAIT));
+                }
             },
             ///////////////////////////////////////////////////
             //// Utility Notifications
