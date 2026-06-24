@@ -40,10 +40,10 @@ $gameinfos = [
     'estimated_duration' => 30,
 
     // Time in second add to a player when "giveExtraTime" is called (speed profile = fast)
-    'fast_additional_time' => 30,
+    'fast_additional_time' => 18,
 
     // Time in second add to a player when "giveExtraTime" is called (speed profile = medium)
-    'medium_additional_time' => 40,
+    'medium_additional_time' => 25,
 
     // Time in second add to a player when "giveExtraTime" is called (speed profile = slow)
     'slow_additional_time' => 50,
@@ -91,4 +91,6 @@ $gameinfos = [
         //  minimum possible value: 320 (the lowest value you specify, the better the display is on mobile)
         'min' => 740,
     ],
+
+    'exception_on_warning' => true,
 ];

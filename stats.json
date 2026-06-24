@@ -47,11 +47,6 @@
       "name": "Families converted to atheism",
       "type": "int"
     },
-    "families_converted_to_religion": {
-      "id": 34,
-      "name": "Families gained from atheism",
-      "type": "int"
-    },
     "temples_built": {
       "id": 25,
       "name": "Temples built",
