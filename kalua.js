@@ -28,17 +28,15 @@ define([
                 document.getElementById('game_play_area').insertAdjacentHTML('beforeend', `
                 <div id="board_background">
                     <div id="hkboard"></div>
+                    <div id="dice"></div>
                     <div id="atheistFamilies"></div>
                     <div id="families-remaining-stat">Families remaining: <span id="families-remaining-count">0</span></div>
-                    <div id="dice"></div>
                     <div id="deck-piles">
                         <div id="deck-disaster" class="deck-pile deck-pile-disaster" title="${_('Disaster deck')}">
-                            <span id="deck-disaster-count" class="deck-pile-count"></span>
-                            <span class="deck-pile-label">${_('Disaster')}</span>
+                            <div class="deck-pile-art"></div>
                         </div>
                         <div id="deck-bonus" class="deck-pile deck-pile-bonus" title="${_('Bonus deck')}">
-                            <span id="deck-bonus-count" class="deck-pile-count"></span>
-                            <span class="deck-pile-label">${_('Bonus')}</span>
+                            <div class="deck-pile-art"></div>
                         </div>
                     </div>
                     <div id="family-exchange" style="display:none;"></div>
@@ -473,7 +471,7 @@ define([
                         for (let i = 0; i < player.temple; i++) {
                             this[`${player.id}_kept`].addToStock(2);
                         }
-
+                        this.updateKeptCardsGrouping(player.id);
                     }
                     /* TODO get each player's hand length to update counters */
                     element = $(`panel_l_${player.id}`);
@@ -793,7 +791,7 @@ define([
             },
             ///////////////////////////////////////////////////
             //// Game & client states
-            onEnteringState: function (stateName, args) {
+            onEnteringState: function (stateName) {
                 const familyExchange = document.getElementById('family-exchange');
                 if (familyExchange && !this._roundSummaryActive) {
                     familyExchange.style.display = 'none';
@@ -802,7 +800,7 @@ define([
                 switch (stateName) {
                     case 'initialDraw':
                     case 'phaseOneDraw':
-                        this.updateDeckCounts(args);
+                        this.showDeckPiles();
                         break;
                     case 'phaseTwoActivateLeader':
                         // Existing code for phaseTwoActivateLeader
@@ -876,6 +874,7 @@ define([
                         // Clean up any state-specific elements when leaving these states
                         // Do not add action buttons here - buttons should only be added in onUpdateActionButtons
                         this.teardownDeckClickability();
+                        this.hideDeckPiles();
                         break;
                     case 'phaseThreePlayCard':
                         clearTimeout(this._autoPassTimer);
@@ -936,16 +935,19 @@ define([
                     }
                 }
             },
-            updateDeckCounts: function (args) {
-                if (!args) return;
-                const disasterCountEl = document.getElementById('deck-disaster-count');
-                const bonusCountEl = document.getElementById('deck-bonus-count');
-                if (disasterCountEl && typeof args.disaster_deck_count !== 'undefined') {
-                    disasterCountEl.textContent = args.disaster_deck_count;
-                }
-                if (bonusCountEl && typeof args.bonus_deck_count !== 'undefined') {
-                    bonusCountEl.textContent = args.bonus_deck_count;
-                }
+            // Visibility is state-based (shown to every player - active or waiting -
+            // during a state where drawing is possible at all), separate from
+            // clickability (gated to just the current active player, below). A
+            // waiting player in a MULTIPLE_ACTIVE_PLAYER state like initialDraw
+            // should still be able to see the deck counts even though they can't
+            // click them.
+            showDeckPiles: function () {
+                const decksEl = document.getElementById('deck-piles');
+                if (decksEl) dojo.addClass(decksEl, 'deck-piles-visible');
+            },
+            hideDeckPiles: function () {
+                const decksEl = document.getElementById('deck-piles');
+                if (decksEl) dojo.removeClass(decksEl, 'deck-piles-visible');
             },
             enableDeckClickability: function (drawAction) {
                 this.teardownDeckClickability();

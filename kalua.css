@@ -23,8 +23,8 @@
 
 #board_background {
     position: relative;
-    width: 356px;
-    height: 495px;
+    width: 384px;
+    height: auto;
     background-image: url('img/kboard_400_265.jpg');
     background-repeat: no-repeat;
     background-size: auto;
@@ -39,7 +39,6 @@
     height: 55px;
     /* Match the height of board_background */
     position: relative;
-    border: 1px solid #4a3a22;
 }
 
 #hkZone {
@@ -61,17 +60,21 @@
     height: 170px;
     position: relative;
     margin-top: 20px;
+    margin-left: 175px;
+    /* Center on #hkboard's midpoint (175px = half its 350px width), same as
+       #dice/#deck-piles - not on #board_background's own (wider) width. */
+    transform: translateX(-50%);
     overflow: hidden;
 }
 
 #families-remaining-stat {
-    position: absolute;
-    top: 255px;
-    left: 0;
-    right: 0;
+    display: inline-block;
+    margin-top: 10px;
+    margin-left: 175px;
+    transform: translateX(-50%);
     font-size: 11px;
     color: #ccc;
-    text-align: center;
+    white-space: nowrap;
 }
 
 /* ── Family Exchange Panel (end-of-round happiness redistribution) ── */
@@ -275,9 +278,8 @@
     min-width: 60px;
     width: 170px;
     height: 120px;
-    position: absolute;
-    left: 50%;
-    top: 185px;
+    margin-top: 10px;
+    margin-left: 175px;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
@@ -376,18 +378,43 @@
     margin-left: 0;
 }
 
+/* Hidden by default - only shown (via .deck-piles-visible, toggled by
+   showDeckPiles/hideDeckPiles in kalua.js) during a state where drawing is
+   possible at all, so the board doesn't reserve space for these most of the
+   game. Sits as its own row below #atheistFamilies. inline-flex (not flex) so
+   the box shrink-wraps its two 180px piles + gap, matching the width the
+   margin-left/transform centering trick below expects. */
 #deck-piles {
-    position: absolute;
-    top: 315px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
+    display: none;
     flex-direction: row;
-    gap: 20px;
-    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+    margin-left: 175px;
+    transform: translateX(-50%);
+}
+
+#deck-piles.deck-piles-visible {
+    display: inline-flex;
 }
 
 .deck-pile {
+    /* Landscape footprint matching the rotated card (below): the actual card
+       art is a normal 120x180 card rotated 90deg, so this box is sized to that
+       ROTATED visual (180 wide x 120 tall) rather than the card's own
+       unrotated dimensions. */
+    width: 180px;
+    height: 120px;
+    position: relative;
+    /* Positioning context for .deck-pile-art (position:absolute) */
+}
+
+.deck-pile-art {
+    /* Same size as the other cards (120x180), rotated and centered so it
+       exactly fills the landscape .deck-pile box above. 270deg (90 + another
+       180) instead of plain 90deg to flip which edge of the art faces up. */
+    position: absolute;
+    top: 50%;
+    left: 50%;
     width: 120px;
     height: 180px;
     /* Cards_Backs_940.png holds two backs side by side: disaster on the left
@@ -396,37 +423,15 @@
     background-image: url('img/Cards_Backs_940.png');
     background-repeat: no-repeat;
     background-size: 200% 100%;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-end;
+    transform: translate(-50%, -50%) rotate(270deg);
 }
 
-.deck-pile-disaster {
+.deck-pile-disaster .deck-pile-art {
     background-position: 0% 0%;
 }
 
-.deck-pile-bonus {
+.deck-pile-bonus .deck-pile-art {
     background-position: 100% 0%;
-}
-
-.deck-pile-count {
-    background: rgba(0, 0, 0, 0.75);
-    color: #fff;
-    font-size: 14px;
-    font-weight: bold;
-    border-radius: 10px;
-    padding: 1px 8px;
-    margin-bottom: 4px;
-}
-
-.deck-pile-label {
-    background: rgba(0, 0, 0, 0.6);
-    color: #fff;
-    font-size: 11px;
-    width: 100%;
-    text-align: center;
 }
 
 .deck-clickable {

@@ -43,7 +43,6 @@ $machinestates = [
 		->descriptionmyturn(clienttranslate('${you} must pick a combination of five bonus and disaster cards'))
         ->type(StateType::MULTIPLE_ACTIVE_PLAYER)
         ->action('stInitialDraw')
-        ->args('argInitialDraw')
         ->possibleactions([
             'actDrawCardInit',
         ])
@@ -69,7 +68,6 @@ $machinestates = [
         ->description(clienttranslate('${actplayer} must draw cards for round'))
 		->descriptionmyturn(clienttranslate('${you} must draw cards for round'))
         ->type(StateType::ACTIVE_PLAYER)
-        ->args('argPhaseOneDraw')
         ->possibleactions([
             'actDrawCard',
             'actGoToBuyCardReflex' // Action to enter reflexive state

@@ -283,22 +283,6 @@ class Game extends Table
         }
     }
 
-    public function argInitialDraw(): array
-    {
-        return [
-            'disaster_deck_count' => $this->disasterCards->countCardInLocation("deck"),
-            'bonus_deck_count' => $this->bonusCards->countCardInLocation("deck"),
-        ];
-    }
-
-    public function argPhaseOneDraw(): array
-    {
-        return [
-            'disaster_deck_count' => $this->disasterCards->countCardInLocation("deck"),
-            'bonus_deck_count' => $this->bonusCards->countCardInLocation("deck"),
-        ];
-    }
-
     public function argGlobalOption(): array
     {
         $card_id = (int)$this->getGameStateValue('current_global_disaster');
