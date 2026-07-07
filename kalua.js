@@ -46,11 +46,11 @@ define([
                 <div id="card_areas">
                     <div id="playedCards">
                         <div class="kalua_played_resolved">PLAYED CARDS:</div>
-                        <div id="playedCardsContent"></div>
+                        <div id="playedCardsContent"><div id="playedCardsInner"></div></div>
                     </div>
                     <div id="resolvedCards">
                         <div class="kalua_played_resolved">RESOLVED CARDS:</div>
-                        <div id="resolvedCardsContent"></div>
+                        <div id="resolvedCardsContent"><div id="resolvedCardsInner"></div></div>
                     </div>
                 </div>
                 <div id="player-tables" class="zone-container"></div>
@@ -336,13 +336,13 @@ define([
                 });
                 // Create stock for played cards
                 this['played'] = new ebg.stock();
-                this['played'].create(this, document.getElementById('playedCardsContent'), 120, 181.3);
+                this['played'].create(this, document.getElementById('playedCardsInner'), 120, 181.3);
                 this['played'].image_items_per_row = 5;
                 this['played'].item_margin = 8;
                 this['played'].setSelectionMode(0);
                 // Create stock for resolved cards
                 this['resolved'] = new ebg.stock();
-                this['resolved'].create(this, document.getElementById('resolvedCardsContent'), 120, 181.3);
+                this['resolved'].create(this, document.getElementById('resolvedCardsInner'), 120, 181.3);
                 this['resolved'].image_items_per_row = 5;
                 this['resolved'].item_margin = 8;
                 this['resolved'].setSelectionMode(0);

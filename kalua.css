@@ -332,6 +332,19 @@
     max-height: 500px;
 }
 
+/* #playedCardsInner/#resolvedCardsInner is what ebg.stock actually renders
+   cards into (position:absolute items anchor to THIS element's own edge,
+   ignoring its parent's padding entirely - that's just how CSS containing
+   blocks work for absolute positioning, padding on an ancestor never insets
+   them). Margin here shifts this whole box - and therefore where its cards
+   anchor - away from the #playedCardsContent/#resolvedCardsContent edge that
+   overflow:hidden actually clips against, giving the played-card color panel
+   (box-shadow, see .kalua_player_card_*) real room to bleed into. */
+#playedCardsInner,
+#resolvedCardsInner {
+    margin: 6px;
+}
+
 #resolvedCards {
     width: 650px;
     min-height: 40px;
