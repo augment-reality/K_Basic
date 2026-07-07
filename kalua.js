@@ -905,24 +905,31 @@ define([
                 });
             },
             refreshCardAreaVisibility: function () {
-                // getItemNumber() turned out to have the same flaw as the original
-                // MutationObserver approach - it reflects registered card *types*
-                // (which never decrease) rather than currently-displayed *items*, so
-                // has-cards would stick forever after the first card ever appeared.
-                // getAllItems() is what the rest of this file already uses to operate
-                // on live items (e.g. finding a specific card/meeple to remove), so it's
-                // the reliable one.
+                // Both getItemNumber() and getAllItems() turned out to be unreliable
+                // signals for "is this visually empty right now" - getItemNumber()
+                // reflects registered card *types* (which never decrease), and
+                // getAllItems() apparently doesn't reliably shrink back to empty
+                // either. Counting actual rendered, visible .stockitem elements
+                // sidesteps trusting the stock library's internal bookkeeping - and
+                // checking offsetParent (not just DOM presence) guards against the
+                // possibility that "removed" items are just hidden rather than
+                // actually detached.
+                const isVisible = (el) => el.offsetParent !== null;
+                const countVisibleCards = (contentEl) =>
+                    Array.from(contentEl.querySelectorAll('.stockitem')).filter(isVisible).length;
                 const playedEl = document.getElementById('playedCards');
                 const resolvedEl = document.getElementById('resolvedCards');
-                if (playedEl) {
-                    if (this['played'] && this['played'].getAllItems().length > 0) {
+                const playedContent = document.getElementById('playedCardsContent');
+                const resolvedContent = document.getElementById('resolvedCardsContent');
+                if (playedEl && playedContent) {
+                    if (countVisibleCards(playedContent) > 0) {
                         dojo.addClass(playedEl, 'has-cards');
                     } else {
                         dojo.removeClass(playedEl, 'has-cards');
                     }
                 }
-                if (resolvedEl) {
-                    if (this['resolved'] && this['resolved'].getAllItems().length > 0) {
+                if (resolvedEl && resolvedContent) {
+                    if (countVisibleCards(resolvedContent) > 0) {
                         dojo.addClass(resolvedEl, 'has-cards');
                     } else {
                         dojo.removeClass(resolvedEl, 'has-cards');

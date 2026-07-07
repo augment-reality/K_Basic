@@ -314,6 +314,24 @@
     min-height: 225px;
 }
 
+/* min-height on the outer box is only a floor - if #playedCardsContent/
+   #resolvedCardsContent have any natural height of their own even with zero
+   items (plausible if ebg.stock reserves row space regardless of item count),
+   the floor can't shrink them. Constrain the content div itself directly, and
+   only relax that constraint once has-cards says there's really something to
+   show. */
+#playedCardsContent,
+#resolvedCardsContent {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+#playedCards.has-cards #playedCardsContent,
+#resolvedCards.has-cards #resolvedCardsContent {
+    max-height: 500px;
+}
+
 #resolvedCards {
     width: 650px;
     min-height: 40px;
