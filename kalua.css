@@ -24,7 +24,7 @@
 #board_background {
     position: relative;
     width: 356px;
-    height: 305px;
+    height: 495px;
     background-image: url('img/kboard_400_265.jpg');
     background-repeat: no-repeat;
     background-size: auto;
@@ -39,7 +39,7 @@
     height: 55px;
     /* Match the height of board_background */
     position: relative;
-    border: 1px solid #ccc;
+    border: 1px solid #4a3a22;
 }
 
 #hkZone {
@@ -50,7 +50,7 @@
     position: relative;
     margin-top: 20px;
     /* Add margin to create a gap above the div */
-    border: 1px solid #ddd;
+    border: 1px solid #4a3a22;
     /* Add a border */
     border-radius: 5px;
     /* Round the corners */
@@ -277,7 +277,7 @@
     height: 120px;
     position: absolute;
     left: 50%;
-    bottom: 0;
+    top: 185px;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
@@ -286,26 +286,53 @@
 
 #playedCards {
     width: 650px;
-    min-height: 225px;
+    min-height: 40px;
     height: auto;
     background-color: #fff;
-    border: 1px solid #ddd;
+    /* Cards_Area.png is split in half horizontally: the disaster scene on top,
+       the calm/bonus scene on the bottom. Fixed (not %-of-box-height) size so
+       the box can grow freely for a 2nd/3rd row of cards - exactly like it did
+       before this background was added - without the art rescaling/distorting
+       as it grows. Matches the scale the old height-relative version produced
+       at the normal one-row height, so the common case looks identical; a box
+       that grows past this just shows plain background below the art. */
+    /* Semi-transparent white wash layered over just the image (not opacity on
+       the whole element, which would also fade the border/cards on top). */
+    background-image: linear-gradient(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.55)), url('img/Cards_Area.png');
+    background-repeat: no-repeat, no-repeat;
+    background-size: 100% 100%, auto 450px;
+    background-position: center, center top;
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     text-align: center;
     margin: 10px;
+    transition: min-height 0.2s ease;
+}
+
+#playedCards.has-cards {
+    min-height: 225px;
 }
 
 #resolvedCards {
     width: 650px;
-    min-height: 210px;
+    min-height: 40px;
     height: auto;
     background-color: #fff;
-    border: 1px solid #ddd;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.55)), url('img/Cards_Area.png');
+    background-repeat: no-repeat, no-repeat;
+    background-size: 100% 100%, auto 420px;
+    background-position: center, center bottom;
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     text-align: center;
     margin: 10px;
+    transition: min-height 0.2s ease;
+}
+
+#resolvedCards.has-cards {
+    min-height: 210px;
 }
 
 #card_areas {
@@ -316,6 +343,87 @@
     min-width: 350px;
     max-width: 700px;
     margin-left: 0;
+}
+
+#deck-piles {
+    position: absolute;
+    top: 315px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    justify-content: center;
+}
+
+.deck-pile {
+    width: 120px;
+    height: 180px;
+    /* Cards_Backs_940.png holds two backs side by side: disaster on the left
+       half, bonus on the right half. Doubling the background width and
+       shifting its position selects one half or the other. */
+    background-image: url('img/Cards_Backs_940.png');
+    background-repeat: no-repeat;
+    background-size: 200% 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.deck-pile-disaster {
+    background-position: 0% 0%;
+}
+
+.deck-pile-bonus {
+    background-position: 100% 0%;
+}
+
+.deck-pile-count {
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+    border-radius: 10px;
+    padding: 1px 8px;
+    margin-bottom: 4px;
+}
+
+.deck-pile-label {
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 11px;
+    width: 100%;
+    text-align: center;
+}
+
+.deck-clickable {
+    cursor: pointer;
+}
+
+.deck-clickable:hover {
+    filter: brightness(1.15);
+    transform: translateY(-3px);
+    transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.player-targetable {
+    cursor: pointer;
+    outline: 3px solid #e0a838;
+    outline-offset: -1px;
+}
+
+.player-targetable:hover {
+    outline-color: #ff6a00;
+}
+
+.die-clickable {
+    cursor: pointer;
+}
+
+.die-clickable:hover {
+    filter: brightness(1.2);
 }
 
 
@@ -403,6 +511,11 @@
     /* Use AHDN font with fallbacks */
     font-weight: 100;
     font-size: 16px;
+    /* Backing chip so the label stays readable over the Cards_Area.png art */
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 2px 10px;
+    border-radius: 3px;
 }
 
 /* Make first letter of played/resolved card headers larger */
@@ -417,13 +530,15 @@
 .kalua_player_area {
     font-family: 'AHDN', Arial, sans-serif;
     font-weight: 100;
-    border: 1px solid #ccc;
+    border: 1px solid #4a3a22;
     padding: 10px;
     margin: 10px;
     width: 700px;
     min-height: 210px;
     height: auto;
-    background-color: #f9f9f9;
+    background-image: url('img/Banner.jpg');
+    background-size: cover;
+    background-position: center;
     border-radius: 5px;
     text-align: right;
     box-sizing: border-box;
@@ -436,8 +551,8 @@
     min-height: 100px;
     width: 100%;
     max-height: fit-content;
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box;
@@ -454,8 +569,8 @@
 .kalua_player_families {
     min-height: 40px;
     width: 100%;
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box;
@@ -466,8 +581,8 @@
 .kalua_player_cards {
     height: 215px !important;
     width: 100%;
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     box-sizing: border-box;
@@ -493,21 +608,15 @@
     left: auto !important;
     top: auto !important;
     margin: 4px !important;
-    /* Add slight margin so shadows don't clip */
     flex-shrink: 0;
     display: block !important;
-    border-radius: 10px;
-    /* Match card art rounded corners */
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
-    /* Subtle drop shadow */
-    transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
     cursor: pointer;
 }
 
 /* Modern hover effect to lift the card */
 .kalua_player_cards .stockitem:hover {
     transform: translateY(-6px);
-    box-shadow: 0 10px 16px rgba(0, 0, 0, 0.3);
 }
 
 /* Completely hide duplicate stacked cards - ensure they don't affect layout */
@@ -518,23 +627,28 @@
     flex: 0 0 0 !important;
 }
 
-/* Scrollbar styling for card area */
-.kalua_player_cards::-webkit-scrollbar {
+/* Scrollbar styling - brown hues to match the border/art theme */
+.kalua_player_cards::-webkit-scrollbar,
+#family-exchange::-webkit-scrollbar {
     height: 8px;
+    width: 8px;
 }
 
-.kalua_player_cards::-webkit-scrollbar-track {
-    background: #f1f1f1;
+.kalua_player_cards::-webkit-scrollbar-track,
+#family-exchange::-webkit-scrollbar-track {
+    background: #e8dcc8;
     border-radius: 4px;
 }
 
-.kalua_player_cards::-webkit-scrollbar-thumb {
-    background: #888;
+.kalua_player_cards::-webkit-scrollbar-thumb,
+#family-exchange::-webkit-scrollbar-thumb {
+    background: #6b5636;
     border-radius: 4px;
 }
 
-.kalua_player_cards::-webkit-scrollbar-thumb:hover {
-    background: #555;
+.kalua_player_cards::-webkit-scrollbar-thumb:hover,
+#family-exchange::-webkit-scrollbar-thumb:hover {
+    background: #4a3a22;
 }
 
 
@@ -547,19 +661,13 @@
     height: auto;
     min-height: 95px;
     /* Minimum height to accommodate temple/amulet items + padding */
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     text-align: center;
     flex: 0 0 480px;
     /* Fixed width of 480px */
-}
-
-/* Border for temple and amulet sprites */
-.kalua_player_kept_cards .stockitem {
-    border: 2px solid #000;
-    border-radius: 3px;
 }
 
 /* Make first letter of kept cards text larger */
@@ -584,8 +692,8 @@
     height: auto;
     min-height: 95px;
     /* Same minimum height as kept cards */
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     padding: 5px;
     text-align: center;
@@ -691,35 +799,41 @@
     display: inline-block;
 }
 
-/* Player color borders for played cards - using box-shadow to prevent jitter */
-.kalua_player_card_blue {
+/* Player color backgrounds for played cards - a rounded color panel behind the
+   card, done with box-shadow (not ::before) because a pseudo-element always
+   paints on top of its own parent's background - z-index can't sink it below
+   that. box-shadow is spec'd to paint behind the element's own background/
+   border, so it's the only way to show color behind the card's own art
+   without touching that art's background-position/size. Spread is capped at
+   4px (half of item_margin:8 in kalua.js) so neighboring cards' panels don't
+   overlap each other. */
+.kalua_player_card_blue,
+.kalua_player_card_red,
+.kalua_player_card_yellow,
+.kalua_player_card_green,
+.kalua_player_card_purple {
     border: none !important;
-    box-shadow: 0 0 0 4px #4685FF, 0 4px 8px rgba(0, 0, 0, 0.25) !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
+}
+
+.kalua_player_card_blue {
+    box-shadow: 0 0 0 4px #4685FF !important;
 }
 
 .kalua_player_card_red {
-    border: none !important;
-    box-shadow: 0 0 0 4px #C22D2D, 0 4px 8px rgba(0, 0, 0, 0.25) !important;
-    border-radius: 10px !important;
+    box-shadow: 0 0 0 4px #C22D2D !important;
 }
 
 .kalua_player_card_yellow {
-    border: none !important;
-    box-shadow: 0 0 0 4px #C8CA25, 0 4px 8px rgba(0, 0, 0, 0.25) !important;
-    border-radius: 10px !important;
+    box-shadow: 0 0 0 4px #C8CA25 !important;
 }
 
 .kalua_player_card_green {
-    border: none !important;
-    box-shadow: 0 0 0 4px #2EA232, 0 4px 8px rgba(0, 0, 0, 0.25) !important;
-    border-radius: 10px !important;
+    box-shadow: 0 0 0 4px #2EA232 !important;
 }
 
 .kalua_player_card_purple {
-    border: none !important;
-    box-shadow: 0 0 0 4px #913CB3, 0 4px 8px rgba(0, 0, 0, 0.25) !important;
-    border-radius: 10px !important;
+    box-shadow: 0 0 0 4px #913CB3 !important;
 }
 
 /* Hide other players preference implementation */
@@ -733,7 +847,7 @@
     text-align: center;
     padding: 10px;
     background-color: #f9f9f9;
-    border: 1px solid #ddd;
+    border: 1px solid #4a3a22;
     border-radius: 5px;
     margin: 10px 0;
     font-style: italic;
@@ -754,14 +868,14 @@
     padding: 4px 8px;
     border-radius: 4px;
     display: inline-block;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(74, 58, 34, 0.4);
     text-align: center;
 }
 
 .kalua_player_name_colored {
     /* Additional styling for colored player names */
     background-color: #969696;
-    border: 2px solid rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(74, 58, 34, 0.55);
 }
 
 /* Lower opacity of prayer token items - more specific selectors */

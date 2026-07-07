@@ -283,6 +283,22 @@ class Game extends Table
         }
     }
 
+    public function argInitialDraw(): array
+    {
+        return [
+            'disaster_deck_count' => $this->disasterCards->countCardInLocation("deck"),
+            'bonus_deck_count' => $this->bonusCards->countCardInLocation("deck"),
+        ];
+    }
+
+    public function argPhaseOneDraw(): array
+    {
+        return [
+            'disaster_deck_count' => $this->disasterCards->countCardInLocation("deck"),
+            'bonus_deck_count' => $this->bonusCards->countCardInLocation("deck"),
+        ];
+    }
+
     public function argGlobalOption(): array
     {
         $card_id = (int)$this->getGameStateValue('current_global_disaster');
@@ -2184,7 +2200,7 @@ class Game extends Table
         }
         
         // Save the current state to return to later
-        $this->setGameStateValue('saved_state', $this->getCurrentStateId());
+        $this->setGameStateValue('saved_state', (int)$this->gamestate->state_id());
         $this->setGameStateValue('saved_active_player', $player_id);
         
         $this->gamestate->nextState('buyCardReflex');
