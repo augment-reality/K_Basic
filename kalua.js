@@ -1860,6 +1860,57 @@ define([
                     }
                 }, 150);
             },
+            updateKeptCardsGrouping: function (player_id) {
+                setTimeout(() => {
+                    const cardStock = this[`${player_id}_kept`];
+                    if (!cardStock || !cardStock.items) {
+                        return;
+                    }
+
+                    const cardsByType = {};
+                    Object.values(cardStock.items).forEach(item => {
+                        const uniqueId = item.type;
+                        if (!cardsByType[uniqueId]) {
+                            cardsByType[uniqueId] = [];
+                        }
+                        cardsByType[uniqueId].push(item);
+                    });
+
+                    Object.keys(cardsByType).forEach(uniqueId => {
+                        const cardsOfType = cardsByType[uniqueId];
+                        const count = cardsOfType.length;
+
+                        cardsOfType.forEach((item, index) => {
+                            const cardElementId = cardStock.getItemDivId(item.id);
+                            const cardElement = document.getElementById(cardElementId);
+
+                            if (!cardElement) {
+                                return;
+                            }
+
+                            if (index === 0) {
+                                cardElement.classList.remove('card-hidden-duplicate');
+                                if (count > 1) {
+                                    this.addCardCountOverlay(cardElement, count);
+                                    cardElement.classList.add('has-card-count');
+                                } else {
+                                    this.removeCardCountOverlay(cardElement);
+                                    cardElement.classList.remove('has-card-count');
+                                }
+                            } else {
+                                cardElement.classList.add('card-hidden-duplicate');
+                                cardElement.style.display = 'none';
+                                this.removeCardCountOverlay(cardElement);
+                                cardElement.classList.remove('has-card-count');
+                            }
+                        });
+                    });
+
+                    if (cardStock.updateDisplay) {
+                        cardStock.updateDisplay();
+                    }
+                }, 150);
+            },
             updateCardbackGrouping: function (player_id) {
                 setTimeout(() => {
                     const cardbackStock = this[`${player_id}_cardbacks`];

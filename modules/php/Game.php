@@ -2184,7 +2184,7 @@ class Game extends Table
         }
         
         // Save the current state to return to later
-        $this->setGameStateValue('saved_state', (int)$this->gamestate->state_id());
+        $this->setGameStateValue('saved_state', (int)$this->gamestate->getCurrentStateId());
         $this->setGameStateValue('saved_active_player', $player_id);
         
         $this->gamestate->nextState('buyCardReflex');
