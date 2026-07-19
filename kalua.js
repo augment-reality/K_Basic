@@ -2022,9 +2022,26 @@ define([
                     existingOverlay.remove();
                 }
             },
+            // Guards against the framework's slideTemporaryObject throwing
+            // "cannot read properties of null (reading 'ownerDocument')" when
+            // either endpoint isn't actually in the DOM, or both ids resolve to
+            // the same element (sliding a node to itself confuses its internal
+            // clone/position logic).
+            safeSlideTemporaryObject: function (html, container, fromEl, toEl, duration, delay) {
+                const fromId = typeof fromEl === 'string' ? fromEl : fromEl?.id;
+                const toId   = typeof toEl   === 'string' ? toEl   : toEl?.id;
+                const fromNode = fromId ? document.getElementById(fromId) : null;
+                const toNode   = toId   ? document.getElementById(toId)   : null;
+                if (!fromNode || !toNode || fromNode === toNode) return null;
+                try {
+                    return this.slideTemporaryObject(html, container, fromEl, toEl, duration, delay);
+                } catch (e) {
+                    return null;
+                }
+            },
             slideMeepleAnim: function (fromEl, toEl) {
                 const cloneHtml = `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:-150px 0px;"></div>`;
-                this.slideTemporaryObject(cloneHtml, 'game_play_area', fromEl, toEl, this.ANIM_MEEPLE_SLIDE, 0);
+                this.safeSlideTemporaryObject(cloneHtml, 'game_play_area', fromEl, toEl, this.ANIM_MEEPLE_SLIDE, 0);
             },
             movetokens: function (tokenType, desiredShift) {
                 const currentPos = this.hkTokenPositions[tokenType];
@@ -2857,7 +2874,7 @@ define([
                     this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
 
                     // Fly a top-level clone so it renders above all other divs
-                    this.slideTemporaryObject(cloneHtml, 'game_play_area', `played_item_${card_id}`, `resolved_item_${card_id}`, this.ANIM_CARD_SLIDE, 0);
+                    this.safeSlideTemporaryObject(cloneHtml, 'game_play_area', `played_item_${card_id}`, `resolved_item_${card_id}`, this.ANIM_CARD_SLIDE, 0);
 
                     // Remove source from played after slideTemporaryObject has read its position
                     setTimeout(() => { this['played'] && this['played'].removeFromStockById(card_id); }, 50);
@@ -3035,7 +3052,7 @@ define([
                 const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
                 const bgX = -(spriteIndex * 30);
                 for (let i = 0; i < args.families_count; i++) {
-                    this.slideTemporaryObject(
+                    this.safeSlideTemporaryObject(
                         `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;opacity:0.35;filter:grayscale(1);"></div>`,
                         'game_play_area',
                         `${args.player_id}_families`,
@@ -3064,7 +3081,7 @@ define([
                     }
                     for (let i = 0; i < args.families_count; i++) {
                         if (meepDiv.lastElementChild) meepDiv.lastElementChild.remove();
-                        this.slideTemporaryObject(
+                        this.safeSlideTemporaryObject(
                             `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;"></div>`,
                             'game_play_area', `fex-meeples-${args.player_id}`, 'fex-pool-meeples',
                             this.ANIM_MEEPLE_SLIDE, 0
@@ -3102,7 +3119,7 @@ define([
                     // Round-end gain: animate out of pool into player row
                     for (let i = 0; i < args.families_count; i++) {
                         if (poolMeeples.lastElementChild) poolMeeples.lastElementChild.remove();
-                        this.slideTemporaryObject(
+                        this.safeSlideTemporaryObject(
                             `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;"></div>`,
                             'game_play_area', 'fex-pool-meeples', `fex-meeples-${args.player_id}`,
                             this.ANIM_MEEPLE_SLIDE, 0
@@ -3126,7 +3143,7 @@ define([
                     const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
                     const bgX = -(spriteIndex * 30);
                     for (let i = 0; i < args.families_count; i++) {
-                        this.slideTemporaryObject(
+                        this.safeSlideTemporaryObject(
                             `<div style="width:30px;height:30px;background-image:url(${g_gamethemeurl}img/30_30_meeple.png);background-position:${bgX}px 0px;"></div>`,
                             'game_play_area',
                             'atheistFamilies',

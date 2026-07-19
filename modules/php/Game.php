@@ -2140,7 +2140,8 @@ class Game extends Table
         $total_cards = ($disaster_cards['count'] ?? 0) + ($bonus_cards['count'] ?? 0);
 
         // Check if player has no cards and insufficient prayer for auto-pass
-        if ($total_cards == 0 && $player['player_prayer'] < 5) {
+        $player_prayer = $this->getUniqueValueFromDB("SELECT player_prayer FROM player WHERE player_id = $player_id");
+        if ($total_cards == 0 && $player_prayer < 5) {
             $player_name = $player['player_name'];
             $this->notifyAllPlayers('message',
                 clienttranslate('${player_name} was automatically passed (no cards and insufficient prayer to buy more)'),
