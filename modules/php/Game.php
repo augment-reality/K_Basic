@@ -870,7 +870,7 @@ class Game extends Table
             
             // Calculate effect multiplier based on choice and player
             $multiplier = 1.0; // Default: normal effect
-            
+
             if ($choice === 'avoid') {
                 // Only the card player avoids the effect completely
                 $multiplier = ($player_id === $card_player_id) ? 0.0 : 1.0;
@@ -878,7 +878,21 @@ class Game extends Table
                 // Everyone (including the card player) gets double effect
                 $multiplier = 2.0;
             }
-            
+
+            // Amulets only protect against family_dies and convert_to_atheist, regardless of
+            // the avoid/double choice in effect — a player who used an amulet must never take
+            // those effects (previously this loop ignored playerUsedAmulet entirely, so an
+            // amulet gave no protection and was consumed for nothing).
+            $used_amulet = isset($this->playerUsedAmulet[$player_id]) && $this->playerUsedAmulet[$player_id];
+            if ($used_amulet) {
+                $player_effects['family_dies'] = 0;
+                $player_effects['convert_to_atheist'] = 0;
+                $this->notifyAllPlayers("message",
+                    clienttranslate('${player_name} is protected from the disaster effects by an amulet'),
+                    ['player_name' => $this->getPlayerNameById($player_id)]
+                );
+            }
+
             // Apply effects without per-player sidebar messages — the globalEffectApplied
             // summary below covers the whole group; amulet exceptions are called out separately.
             if ($choice === 'normal') {
@@ -1508,10 +1522,11 @@ class Game extends Table
 
             // Collect 2 families from low and 1 from middle happiness players
             // IMPORTANT: Never remove the chief meeple - they can only be sacrificed voluntarily
-            foreach ($players as $player_id => $happiness) {
+            foreach ($players as $player_id => $player_info) {
                 $family_count = (int)$playerData[$player_id]['player_family'];
                 $has_chief    = (int)$playerData[$player_id]['player_chief'];
                 $available_for_loss = ($has_chief > 0) ? max(0, $family_count - 1) : $family_count;
+                $happiness    = $happinessScores[$player_id];
 
                 if ($happiness == $happy_value_low) {
                     $to_convert = min(2, $available_for_loss);
@@ -1632,6 +1647,32 @@ class Game extends Table
             return $actual_families > 0;
         }));
         if ($religions_with_families <= 1) {
+            // Find the one religion (if any) that still has followers, to name it as dominant
+            $dominant_player_id = null;
+            foreach ($playerData as $pid => $row) {
+                $family_count = (int)$row['player_family'];
+                $has_chief = (int)$row['player_chief'];
+                $actual_families = $family_count - ($has_chief > 0 ? 1 : 0);
+                if ($actual_families > 0) {
+                    $dominant_player_id = (int)$pid;
+                    break;
+                }
+            }
+
+            if ($dominant_player_id !== null) {
+                $this->notifyAllPlayers('dominantReligionEstablished',
+                    clienttranslate('All but one religion have lost their followers — ${player_name} now reigns as the sole dominant religion!'), [
+                        'player_id'   => $dominant_player_id,
+                        'player_name' => $this->getPlayerNameById($dominant_player_id),
+                        'preserve'    => 5000
+                    ]);
+            } else {
+                $this->notifyAllPlayers('dominantReligionEstablished',
+                    clienttranslate('All religions were eliminated, but not all were equal...'), [
+                        'preserve' => 5000
+                    ]);
+            }
+
             $this->gamestate->nextState('gameOver');
             return;
         }
@@ -1786,8 +1827,10 @@ class Game extends Table
                 $this->bonusCards->moveCard($card['id'], 'discard');
             }
             
-            // Notify frontend to clear all played/resolved card stocks and displays
-            $this->notifyAllPlayers('allCardsCleanup', clienttranslate('All played and resolved cards have been discarded for the new round'), [
+            // Notify frontend to clear the played card stock now; resolved cards stay on
+            // display until the first card of the new round is played (see notif_cardPlayed
+            // in kalua.js), so no player-facing text claims they're gone yet.
+            $this->notifyAllPlayers('allCardsCleanup', '', [
                 'total_cards_count' => count($all_cards_to_cleanup),
                 'played_cards_count' => count($played_disaster_cards) + count($played_bonus_cards),
                 'resolved_cards_count' => count($resolved_disaster_cards) + count($resolved_bonus_cards),
@@ -2624,7 +2667,8 @@ class Game extends Table
         $played_by = $card_play_info['played_by'] ? (int)$card_play_info['played_by'] : null;
         $target_player = $card_play_info['target_player'] ? (int)$card_play_info['target_player'] : null;
         
-        // Handle global disasters with player choices (amulets don't affect these as they have individual choices)
+        // Handle global disasters with player choices; per-player amulet protection against
+        // family_dies/convert_to_atheist is applied inside applyGlobalDisasterEffects.
         if ($card_type === CardType::GlobalDisaster->value) {
             $this->applyGlobalDisasterEffects($card_id, $effects, $played_by);
         } else {

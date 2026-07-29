@@ -87,24 +87,25 @@ define([
                 this.ANIM_MEEPLE_STAGGER = 600;  // ms — gap between meeples in a multi-move
                 this.ANIM_MEEPLE_WAIT    = 1800; // ms — queue hold after all meeples land
                 this.ANIM_POOL_PAUSE     = 2500; // ms — pause after pool fills before distribution
-                this.ANIM_CARD_SLIDE     = 2400; // ms — flight time for card → resolved
-                this.ANIM_CARD_WAIT      = 2800; // ms — queue hold after card animation
+                this.ANIM_CARD_SLIDE     = 7200; // ms — flight time for card → resolved (3x slowed: card resolution phase)
+                this.ANIM_CARD_WAIT      = 8400; // ms — queue hold after card animation (3x slowed: card resolution phase)
                 // Notification queue hold times (setSynchronous)
                 this.QUEUE_PLAYER_COUNTS            = 500;
-                this.QUEUE_FAMILIES_DIED            = 1000;
-                this.QUEUE_FAMILIES_GAINED          = 200;
-                this.QUEUE_FAMILIES_LOST            = 200;
-                this.QUEUE_TEMPLE_DESTROYED         = 500;
-                this.QUEUE_LEADER_RECOVERED         = 500;
-                this.QUEUE_TEMPLE_BUILT             = 500;
-                this.QUEUE_AMULET_GAINED            = 500;
-                this.QUEUE_CARD_BEING_RESOLVED      = 800;
-                this.QUEUE_DICE_ROLLED              = 500;
-                this.QUEUE_AMULET_USED              = 500;
-                this.QUEUE_AMULET_NOT_USED          = 500;
+                this.QUEUE_FAMILIES_DIED            = 3000; // 3x slowed: card resolution phase (disaster deaths only, not convert-phase redistribution)
+                this.QUEUE_FAMILIES_GAINED          = 200;  // shared with convert-phase redistribution — left as-is
+                this.QUEUE_FAMILIES_LOST            = 200;  // shared with convert-phase redistribution — left as-is
+                this.QUEUE_TEMPLE_DESTROYED         = 1500; // 3x slowed: card resolution phase
+                this.QUEUE_LEADER_RECOVERED         = 1500; // 3x slowed: card resolution phase
+                this.QUEUE_TEMPLE_BUILT             = 1500; // 3x slowed: card resolution phase
+                this.QUEUE_AMULET_GAINED            = 1500; // 3x slowed: card resolution phase
+                this.QUEUE_CARD_BEING_RESOLVED      = 2400; // 3x slowed: card resolution phase
+                this.QUEUE_DICE_ROLLED              = 1500; // 3x slowed: card resolution phase
+                this.QUEUE_AMULET_USED              = 1500; // 3x slowed: card resolution phase
+                this.QUEUE_AMULET_NOT_USED          = 1500; // 3x slowed: card resolution phase
                 this.QUEUE_ROUND_LEADER_CHANGED     = 2000;
                 this.QUEUE_ROUND_ENDED              = 500;
                 this.QUEUE_ROUND_SUMMARY_PAUSE      = 3500;
+                this.QUEUE_DOMINANT_RELIGION        = 5000; // ms — hold before end game transition so the dominant-religion banner is readable
                 // Behavioural delays
                 this.AUTO_PASS_DELAY = 2000; // ms — pause before auto-pass/convert fires
                 // ─────────────────────────────────────────────────────────────────────────
@@ -140,6 +141,12 @@ define([
                         6: "Prayer cost: 5. You: Gain 4 happiness.",                                                    // DoubleHarvest
                         7: "Prayer cost: 5. You: Build a temple, keep card.",                                           // Temple
                     }
+                };
+
+                // Tooltips for the kept-card icons (amulet/temple tokens shown in each player's kept area)
+                this.KEPT_ITEM_TOOLTIPS = {
+                    1: { title: "Amulet", text: "Spend one to protect yourself from a disaster's family deaths and atheist conversions. Consumed when used." },
+                    2: { title: "Temple", text: "Grants +1 prayer and +1 happiness at the end of each round. Can be destroyed by the Temple Destroyed disaster." },
                 };
 
 
@@ -466,10 +473,12 @@ define([
                         // Add amulet cards (kept_id = 1)
                         for (let i = 0; i < player.amulet; i++) {
                             this[`${player.id}_kept`].addToStock(1);
+                            this.addKeptItemTooltip(player.id, 1);
                         }
                         // Add temple cards (kept_id = 2)
                         for (let i = 0; i < player.temple; i++) {
                             this[`${player.id}_kept`].addToStock(2);
+                            this.addKeptItemTooltip(player.id, 2);
                         }
                         this.updateKeptCardsGrouping(player.id);
                     }
@@ -773,6 +782,25 @@ define([
                     }
                 } else {
                 }
+            },
+            // Attach a tooltip explaining what an amulet/temple kept-item does, to the most
+            // recently added stock item of that type that doesn't have one yet.
+            addKeptItemTooltip: function (playerId, keptId) {
+                const keptStock = this[`${playerId}_kept`];
+                const info = this.KEPT_ITEM_TOOLTIPS[keptId];
+                if (!keptStock || !info) return;
+                setTimeout(() => {
+                    const items = keptStock.getAllItems().filter(item => item.type == keptId);
+                    for (let i = items.length - 1; i >= 0; i--) {
+                        const elementId = keptStock.getItemDivId(items[i].id);
+                        const element = document.getElementById(elementId);
+                        if (element && !element.hasAttribute('data-tooltip-added')) {
+                            this.addTooltip(elementId, info.title, info.text);
+                            element.setAttribute('data-tooltip-added', 'true');
+                            return;
+                        }
+                    }
+                }, 100);
             },
             // Function to manually refresh tooltips for all visible cards
             refreshAllCardTooltips: function () {
@@ -2259,6 +2287,7 @@ define([
                 // end-of-round summary notifications have all had time to register.
                 this.notifqueue.setSynchronous('roundLeaderChanged',         this.QUEUE_ROUND_LEADER_CHANGED);
                 this.notifqueue.setSynchronous('roundEnded',                 this.QUEUE_ROUND_ENDED);
+                this.notifqueue.setSynchronous('dominantReligionEstablished', this.QUEUE_DOMINANT_RELIGION);
                 // roundSummaryPause is async and self-timed — no setSynchronous needed
                 // Add tooltips to any cards that might have been missed
                 setTimeout(() => {
@@ -2452,6 +2481,7 @@ define([
                 // Clear resolved cards from previous round when first new card is played
                 if (this['resolved'] && this['resolved'].getItemNumber() > 0) {
                     this['resolved'].removeAll();
+                    this.showMessage(_('All played and resolved cards have been discarded for the new round'), 'info');
                 }
                 // Remove the card from the correct player's hand if the stock exists
                 const playerCardsStock = this[`${args.player_id}_cards`];
@@ -2488,9 +2518,9 @@ define([
                     // Add player color border to the played card
                     this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
                 }
-                // Update prayer counter if prayer was spent
-                if (args.new_prayer_total !== undefined && this.prayerCounters[args.player_id]) {
-                    this.prayerCounters[args.player_id].setValue(args.new_prayer_total);
+                // Update prayer counter and token sprites if prayer was spent
+                if (args.new_prayer_total !== undefined) {
+                    this.updatePlayerPrayer(args.player_id, args.new_prayer_total);
                 }
             },
             notif_cardBought: function (args) {
@@ -2597,8 +2627,22 @@ define([
                 // No UI update needed; the sidebar log message is sufficient
             },
             notif_localEffectApplied: function (args) {
-                // No UI update needed; familiesDied/familiesConverted handle animations,
-                // playerCountsChanged handles counters — this notification exists for the log text only
+                // familiesDied/familiesConverted handle animations, playerCountsChanged handles
+                // counters — surface the summary at the top of the screen too, right after the
+                // "Now resolving" toast, so players can follow what the card caused.
+                this.showMessage(dojo.string.substitute(_('${card_name} hits ${target_name}: ${effect_text}'), {
+                    card_name: args.card_name,
+                    target_name: args.target_name,
+                    effect_text: args.effect_text
+                }), 'info');
+            },
+            notif_globalEffectApplied: function (args) {
+                // Summary of a global disaster's effect on everyone — shown at the top of the
+                // screen right after the "Now resolving" toast so players can follow along.
+                const template = args.multiplier === 2.0
+                    ? _('Each player (doubled — 2× base effects): ${effect_text}')
+                    : _('Each player: ${effect_text}');
+                this.showMessage(dojo.string.substitute(template, { effect_text: args.effect_text }), 'info');
             },
             notif_amuletDecision: function (args) {
                 // Store which players have amulets for reference
@@ -2693,6 +2737,7 @@ define([
                 if (keptStock) {
 
                     keptStock.addToStock(2);
+                    this.addKeptItemTooltip(player_id, 2);
 
                 }
             },
@@ -2711,6 +2756,7 @@ define([
                 if (keptStock) {
 
                     keptStock.addToStock(1);
+                    this.addKeptItemTooltip(player_id, 1);
 
                 }
             },
@@ -3006,6 +3052,14 @@ define([
             },
             notif_cardBeingResolved: function (args) {
                 const msg = dojo.string.substitute(_('Now resolving: ${card_name}'), { card_name: args.card_name });
+                this.showMessage(msg, 'info');
+            },
+            notif_dominantReligionEstablished: function (args) {
+                // Held at the top of the screen for QUEUE_DOMINANT_RELIGION (5s) before the
+                // end game transition, via the setSynchronous registration above.
+                const msg = args.player_name
+                    ? dojo.string.substitute(_('All but one religion have lost their followers — ${player_name} now reigns as the sole dominant religion!'), { player_name: args.player_name })
+                    : _('All religions were eliminated, but not all were equal...');
                 this.showMessage(msg, 'info');
             },
             notif_resolvedCardsCleanup: function (args) {

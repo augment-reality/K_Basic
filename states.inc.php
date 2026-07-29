@@ -245,6 +245,7 @@ $machinestates = [
     /* Convert then pray phase */
     ST_PHASE_FOUR_CONVERT_PRAY => GameStateBuilder::create()
         ->name('phaseFourConvertPray')
+        ->description(clienttranslate('Families flee to happier religions and unhappy religions pray harder'))
         ->type(StateType::GAME)
         ->action('stConvertPray')
         ->updateGameProgression(true)  // Update progression after each round
