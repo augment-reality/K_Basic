@@ -59,6 +59,16 @@
     },
     "default": 1
   },
+  "105": {
+    "name": "Animation pace",
+    "needReload": true,
+    "values": {
+      "1": { "name": "Normal", "cssPref": "kalua_pace_normal" },
+      "2": { "name": "Fast", "cssPref": "kalua_pace_fast" },
+      "3": { "name": "No movement", "cssPref": "kalua_pace_none" }
+    },
+    "default": 1
+  },
   "104": {
     "name": "Timed confirmation",
     "needReload": false,

@@ -960,3 +960,49 @@
 .card-hidden-duplicate {
     display: none !important;
 }
+/* Trial feedback pass: overlays only; no changes to board or stock geometry. */
+.kalua-resolving-card {
+    outline: 3px solid #a86300;
+    outline-offset: 3px;
+    box-shadow: 0 0 12px #ffc34d;
+}
+.kalua-effect-target {
+    outline: 3px solid #a86300;
+    outline-offset: 2px;
+}
+#playedCards { position: relative; }
+#kalua-resolution-caption {
+    position: absolute;
+    left: 8px;
+    bottom: 4px;
+    max-width: calc(100% - 16px);
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: #332000;
+    background: #fff5d6;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 12;
+}
+.kalua-feedback-badge {
+    display: inline-block;
+    position: absolute;
+    margin-left: 5px;
+    padding: 3px 6px;
+    border: 1px solid #805800;
+    border-radius: 4px;
+    background: #fff5d6;
+    color: #332000;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 20;
+}
+.kalua-protection-badge {
+    border-color: #246346;
+    background: #e5f7ed;
+    color: #14442e;
+    white-space: normal;
+    max-width: 200px;
+}

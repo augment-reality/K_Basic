@@ -350,7 +350,7 @@ class Game extends Table
 
             $card_name = $this->getCardName($resolving_card);
             $this->notifyAllPlayers("cardBeingResolved",
-                clienttranslate("Now resolving: ${card_name}"), [
+                clienttranslate('Now resolving: ${card_name}'), [
                     'card_name' => $card_name,
                     'card_id'   => $resolving_card['id'],
                     'preserve'  => 2500
@@ -3719,7 +3719,7 @@ class Game extends Table
         /* TODO get size of each players hand */
 
         // Add game options to frontend data
-        $result["game_options"] = $this->getGameOptions();
+        $result["game_options"] = $this->getKaluaFrontendOptions();
 
         return $result;
     }
@@ -3727,7 +3727,7 @@ class Game extends Table
     /**
      * Get game options for frontend
      */
-    protected function getGameOptions(): array
+    protected function getKaluaFrontendOptions(): array
     {
         return [
             '100' => $this->tableOptions->get(100), // Quickstart Cards

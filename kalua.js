@@ -87,8 +87,8 @@ define([
                 this.ANIM_MEEPLE_STAGGER = 600;  // ms — gap between meeples in a multi-move
                 this.ANIM_MEEPLE_WAIT    = 1800; // ms — queue hold after all meeples land
                 this.ANIM_POOL_PAUSE     = 2500; // ms — pause after pool fills before distribution
-                this.ANIM_CARD_SLIDE     = 7200; // ms — flight time for card → resolved (3x slowed: card resolution phase)
-                this.ANIM_CARD_WAIT      = 8400; // ms — queue hold after card animation (3x slowed: card resolution phase)
+                this.ANIM_CARD_SLIDE     = 1600; // Meaningful travel without a long empty wait
+                this.ANIM_CARD_WAIT      = 300;  // Reading pause after landing
                 // Notification queue hold times (setSynchronous)
                 this.QUEUE_PLAYER_COUNTS            = 500;
                 this.QUEUE_FAMILIES_DIED            = 3000; // 3x slowed: card resolution phase (disaster deaths only, not convert-phase redistribution)
@@ -619,6 +619,7 @@ define([
                 }
                 // Setup game notifications to handle (see "setupNotifications" method below)
                 this.setupNotifications();
+                this.installCounterFeedback();
                 // Apply initial hand sort and re-apply whenever BGA flips the pref-103 CSS class
                 this.applyHandSort();
                 new MutationObserver(() => this.applyHandSort())
@@ -2050,12 +2051,82 @@ define([
                     existingOverlay.remove();
                 }
             },
+            // Presentation only: never alter server values or the stock layout.
+            feedbackDuration: function (ms) {
+                const active = this.bgaAnimationsActive ? this.bgaAnimationsActive() : !this.instantaneousMode;
+                const pref = Number(this.bga?.userPreferences?.get(105) ?? this.prefs?.[105]?.value ?? 1);
+                const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+                return !active || pref === 3 || reduced ? 0 : Math.round(ms * (pref === 2 ? 0.4 : 1));
+            },
+            feedbackPause: function (ms) {
+                const duration = this.feedbackDuration(ms);
+                // Even a zero-length pause flushes stock-update timers before the next event.
+                return new Promise(resolve => setTimeout(resolve, duration));
+            },
+            showFeedbackBadge: function (anchor, text, protectedEffect) {
+                if (!anchor || this.instantaneousMode || (this.bgaAnimationsActive && !this.bgaAnimationsActive())) return;
+                const badge = document.createElement('span');
+                badge.className = 'kalua-feedback-badge' + (protectedEffect ? ' kalua-protection-badge' : '');
+                badge.textContent = text;
+                badge.setAttribute('role', 'status');
+                anchor.appendChild(badge);
+                setTimeout(() => badge.remove(), this.feedbackDuration(2200) || 2200);
+            },
+            installCounterFeedback: function () {
+                const groups = [
+                    [this.prayerCounters, 'p', _('prayer')],
+                    [this.happinessCounters, 'h', _('happiness')],
+                    [this.familyCounters, 'f', _('families')],
+                    [this.templeCounters, 't', _('temples')],
+                    [this.amuletCounters, 'a', _('amulets')]
+                ];
+                groups.forEach(([counters, key, label]) => Object.entries(counters).forEach(([pid, counter]) => {
+                    // Cover setValue and incValue; suppress nested calls to avoid duplicate badges.
+                    ['setValue', 'incValue'].forEach(method => {
+                        const original = counter[method];
+                        counter[method] = (...args) => {
+                            if (counter._kaluaFeedbackBusy) return original.apply(counter, args);
+                            const before = Number(counter.getValue());
+                            counter._kaluaFeedbackBusy = true;
+                            let result;
+                            try { result = original.apply(counter, args); }
+                            finally { counter._kaluaFeedbackBusy = false; }
+                            const after = Number(counter.getValue());
+                            if (Number.isFinite(before) && Number.isFinite(after) && before !== after) {
+                                const anchor = document.getElementById(`panel_${key}_${pid}`)?.parentElement;
+                                this.showFeedbackBadge(anchor, `${after > before ? '+' : ''}${after - before} ${label} (${before} → ${after})`);
+                            }
+                            return result;
+                        };
+                    });
+                }));
+            },
+            clearResolvingFeedback: function () {
+                document.querySelectorAll('.kalua-resolving-card').forEach(el => el.classList.remove('kalua-resolving-card'));
+                document.querySelectorAll('.kalua-effect-target').forEach(el => el.classList.remove('kalua-effect-target'));
+                document.getElementById('kalua-resolution-caption')?.remove();
+            },
+            resolutionCaption: function (text) {
+                const area = document.getElementById('playedCards');
+                if (!area) return;
+                let caption = document.getElementById('kalua-resolution-caption');
+                if (!caption) {
+                    caption = document.createElement('div');
+                    caption.id = 'kalua-resolution-caption';
+                    caption.setAttribute('role', 'status');
+                    area.appendChild(caption);
+                }
+                caption.textContent = text;
+            },
             // Guards against the framework's slideTemporaryObject throwing
             // "cannot read properties of null (reading 'ownerDocument')" when
             // either endpoint isn't actually in the DOM, or both ids resolve to
             // the same element (sliding a node to itself confuses its internal
             // clone/position logic).
             safeSlideTemporaryObject: function (html, container, fromEl, toEl, duration, delay) {
+                duration = this.feedbackDuration(duration);
+                delay = this.feedbackDuration(delay || 0);
+                if (!duration) return null;
                 const fromId = typeof fromEl === 'string' ? fromEl : fromEl?.id;
                 const toId   = typeof toEl   === 'string' ? toEl   : toEl?.id;
                 const fromNode = fromId ? document.getElementById(fromId) : null;
@@ -2065,6 +2136,22 @@ define([
                     return this.slideTemporaryObject(html, container, fromEl, toEl, duration, delay);
                 } catch (e) {
                     return null;
+                }
+            },
+            awaitFeedbackSlide: async function (html, fromEl, toEl, ms) {
+                const anim = this.safeSlideTemporaryObject(html, 'game_play_area', fromEl, toEl, ms, 0);
+                if (!anim) return;
+                const duration = this.feedbackDuration(ms);
+                let timer;
+                try {
+                    const completion = this.bgaPlayDojoAnimation
+                        ? this.bgaPlayDojoAnimation(anim)
+                        : new Promise(resolve => setTimeout(resolve, duration));
+                    await Promise.race([completion, new Promise(resolve => { timer = setTimeout(resolve, duration + 250); })]);
+                } catch (error) {
+                    console.warn('Kalua animation interrupted; retaining the authoritative result', error);
+                } finally {
+                    clearTimeout(timer);
                 }
             },
             slideMeepleAnim: function (fromEl, toEl) {
@@ -2118,15 +2205,15 @@ define([
                         const fromElId = `atheistFamilies_item_${meeple.id}`;
                         this.slideMeepleAnim(fromElId, `${player_id}_families`);
                         atheistFamilies.removeFromStockById(meeple.id);
-                        setTimeout(() => playerFamilies.addToStock(this.ID_AHTHIEST_STOCK), this.ANIM_MEEPLE_SLIDE);
+                        setTimeout(() => playerFamilies.addToStock(this.ID_AHTHIEST_STOCK), this.feedbackDuration(this.ANIM_MEEPLE_SLIDE));
                     } else {
                         playerFamilies.addToStock(this.ID_AHTHIEST_STOCK);
                     }
                     if (i < num_atheists - 1) {
-                        await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                        await this.feedbackPause(this.ANIM_MEEPLE_STAGGER);
                     }
                 }
-                await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                await this.feedbackPause(this.ANIM_MEEPLE_WAIT);
                 this.familyCounters[player_id].incValue(num_atheists);
             },
             setupTargetSelection: function () {
@@ -2180,7 +2267,7 @@ define([
                     const fromElId = `${target_player_id}_families_item_${meeple.id}`;
                     this.slideMeepleAnim(fromElId, `${player_id}_families`);
                     targetFamilies.removeFromStockById(meeple.id);
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_SLIDE));
+                    await this.feedbackPause(this.ANIM_MEEPLE_SLIDE);
                     playerFamilies.addToStock(this.ID_AHTHIEST_STOCK);
                 } else {
                     targetFamilies.removeFromStock(this.ID_AHTHIEST_STOCK);
@@ -2270,24 +2357,24 @@ define([
                 // automatically listen to the notifications, based on the `notif_xxx` function on this class.
                 this.bgaSetupPromiseNotifications();
                 // Queue hold times — durations live in the timing block at the top of the constructor
-                this.notifqueue.setSynchronous('playerCountsChanged',        this.QUEUE_PLAYER_COUNTS);
+                this.notifqueue.setSynchronous('playerCountsChanged',        this.feedbackDuration(this.QUEUE_PLAYER_COUNTS));
                 // familiesDied is an async handler — promise-based timing, no setSynchronous needed
                 // familiesGained and familiesLost are async handlers — promise-based timing, no setSynchronous needed
-                this.notifqueue.setSynchronous('templeDestroyed',            this.QUEUE_TEMPLE_DESTROYED);
-                this.notifqueue.setSynchronous('leaderRecovered',            this.QUEUE_LEADER_RECOVERED);
-                this.notifqueue.setSynchronous('templeBuilt',                this.QUEUE_TEMPLE_BUILT);
-                this.notifqueue.setSynchronous('amuletGained',               this.QUEUE_AMULET_GAINED);
+                this.notifqueue.setSynchronous('templeDestroyed',            this.feedbackDuration(this.QUEUE_TEMPLE_DESTROYED));
+                this.notifqueue.setSynchronous('leaderRecovered',            this.feedbackDuration(this.QUEUE_LEADER_RECOVERED));
+                this.notifqueue.setSynchronous('templeBuilt',                this.feedbackDuration(this.QUEUE_TEMPLE_BUILT));
+                this.notifqueue.setSynchronous('amuletGained',               this.feedbackDuration(this.QUEUE_AMULET_GAINED));
                 // cardResolved is async and self-timed — no setSynchronous needed
-                this.notifqueue.setSynchronous('cardBeingResolved',          this.QUEUE_CARD_BEING_RESOLVED);
-                this.notifqueue.setSynchronous('diceRolled',                 this.QUEUE_DICE_ROLLED);
-                this.notifqueue.setSynchronous('amuletUsed',                 this.QUEUE_AMULET_USED);
-                this.notifqueue.setSynchronous('amuletNotUsed',              this.QUEUE_AMULET_NOT_USED);
+                // cardBeingResolved / amuletProtection are awaited, preference-aware handlers.
+                this.notifqueue.setSynchronous('diceRolled',                 this.feedbackDuration(this.QUEUE_DICE_ROLLED));
+                this.notifqueue.setSynchronous('amuletUsed',                 this.feedbackDuration(this.QUEUE_AMULET_USED));
+                this.notifqueue.setSynchronous('amuletNotUsed',              this.feedbackDuration(this.QUEUE_AMULET_NOT_USED));
                 // Hold the queue on the round-leader change so the phaseOneDraw gameStateChange
                 // (which visually activates the new leader) doesn't fire until after the
                 // end-of-round summary notifications have all had time to register.
-                this.notifqueue.setSynchronous('roundLeaderChanged',         this.QUEUE_ROUND_LEADER_CHANGED);
-                this.notifqueue.setSynchronous('roundEnded',                 this.QUEUE_ROUND_ENDED);
-                this.notifqueue.setSynchronous('dominantReligionEstablished', this.QUEUE_DOMINANT_RELIGION);
+                this.notifqueue.setSynchronous('roundLeaderChanged',         this.feedbackDuration(this.QUEUE_ROUND_LEADER_CHANGED));
+                this.notifqueue.setSynchronous('roundEnded',                 this.feedbackDuration(this.QUEUE_ROUND_ENDED));
+                this.notifqueue.setSynchronous('dominantReligionEstablished', this.feedbackDuration(this.QUEUE_DOMINANT_RELIGION));
                 // roundSummaryPause is async and self-timed — no setSynchronous needed
                 // Add tooltips to any cards that might have been missed
                 setTimeout(() => {
@@ -2624,9 +2711,11 @@ define([
                 }
             },
             notif_targetSelected: function (args) {
-                // No UI update needed; the sidebar log message is sufficient
+                document.getElementById(`player_area_${args.target_player_id}`)?.classList.add('kalua-effect-target');
+                this.resolutionCaption(dojo.string.substitute(_('${card_name} targets ${target_name}'), args));
             },
             notif_localEffectApplied: function (args) {
+                this.resolutionCaption(dojo.string.substitute(_('${card_name} → ${target_name}: ${effect_text}'), args));
                 // familiesDied/familiesConverted handle animations, playerCountsChanged handles
                 // counters — surface the summary at the top of the screen too, right after the
                 // "Now resolving" toast, so players can follow what the card caused.
@@ -2696,8 +2785,9 @@ define([
             notif_amuletProtection: function (args) {
                 const player_name = args.player_name;
                 const player_id = args.player_id;
-                // Visual feedback could be added here to show amulet protection
-                // For example, a brief animation or highlighting of the player's board
+                const anchor = document.getElementById(`player_name_${player_id}`);
+                this.showFeedbackBadge(anchor, _('Amulet: harmful family effects blocked'), true);
+                return this.feedbackPause(1500);
             },
             notif_diceRollRequired: function (args) {
                 this.playersWhoNeedToRoll = (args.players_rolling || []).map(id => parseInt(id));
@@ -2891,6 +2981,7 @@ define([
                     const cardInPlayed = playedItems.find(item => item.id == card_id);
 
                     if (!cardInPlayed) {
+                        this.clearResolvingFeedback();
                         return;
                     }
 
@@ -2905,7 +2996,8 @@ define([
                         this['played'].removeFromStockById(card_id);
                         this['resolved'].addToStockWithId(resolvedInstanceTypeId, card_id);
                         this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
-                        await new Promise(resolve => setTimeout(resolve, this.ANIM_CARD_WAIT));
+                        this.clearResolvingFeedback();
+                        await this.feedbackPause(this.ANIM_CARD_WAIT);
                         return;
                     }
 
@@ -2920,15 +3012,16 @@ define([
                     this.addCardTooltipByUniqueId('resolved', uniqueId, null, card_id);
 
                     // Fly a top-level clone so it renders above all other divs
-                    this.safeSlideTemporaryObject(cloneHtml, 'game_play_area', `played_item_${card_id}`, `resolved_item_${card_id}`, this.ANIM_CARD_SLIDE, 0);
-
-                    // Remove source from played after slideTemporaryObject has read its position
-                    setTimeout(() => { this['played'] && this['played'].removeFromStockById(card_id); }, 50);
-
-                    // Reveal destination just as the clone lands
-                    setTimeout(() => { if (destEl) destEl.style.visibility = ''; }, this.ANIM_CARD_SLIDE + 50);
-
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_CARD_WAIT));
+                    // Keep the source position stable until the ghost lands; no orphaned timers.
+                    sourceElement.style.visibility = 'hidden';
+                    try {
+                        await this.awaitFeedbackSlide(cloneHtml, `played_item_${card_id}`, `resolved_item_${card_id}`, this.ANIM_CARD_SLIDE);
+                    } finally {
+                        this['played'].removeFromStockById(card_id);
+                        if (destEl) destEl.style.visibility = '';
+                        this.clearResolvingFeedback();
+                    }
+                    await this.feedbackPause(this.ANIM_CARD_WAIT);
                 }
             },
             notif_phaseConvertStart: function (args) {
@@ -3042,7 +3135,7 @@ define([
                     });
                 }
 
-                await new Promise(resolve => setTimeout(resolve, this.QUEUE_ROUND_SUMMARY_PAUSE));
+                await this.feedbackPause(this.QUEUE_ROUND_SUMMARY_PAUSE);
                 this._roundSummaryActive = false;
 
                 if (panel) {
@@ -3050,9 +3143,13 @@ define([
                     panel.innerHTML = '';
                 }
             },
-            notif_cardBeingResolved: function (args) {
+            notif_cardBeingResolved: async function (args) {
+                this.clearResolvingFeedback();
+                document.getElementById(`played_item_${args.card_id}`)?.classList.add('kalua-resolving-card');
                 const msg = dojo.string.substitute(_('Now resolving: ${card_name}'), { card_name: args.card_name });
+                this.resolutionCaption(msg);
                 this.showMessage(msg, 'info');
+                await this.feedbackPause(1500);
             },
             notif_dominantReligionEstablished: function (args) {
                 // Held at the top of the screen for QUEUE_DOMINANT_RELIGION (5s) before the
@@ -3063,12 +3160,14 @@ define([
                 this.showMessage(msg, 'info');
             },
             notif_resolvedCardsCleanup: function (args) {
+                this.clearResolvingFeedback();
                 // Clear all cards from the resolved stock
                 if (this['resolved']) {
                     this['resolved'].removeAll();
                 }
             },
             notif_allCardsCleanup: function (args) {
+                this.clearResolvingFeedback();
                 // Clear played cards; resolved cards persist until the first card of the new round is played
                 if (this['played']) {
                     this['played'].removeAll();
@@ -3088,13 +3187,13 @@ define([
                             this.slideMeepleAnim(fromElId, 'atheistFamilies');
                             playerFamilies.removeFromStockById(meeple.id);
                             // Add to atheist pool as clone lands
-                            setTimeout(() => this['atheists'].addToStock(this.ID_AHTHIEST_STOCK), this.ANIM_MEEPLE_SLIDE);
+                            setTimeout(() => this['atheists'].addToStock(this.ID_AHTHIEST_STOCK), this.feedbackDuration(this.ANIM_MEEPLE_SLIDE));
                         }
                         if (i < args.families_count - 1) {
-                            await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                            await this.feedbackPause(this.ANIM_MEEPLE_STAGGER);
                         }
                     }
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                    await this.feedbackPause(this.ANIM_MEEPLE_WAIT);
                 }
                 if (args.prayer !== undefined) {
                     this.updatePlayerPrayer(args.player_id, args.prayer);
@@ -3114,10 +3213,10 @@ define([
                         this.ANIM_MEEPLE_SLIDE, 0
                     );
                     if (i < args.families_count - 1) {
-                        await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                        await this.feedbackPause(this.ANIM_MEEPLE_STAGGER);
                     }
                 }
-                await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                await this.feedbackPause(this.ANIM_MEEPLE_WAIT);
                 this.updateFamiliesRemainingDisplay();
             },
             notif_familiesLost: async function (args) {
@@ -3147,12 +3246,12 @@ define([
                             m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
                             m.style.backgroundPosition = `${bgXCap}px 0px`;
                             poolMeeples.appendChild(m);
-                        }, this.ANIM_MEEPLE_SLIDE);
+                        }, this.feedbackDuration(this.ANIM_MEEPLE_SLIDE));
                         if (i < args.families_count - 1) {
-                            await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                            await this.feedbackPause(this.ANIM_MEEPLE_STAGGER);
                         }
                     }
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                    await this.feedbackPause(this.ANIM_MEEPLE_WAIT);
                 }
             },
             notif_familiesGained: async function (args) {
@@ -3163,7 +3262,7 @@ define([
                 const bgX = -(spriteIndex * 30);
                 if (meepDiv && poolMeeples) {
                     // Pause to let pool fill settle before distributing
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_POOL_PAUSE));
+                    await this.feedbackPause(this.ANIM_POOL_PAUSE);
                     const row = document.getElementById(`fex-row-${args.player_id}`);
                     if (row) {
                         row.classList.remove('fex-pulse-lost', 'fex-pulse-gained');
@@ -3185,12 +3284,12 @@ define([
                             m.style.backgroundImage = `url(${g_gamethemeurl}img/30_30_meeple.png)`;
                             m.style.backgroundPosition = `${bgXCap}px 0px`;
                             meepDiv.appendChild(m);
-                        }, this.ANIM_MEEPLE_SLIDE);
+                        }, this.feedbackDuration(this.ANIM_MEEPLE_SLIDE));
                         if (i < args.families_count - 1) {
-                            await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_STAGGER));
+                            await this.feedbackPause(this.ANIM_MEEPLE_STAGGER);
                         }
                     }
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_WAIT));
+                    await this.feedbackPause(this.ANIM_MEEPLE_WAIT);
                 } else {
                     // Mid-round gain (e.g. Fertility card) — slide from atheist pool to player
                     const player = this.gamedatas.players[args.player_id];
@@ -3205,7 +3304,7 @@ define([
                             this.ANIM_MEEPLE_SLIDE, i * this.ANIM_MEEPLE_STAGGER
                         );
                     }
-                    await new Promise(resolve => setTimeout(resolve, this.ANIM_MEEPLE_SLIDE + this.ANIM_MEEPLE_WAIT));
+                    await this.feedbackPause(this.ANIM_MEEPLE_SLIDE + this.ANIM_MEEPLE_WAIT);
                 }
             },
         });
