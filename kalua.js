@@ -27,6 +27,24 @@ define([
                 // Setup non-player based divs
                 document.getElementById('game_play_area').insertAdjacentHTML('beforeend', `
                 <div id="board_background">
+                    <div class="kalua-leader-help">
+                    <button id="kalua-leader-help-toggle" type="button" aria-label="${_('Leader actions help')}" title="${_('Leader actions help')}" aria-haspopup="dialog" aria-expanded="false" aria-controls="kalua-leader-help-content">?</button>
+                    <dialog id="kalua-leader-help-content" aria-labelledby="kalua-leader-help-title">
+                        <button id="kalua-leader-help-close" type="button" aria-label="${_('Close help')}" title="${_('Close help')}">×</button>
+                        <h2 id="kalua-leader-help-title">${_('Leader actions')}</h2>
+                        <p>${_('Choose one action when it is your turn to activate your leader.')}</p>
+                        <dl>
+                            <dt>${_('Give a Speech')}</dt>
+                            <dd>${_('Gain 1 happiness, up to a maximum of 10.')}</dd>
+                            <dt>${_('Convert Atheists')}</dt>
+                            <dd>${_('Move up to 2 families from the atheist pool to your religion. Requires at least 1 atheist family.')}</dd>
+                            <dt>${_('Convert Believer')}</dt>
+                            <dd>${_('Choose another player and move 1 of their families to your religion.')}</dd>
+                            <dt>${_('Sacrifice Leader')}</dt>
+                            <dd>${_('Remove your leader and move up to 5 families from the atheist pool to your religion. You lose your leader even if fewer than 5 atheist families are available.')}</dd>
+                        </dl>
+                    </dialog>
+                    </div>
                     <div id="hkboard"></div>
                     <div id="dice"></div>
                     <div id="atheistFamilies"></div>
@@ -53,6 +71,20 @@ define([
                 </div>
                 <div id="player-tables" class="zone-container"></div>
             `);
+                const helpToggle = document.getElementById('kalua-leader-help-toggle');
+                const helpContent = document.getElementById('kalua-leader-help-content');
+                helpToggle.addEventListener('click', () => {
+                    helpContent.showModal();
+                    helpToggle.setAttribute('aria-expanded', 'true');
+                });
+                document.getElementById('kalua-leader-help-close').addEventListener('click', () => helpContent.close());
+                helpContent.addEventListener('click', (event) => {
+                    if (event.target === helpContent) helpContent.close();
+                });
+                helpContent.addEventListener('close', () => {
+                    helpToggle.setAttribute('aria-expanded', 'false');
+                    helpToggle.focus();
+                });
                 this.ID_GLOBAL_DISASTER = 1;
                 this.ID_LOCAL_DISASTER = 2;
                 this.ID_BONUS = 3;
@@ -2102,12 +2134,34 @@ define([
                 }));
             },
             clearResolvingFeedback: function () {
+                this._resolvingCard = null;
+                this._resolutionHandCues = new Set();
+                document.querySelectorAll('.kalua-hand-shake, .kalua-hand-bonus').forEach(el => el.classList.remove('kalua-hand-shake', 'kalua-hand-bonus'));
+                document.querySelectorAll('.kalua-resolution-step').forEach(el => el.remove());
+                document.querySelectorAll('.kalua-effect-pulse').forEach(el => el.classList.remove('kalua-effect-pulse'));
                 document.querySelectorAll('.kalua-resolving-card').forEach(el => el.classList.remove('kalua-resolving-card'));
                 document.querySelectorAll('.kalua-effect-target').forEach(el => el.classList.remove('kalua-effect-target'));
                 document.getElementById('kalua-resolution-caption')?.remove();
             },
+            animateResolutionHands: async function (playerIds, bonus = false) {
+                const duration = this.feedbackDuration(1800);
+                if (!duration) return;
+                const className = bonus ? 'kalua-hand-bonus' : 'kalua-hand-shake';
+                const hands = playerIds.map(pid => document.getElementById(`${pid}_cards`)).filter(Boolean);
+                hands.forEach(hand => {
+                    hand.classList.remove('kalua-hand-shake', 'kalua-hand-bonus');
+                    hand.style.setProperty('--kalua-hand-cue-duration', `${duration}ms`);
+                    void hand.offsetWidth;
+                    hand.classList.add(className);
+                });
+                try {
+                    await this.feedbackPause(1800);
+                } finally {
+                    hands.forEach(hand => hand.classList.remove(className));
+                }
+            },
             resolutionCaption: function (text) {
-                const area = document.getElementById('playedCards');
+                const area = document.getElementById(`played_item_${this._resolvingCard?.card_id}`);
                 if (!area) return;
                 let caption = document.getElementById('kalua-resolution-caption');
                 if (!caption) {
@@ -2117,6 +2171,19 @@ define([
                     area.appendChild(caption);
                 }
                 caption.textContent = text;
+            },
+            setActionFeedback: function (stage, detail, tone = 'neutral') {
+                const line = document.getElementById('kalua-action-feedback');
+                if (!line) return;
+                document.getElementById('kalua-action-stage').textContent = stage;
+                document.getElementById('kalua-action-detail').textContent = detail;
+                line.dataset.tone = tone;
+                // Restart a short transition whenever the meaning of the line changes.
+                line.classList.remove('kalua-action-changed');
+                if (this.feedbackDuration(450)) {
+                    void line.offsetWidth;
+                    line.classList.add('kalua-action-changed');
+                }
             },
             // Guards against the framework's slideTemporaryObject throwing
             // "cannot read properties of null (reading 'ownerDocument')" when
@@ -2152,6 +2219,58 @@ define([
                     console.warn('Kalua animation interrupted; retaining the authoritative result', error);
                 } finally {
                     clearTimeout(timer);
+                }
+            },
+            flyPlayedCardAboveTable: async function (fromRect, destination) {
+                const duration = this.feedbackDuration(1300);
+                if (!destination || !duration) return;
+                // The stock may create its card before its first layout pass. Keep it
+                // hidden while the card area opens and its final coordinates settle.
+                destination.style.visibility = 'hidden';
+                let ghost;
+                try {
+                    document.getElementById('playedCards')?.classList.add('has-cards');
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                    let toRect = destination.getBoundingClientRect();
+                    if (!toRect.width || !toRect.height) {
+                        const area = document.getElementById('playedCards').getBoundingClientRect();
+                        toRect = { left: area.left + 25, top: area.top + 40, width: 120, height: 181 };
+                    }
+                    const start = fromRect?.width && fromRect?.height ? fromRect : toRect;
+                    const cardWidth = toRect.width;
+                    const cardHeight = toRect.height;
+                    const startLeft = start.left + (start.width - cardWidth) / 2;
+                    const startTop = start.top + (start.height - cardHeight) / 2;
+
+                    // Body-level fixed clone stays above every table div and overflow clip.
+                    ghost = destination.cloneNode(true);
+                    ghost.removeAttribute('id');
+                    ghost.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+                    ghost.classList.add('kalua-flying-card');
+                    ghost.style.left = `${startLeft}px`;
+                    ghost.style.top = `${startTop}px`;
+                    ghost.style.width = `${cardWidth}px`;
+                    ghost.style.height = `${cardHeight}px`;
+                    ghost.style.visibility = 'visible';
+                    ghost.style.transform = 'translate(0, 0)';
+                    document.body.appendChild(ghost);
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                    ghost.style.transition = `transform ${duration}ms ease-in-out`;
+                    ghost.style.transform = `translate(${toRect.left - startLeft}px, ${toRect.top - startTop}px)`;
+                    await new Promise(resolve => {
+                        const timeout = setTimeout(resolve, duration + 200);
+                        ghost.addEventListener('transitionend', event => {
+                            if (event.propertyName === 'transform') {
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        }, { once: true });
+                    });
+                } catch (error) {
+                    console.warn('Kalua played-card flight interrupted', error);
+                } finally {
+                    ghost?.remove();
+                    destination.style.visibility = '';
                 }
             },
             slideMeepleAnim: function (fromEl, toEl) {
@@ -2357,7 +2476,7 @@ define([
                 // automatically listen to the notifications, based on the `notif_xxx` function on this class.
                 this.bgaSetupPromiseNotifications();
                 // Queue hold times — durations live in the timing block at the top of the constructor
-                this.notifqueue.setSynchronous('playerCountsChanged',        this.feedbackDuration(this.QUEUE_PLAYER_COUNTS));
+                // playerCountsChanged is awaited so each resolution stage finishes visibly.
                 // familiesDied is an async handler — promise-based timing, no setSynchronous needed
                 // familiesGained and familiesLost are async handlers — promise-based timing, no setSynchronous needed
                 this.notifqueue.setSynchronous('templeDestroyed',            this.feedbackDuration(this.QUEUE_TEMPLE_DESTROYED));
@@ -2366,7 +2485,7 @@ define([
                 this.notifqueue.setSynchronous('amuletGained',               this.feedbackDuration(this.QUEUE_AMULET_GAINED));
                 // cardResolved is async and self-timed — no setSynchronous needed
                 // cardBeingResolved / amuletProtection are awaited, preference-aware handlers.
-                this.notifqueue.setSynchronous('diceRolled',                 this.feedbackDuration(this.QUEUE_DICE_ROLLED));
+                // diceRolled is async and waits for the result reveal and reading pause.
                 this.notifqueue.setSynchronous('amuletUsed',                 this.feedbackDuration(this.QUEUE_AMULET_USED));
                 this.notifqueue.setSynchronous('amuletNotUsed',              this.feedbackDuration(this.QUEUE_AMULET_NOT_USED));
                 // Hold the queue on the round-leader change so the phaseOneDraw gameStateChange
@@ -2564,7 +2683,8 @@ define([
                     this.updatePlayerPrayer(args.target_id, args.target_prayer);
                 }
             },
-            notif_cardPlayed: function (args) {
+            notif_cardPlayed: async function (args) {
+                this.setActionFeedback(_('Played'), dojo.string.substitute(_('${player_name} played ${card_name}. Waiting to resolve.'), args), 'pending');
                 // Clear resolved cards from previous round when first new card is played
                 if (this['resolved'] && this['resolved'].getItemNumber() > 0) {
                     this['resolved'].removeAll();
@@ -2572,6 +2692,10 @@ define([
                 }
                 // Remove the card from the correct player's hand if the stock exists
                 const playerCardsStock = this[`${args.player_id}_cards`];
+                const sourceCard = document.getElementById(playerCardsStock?.getItemDivId(args.card_id) || '')
+                    || document.getElementById(this[`${args.player_id}_cardbacks`]?.getItemDivId(args.card_id) || '')
+                    || document.getElementById(`${args.player_id}_cards`);
+                const sourceRect = sourceCard?.getBoundingClientRect();
                 if (playerCardsStock) {
                     playerCardsStock.removeFromStockById(args.card_id);
                     // Update card grouping after removing card
@@ -2594,8 +2718,8 @@ define([
                     const instanceTypeId = this.registerInstanceType(this['played'], args.card_id, uniqueId, this.nextPlayOrder);
                     this.nextPlayOrder++;
 
-                    // The third parameter is the 'from' DOM ID which creates a flying animation from that element
-                    this['played'].addToStockWithId(instanceTypeId, args.card_id, `${args.player_id}_cards`);
+                    // Place the real card without stock's clipped, low-layer travel animation.
+                    this['played'].addToStockWithId(instanceTypeId, args.card_id);
                     
                     // Store player info and add tooltip with player information
                     if (this['played'].items && this['played'].items[args.card_id]) {
@@ -2604,6 +2728,10 @@ define([
                     this.addCardTooltipByUniqueId('played', uniqueId, args.player_id, args.card_id);
                     // Add player color border to the played card
                     this.addPlayerBorderToCard(args.card_id, args.player_id, 'played');
+                    const destination = document.getElementById(`played_item_${args.card_id}`);
+                    if (destination && this.feedbackDuration(1300)) {
+                        await this.flyPlayedCardAboveTable(sourceRect, destination);
+                    }
                 }
                 // Update prayer counter and token sprites if prayer was spent
                 if (args.new_prayer_total !== undefined) {
@@ -2713,26 +2841,11 @@ define([
             notif_targetSelected: function (args) {
                 document.getElementById(`player_area_${args.target_player_id}`)?.classList.add('kalua-effect-target');
                 this.resolutionCaption(dojo.string.substitute(_('${card_name} targets ${target_name}'), args));
+                this.setActionFeedback(_('Target'), dojo.string.substitute(_('${card_name} targets ${target_name}.'), args), 'pending');
             },
-            notif_localEffectApplied: function (args) {
-                this.resolutionCaption(dojo.string.substitute(_('${card_name} → ${target_name}: ${effect_text}'), args));
-                // familiesDied/familiesConverted handle animations, playerCountsChanged handles
-                // counters — surface the summary at the top of the screen too, right after the
-                // "Now resolving" toast, so players can follow what the card caused.
-                this.showMessage(dojo.string.substitute(_('${card_name} hits ${target_name}: ${effect_text}'), {
-                    card_name: args.card_name,
-                    target_name: args.target_name,
-                    effect_text: args.effect_text
-                }), 'info');
-            },
-            notif_globalEffectApplied: function (args) {
-                // Summary of a global disaster's effect on everyone — shown at the top of the
-                // screen right after the "Now resolving" toast so players can follow along.
-                const template = args.multiplier === 2.0
-                    ? _('Each player (doubled — 2× base effects): ${effect_text}')
-                    : _('Each player: ${effect_text}');
-                this.showMessage(dojo.string.substitute(template, { effect_text: args.effect_text }), 'info');
-            },
+            // Summary notifications remain in the log; the board shows each stage.
+            notif_localEffectApplied: function () {},
+            notif_globalEffectApplied: function () {},
             notif_amuletDecision: function (args) {
                 // Store which players have amulets for reference
                 this.playersWithAmulets = args.players_with_amulets || [];
@@ -2787,32 +2900,43 @@ define([
                 const player_id = args.player_id;
                 const anchor = document.getElementById(`player_name_${player_id}`);
                 this.showFeedbackBadge(anchor, _('Amulet: harmful family effects blocked'), true);
+                this.setActionFeedback(_('Protected'), dojo.string.substitute(_("${player_name}'s amulet blocked harmful family effects."), args), 'protected');
                 return this.feedbackPause(1500);
             },
             notif_diceRollRequired: function (args) {
                 this.playersWhoNeedToRoll = (args.players_rolling || []).map(id => parseInt(id));
                 this._checkAutoRoll();
             },
-            notif_diceRolled: function (args) {
+            notif_diceRolled: async function (args) {
                 const player_id = args.player_id;
                 const result = args.result;
+                this.setActionFeedback(_('Dice'), dojo.string.substitute(_('${player_name} is rolling…'), args), 'pending');
                 try { new Audio(g_gamethemeurl + 'sounds/kalua_dice_roll.ogg').play(); } catch(e) {}
-                setTimeout(() => {
+                await this.feedbackPause(450);
+                {
                     if (player_id && this.gamedatas.players[player_id]) {
                         const player = this.gamedatas.players[player_id];
                         const playerDieFace = ((player.sprite - 1) * 6) + result;
                         this['dice'].removeFromStockById(player_id);
                         this['dice'].addToStockWithId(playerDieFace, player_id);
                     }
+                    const die = document.getElementById(`dice_item_${player_id}`);
+                    if (die && this.feedbackDuration(700)) {
+                        die.classList.remove('kalua-die-result');
+                        void die.offsetWidth;
+                        die.classList.add('kalua-die-result');
+                    }
+                    this.setActionFeedback(_('Dice result'), dojo.string.substitute(_('${player_name} rolled ${result}. Applying the effect…'), args), 'effect');
                     this.diceRolledTracker.add(parseInt(player_id));
                     // Check if all manual players have rolled so we can auto-roll
                     if (parseInt(player_id) !== parseInt(this.player_id)) {
                         this._checkAutoRoll();
                     }
-                }, 200);
+                }
                 this.disableNextMoveSound();
+                await this.feedbackPause(650);
             },
-            notif_templeIncremented: function (args) {
+            notif_templeIncremented: async function (args) {
                 const player_id = args.player_id;
                 // Update temple counter with exact count from server
                 if (this.templeCounters[player_id]) {
@@ -2830,8 +2954,9 @@ define([
                     this.addKeptItemTooltip(player_id, 2);
 
                 }
+                if (this._resolvingCard && !args.grouped) await this.feedbackPause(1500);
             },
-            notif_amuletIncremented: function (args) {
+            notif_amuletIncremented: async function (args) {
                 const player_id = args.player_id;
                 // Update amulet counter
                 if (this.amuletCounters[player_id]) {
@@ -2849,6 +2974,7 @@ define([
                     this.addKeptItemTooltip(player_id, 1);
 
                 }
+                if (this._resolvingCard) await this.feedbackPause(1500);
             },
             notif_templeDestroyed: function (args) {
                 const player_id = args.player_id;
@@ -2877,7 +3003,7 @@ define([
                     this.updatePlayerPrayer(args.player_id, args.prayer);
                 }
             },
-            notif_playerCountsChanged: function (args) {
+            notif_playerCountsChanged: async function (args) {
                 const player_id = args.player_id;
                 // Update all player counters
                 if (this.familyCounters[player_id]) {
@@ -2886,7 +3012,7 @@ define([
                     const familyChange = newFamilyCount - currentFamilyCount;
                     this.familyCounters[player_id].setValue(newFamilyCount);
                     // Update family stock (visual meeples) if there's a change
-                    if (familyChange !== 0 && this[`fams_${player_id}`]) {
+                    if (familyChange !== 0 && !args.defer_family_animation && this[`fams_${player_id}`]) {
                         if (familyChange > 0) {
                             // Add family meeples
                             for (let i = 0; i < familyChange; i++) {
@@ -2926,6 +3052,7 @@ define([
                     this.amuletCounters[player_id].setValue(args.amulet_count);
                 }
                 this.updateFamiliesRemainingDisplay();
+                if (this._resolvingCard) await this.feedbackPause(1500);
             },
             notif_leaderRecovered: function (args) {
                 const player_id = args.player_id;
@@ -3023,6 +3150,7 @@ define([
                     }
                     await this.feedbackPause(this.ANIM_CARD_WAIT);
                 }
+                this.setActionFeedback(_('Resolved'), _('Card finished resolving.'), 'complete');
             },
             notif_phaseConvertStart: function (args) {
                 const panel = document.getElementById('family-exchange');
@@ -3145,11 +3273,98 @@ define([
             },
             notif_cardBeingResolved: async function (args) {
                 this.clearResolvingFeedback();
+                this._resolvingCard = args;
+                const card = document.getElementById(`played_item_${args.card_id}`);
+                const type = Number(args.card_type);
+                if (card) {
+                    card.dataset.resolutionType = type === 1 ? 'global' : type === 2 ? 'local' : 'bonus';
+                }
+                if (type === 1) {
+                    Object.keys(this.gamedatas.players).forEach(pid => {
+                        document.getElementById(`player_area_${pid}`)?.classList.add('kalua-effect-target');
+                    });
+                }
                 document.getElementById(`played_item_${args.card_id}`)?.classList.add('kalua-resolving-card');
-                const msg = dojo.string.substitute(_('Now resolving: ${card_name}'), { card_name: args.card_name });
+                const msg = type === 1 ? _('Global disaster') : type === 2 ? _('Local disaster') : _('Bonus');
                 this.resolutionCaption(msg);
-                this.showMessage(msg, 'info');
+                this.setActionFeedback(_('Resolving'), dojo.string.substitute(_('Now resolving ${card_name}.'), args), 'pending');
+                if (type === 1) {
+                    await this.animateResolutionHands(Object.keys(this.gamedatas.players));
+                    await this.feedbackPause(900);
+                } else {
+                    await this.feedbackPause(2400);
+                }
+            },
+            notif_cardEffectStep: async function (args) {
+                const type = Number(this._resolvingCard?.card_type);
+                // Local cards cue only their actual recipient; bonus cards glow instead.
+                if (this._resolvingCard && type !== 1) {
+                    this._resolutionHandCues ??= new Set();
+                    const pid = String(args.player_id);
+                    if (!this._resolutionHandCues.has(pid)) {
+                        this._resolutionHandCues.add(pid);
+                        await this.animateResolutionHands([pid], type === 3);
+                    }
+                }
+                const labels = {
+                    happiness_effect: _('Happiness'), prayer_effect: _('Prayer'),
+                    convert_to_atheist: _('To atheism'), convert_to_religion: _('New believers'),
+                    family_dies: _('Family deaths'), temple_destroyed: _('Temple destroyed'),
+                    recover_leader: _('Leader recovered'), temple: _('Temple gained'), amulet: _('Amulet gained')
+                };
+                const keys = { happiness_effect: 'h', prayer_effect: 'p', convert_to_atheist: 'f', convert_to_religion: 'f', family_dies: 'f', temple_destroyed: 't', temple: 't', amulet: 'a' };
+                document.querySelectorAll('.kalua-effect-pulse').forEach(el => el.classList.remove('kalua-effect-pulse'));
+                document.querySelectorAll('.kalua-effect-target').forEach(el => el.classList.remove('kalua-effect-target'));
+                const playerIds = args.player_ids || [args.player_id];
+                playerIds.forEach(pid => {
+                    const target = document.getElementById(`player_area_${pid}`);
+                    target?.classList.add('kalua-effect-target');
+                    const anchor = document.getElementById(`panel_${keys[args.effect]}_${pid}`)?.parentElement || target;
+                    anchor?.classList.add('kalua-effect-pulse');
+                });
+                const card = document.getElementById(`played_item_${this._resolvingCard?.card_id}`);
+                if (card) {
+                    let step = card.querySelector('.kalua-resolution-step');
+                    if (!step) {
+                        step = document.createElement('span');
+                        step.className = 'kalua-resolution-step';
+                        step.setAttribute('role', 'status');
+                        card.appendChild(step);
+                    }
+                    step.textContent = labels[args.effect] || args.effect;
+                }
+                await this.feedbackPause(900);
+            },
+            notif_globalStatEffectApplied: async function (args) {
+                await this.notif_cardEffectStep({
+                    effect: args.effect,
+                    player_ids: args.players.map(player => player.player_id),
+                });
+                // Each counter changes before yielding, so all panels update together.
+                await Promise.all(args.players.map(player =>
+                    this.notif_playerCountsChanged({ ...player, grouped: true })
+                ));
                 await this.feedbackPause(1500);
+            },
+            notif_globalFamilyEffectApplied: async function (args) {
+                await this.notif_cardEffectStep({
+                    effect: args.effect,
+                    player_ids: args.player_ids,
+                });
+                // Apply the same notification type to all players before starting the
+                // next type, so their meeples move together.
+                const types = [...new Set(args.events.map(event => event.type))];
+                for (const type of types) {
+                    const handler = this[`notif_${type}`];
+                    if (typeof handler !== 'function') throw new Error(`Missing grouped effect handler: ${type}`);
+                    await Promise.all(args.events
+                        .filter(event => event.type === type)
+                        .map(event => handler.call(this, {
+                            ...event.args,
+                            grouped: type === 'playerCountsChanged',
+                        })));
+                }
+                await this.feedbackPause(900);
             },
             notif_dominantReligionEstablished: function (args) {
                 // Held at the top of the screen for QUEUE_DOMINANT_RELIGION (5s) before the
@@ -3201,6 +3416,11 @@ define([
                 this.updateFamiliesRemainingDisplay();
             },
             notif_familiesDied: async function (args) {
+                if (Number(args.families_count) > 0) {
+                    this.setActionFeedback(_('Families died'), dojo.string.substitute(_('${player_name} lost ${families_count} families. They leave the game.'), args), 'loss');
+                } else {
+                    this.setActionFeedback(_('Protected'), dojo.string.substitute(_("${player_name}'s chief survived."), args), 'protected');
+                }
                 const player = this.gamedatas.players[args.player_id];
                 const spriteIndex = player ? (parseInt(player.sprite) - 1) : 5;
                 const bgX = -(spriteIndex * 30);
@@ -3220,6 +3440,7 @@ define([
                 this.updateFamiliesRemainingDisplay();
             },
             notif_familiesLost: async function (args) {
+                this.setActionFeedback(_('To the pool'), dojo.string.substitute(_('${player_name} sent ${families_count} families to the atheist pool.'), args), 'loss');
                 const meepDiv    = document.getElementById(`fex-meeples-${args.player_id}`);
                 const poolMeeples = document.getElementById('fex-pool-meeples');
                 const player = this.gamedatas.players[args.player_id];
@@ -3255,6 +3476,7 @@ define([
                 }
             },
             notif_familiesGained: async function (args) {
+                this.setActionFeedback(_('From the pool'), dojo.string.substitute(_('${player_name} gained ${families_count} families from the atheist pool.'), args), 'gain');
                 const meepDiv    = document.getElementById(`fex-meeples-${args.player_id}`);
                 const poolMeeples = document.getElementById('fex-pool-meeples');
                 const player = this.gamedatas.players[args.player_id];

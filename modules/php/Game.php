@@ -28,6 +28,7 @@ class Game extends Table
     private $disasterCards;
     private $bonusCards;
     private array $playerUsedAmulet = []; // Track which players used amulets in current resolution
+    private ?array $groupedEffectNotifications = null;
     private array $diceResults = []; // Track dice results for current resolution
     private bool $amuletsResolved = false; // Track if amulets have been resolved for current card
     private array $multiactiveAmuletPlayers = []; // Track which players are multiactive for amulet decisions
@@ -353,6 +354,7 @@ class Game extends Table
                 clienttranslate('Now resolving: ${card_name}'), [
                     'card_name' => $card_name,
                     'card_id'   => $resolving_card['id'],
+                    'card_type' => (int)$resolving_card['type'],
                     'preserve'  => 2500
                 ]
             );
@@ -628,6 +630,13 @@ class Game extends Table
             }
         }
         
+        // Apply common effects first, then leader/temple/amulet effects.
+        if (!$amulets_resolved) {
+            $this->applyBasicCardEffects($card, $effects);
+        } else {
+            $this->applyBasicCardEffectsWithAmulets($card, $effects);
+        }
+
         if ($effects['recover_leader'] === true) {
             // Check if player already has a leader
             $current_chief = (int)$this->getUniqueValueFromDb("SELECT player_chief FROM player WHERE player_id = $played_by");
@@ -636,17 +645,12 @@ class Game extends Table
                 // Player doesn't have a chief, give them one
                 $this->DbQuery("UPDATE player SET player_chief = 1 WHERE player_id = $played_by");
                 
+                $this->notifyAllPlayers('cardEffectStep', '', ['player_id' => $played_by, 'effect' => 'recover_leader', 'amount' => 1]);
                 $this->notifyAllPlayers('leaderRecovered', clienttranslate('${player_name} gained a new leader'), [
                     'player_id' => $played_by,
                     'player_name' => $this->getPlayerNameById($played_by)
                 ]);
                 
-                // Apply basic card effects with amulet protection if needed
-                if (!$amulets_resolved) {
-                    $this->applyBasicCardEffects($card, $effects);
-                } else {
-                    $this->applyBasicCardEffectsWithAmulets($card, $effects);
-                }
                 
                 return true; // Resolution complete
             } else {
@@ -669,6 +673,7 @@ class Game extends Table
                 // Track statistics: temple built
                 $this->incStat(1, 'temples_built', $played_by);
                 
+                $this->notifyAllPlayers('cardEffectStep', '', ['player_id' => $played_by, 'effect' => 'temple', 'amount' => 1]);
                 $this->notifyAllPlayers('templeIncremented', clienttranslate('${player_name} gained a temple'), [
                     'player_id' => $played_by,
                     'player_name' => $this->getPlayerNameById($played_by),
@@ -681,6 +686,7 @@ class Game extends Table
                 $this->incStat(1, 'amulets_gained', $played_by);
                 
                 $new_amulet_count = (int)$this->getUniqueValueFromDb("SELECT player_amulet FROM player WHERE player_id = $played_by");
+                $this->notifyAllPlayers('cardEffectStep', '', ['player_id' => $played_by, 'effect' => 'amulet', 'amount' => 1]);
                 $this->notifyAllPlayers('amuletIncremented', clienttranslate('${player_name} gained an amulet'), [
                     'player_id' => $played_by,
                     'player_name' => $this->getPlayerNameById($played_by),
@@ -688,21 +694,8 @@ class Game extends Table
                 ]);
             }
             
-            // Apply basic effects - with amulet protection if amulets were resolved
-            if (!$amulets_resolved) {
-                $this->applyBasicCardEffects($card, $effects);
-            } else {
-                $this->applyBasicCardEffectsWithAmulets($card, $effects);
-            }
             
             return true; // Resolution complete
-        }
-        
-        // If no special effects, apply basic effects and continue resolving
-        if (!$amulets_resolved) {
-            $this->applyBasicCardEffects($card, $effects);
-        } else {
-            $this->applyBasicCardEffectsWithAmulets($card, $effects);
         }
         
         return true; // Resolution complete
@@ -842,6 +835,7 @@ class Game extends Table
                 FROM player 
                 WHERE player_eliminated = 0";
         $players = $this->getObjectListFromDb($sql);
+        $prepared_players = [];
 
         foreach ($players as $player) {
             $player_id = (int)$player['player_id'];
@@ -893,12 +887,71 @@ class Game extends Table
                 );
             }
 
-            // Apply effects without per-player sidebar messages — the globalEffectApplied
-            // summary below covers the whole group; amulet exceptions are called out separately.
+            $prepared_players[] = [
+                'id' => $player_id,
+                'effects' => $player_effects,
+                'multiplier' => $multiplier,
+            ];
+        }
+
+        // Each shared counter stage is applied to every player before the next stage.
+        foreach (['happiness_effect', 'prayer_effect'] as $effect) {
+            $changed_players = [];
+            foreach ($prepared_players as $prepared_player) {
+                $amount = (int)(($prepared_player['effects'][$effect] ?? 0) * $prepared_player['multiplier']);
+                if ($amount === 0) continue;
+
+                $player_id = $prepared_player['id'];
+                $column = $effect === 'happiness_effect' ? 'player_happiness' : 'player_prayer';
+                $value = $effect === 'happiness_effect'
+                    ? "LEAST(10, GREATEST(0, $column + $amount))"
+                    : "GREATEST(0, $column + $amount)";
+                $this->DbQuery("UPDATE player SET $column = $value WHERE player_id = $player_id");
+                $player_data = $this->getObjectFromDb("SELECT player_prayer as prayer, player_happiness as happiness,
+                    player_family as family_count, player_temple as temple_count,
+                    player_amulet as amulet_count FROM player WHERE player_id = $player_id");
+                $changed_players[] = array_merge(['player_id' => $player_id], $player_data);
+            }
+            if ($changed_players) {
+                $this->notifyAllPlayers('globalStatEffectApplied', '', [
+                    'effect' => $effect,
+                    'players' => $changed_players,
+                ]);
+            }
+        }
+
+        // Resolve family changes in the same fixed order for every player. The DB still
+        // handles each family safely in turn, while one notification animates the group.
+        foreach (['convert_to_atheist', 'family_dies'] as $effect) {
+            $affected_players = [];
+            $this->groupedEffectNotifications = [];
+            foreach ($prepared_players as $prepared_player) {
+                $amount = (int)(($prepared_player['effects'][$effect] ?? 0) * $prepared_player['multiplier']);
+                if ($amount <= 0) continue;
+                $affected_players[] = $prepared_player['id'];
+                $this->applyCardEffects($prepared_player['id'], [$effect => $amount], true, true);
+            }
+            $events = $this->groupedEffectNotifications;
+            $this->groupedEffectNotifications = null;
+            if ($events) {
+                $this->notifyAllPlayers('globalFamilyEffectApplied', '', [
+                    'effect' => $effect,
+                    'player_ids' => $affected_players,
+                    'events' => $events,
+                ]);
+            }
+        }
+
+        // Preserve support for any additional effects on future global cards.
+        foreach ($prepared_players as $prepared_player) {
+            $remaining = $prepared_player['effects'];
+            unset($remaining['happiness_effect'], $remaining['prayer_effect'],
+                $remaining['convert_to_atheist'], $remaining['family_dies']);
             if ($choice === 'normal') {
-                $this->applyCardEffects($player_id, $player_effects, true);
+                $this->applyCardEffects($prepared_player['id'], $remaining, true);
             } else {
-                $this->applyEffectsToPlayer($player_id, $player_effects, $multiplier, $choice, true);
+                $this->applyEffectsToPlayer($prepared_player['id'], $remaining,
+                    $prepared_player['multiplier'], $choice, true);
             }
         }
         
@@ -1026,8 +1079,34 @@ class Game extends Table
     /**
      * Apply card effects to a specific player
      */
-    private function applyCardEffects(int $player_id, array $effects, bool $silent = false): void
+    private function notifyResolutionEffect(string $type, string $message, array $args): void
     {
+        if ($this->groupedEffectNotifications !== null) {
+            $this->groupedEffectNotifications[] = [
+                'type' => $type,
+                'args' => $args,
+            ];
+        } else {
+            $this->notifyAllPlayers($type, $message, $args);
+        }
+    }
+
+    private function applyCardEffects(int $player_id, array $effects, bool $silent = false, bool $singleEffect = false): void
+    {
+        // Emit one stage at a time; each player follows the same resolution order.
+        if (!$singleEffect) {
+            foreach (['happiness_effect', 'prayer_effect', 'convert_to_atheist', 'convert_to_religion', 'family_dies', 'temple_destroyed'] as $effect) {
+                if (!empty($effects[$effect])) {
+                    $this->notifyResolutionEffect('cardEffectStep', '', [
+                        'player_id' => $player_id,
+                        'effect' => $effect,
+                        'amount' => (int)$effects[$effect],
+                    ]);
+                    $this->applyCardEffects($player_id, [$effect => $effects[$effect]], $silent, true);
+                }
+            }
+            return;
+        }
         $updates = [];
         
         // Handle prayer effects
@@ -1053,7 +1132,7 @@ class Game extends Table
                                                    FROM player WHERE player_id = $player_id");
             
             // Notify about the stat changes
-            $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+            $this->notifyResolutionEffect('playerCountsChanged', '', array_merge([
                 'player_id' => $player_id
             ], $player_data));
         }
@@ -1082,11 +1161,12 @@ class Game extends Table
                                                        FROM player WHERE player_id = $player_id");
                 
                 // Update UI counters
-                $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
-                    'player_id' => $player_id
+                $this->notifyResolutionEffect('playerCountsChanged', '', array_merge([
+                    'player_id' => $player_id,
+                    'defer_family_animation' => true
                 ], $player_data));
                 
-                $this->notifyAllPlayers('familiesConverted',
+                $this->notifyResolutionEffect('familiesConverted',
                     $silent ? '' : clienttranslate('${player_name} loses ${families_count} families to atheism'), [
                         'player_id' => $player_id,
                         'player_name' => $this->getPlayerNameById($player_id),
@@ -1098,7 +1178,7 @@ class Game extends Table
             } else if ($families_to_convert > 0) {
                 $has_chief = $this->getChiefCount($player_id);
                 if ($has_chief > 0 && $current_families <= 1) {
-                    $this->notifyAllPlayers('familiesConverted',
+                    $this->notifyResolutionEffect('familiesConverted',
                         $silent ? '' : clienttranslate('${player_name}\'s chief is the only one left'), [
                             'player_id' => $player_id,
                             'player_name' => $this->getPlayerNameById($player_id),
@@ -1129,11 +1209,11 @@ class Game extends Table
                                                        FROM player WHERE player_id = $player_id");
                 
                 // Update UI counters
-                $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+                $this->notifyResolutionEffect('playerCountsChanged', '', array_merge([
                     'player_id' => $player_id
                 ], $player_data));
                 
-                $this->notifyAllPlayers('familiesDied',
+                $this->notifyResolutionEffect('familiesDied',
                     $silent ? '' : clienttranslate('${player_name} loses ${families_count} families to death'), [
                         'player_id' => $player_id,
                         'player_name' => $this->getPlayerNameById($player_id),
@@ -1145,7 +1225,7 @@ class Game extends Table
             } else if ($families_to_kill > 0) {
                 $has_chief = $this->getChiefCount($player_id);
                 if ($has_chief > 0 && $current_families <= 1) {
-                    $this->notifyAllPlayers('familiesDied',
+                    $this->notifyResolutionEffect('familiesDied',
                         $silent ? '' : clienttranslate('${player_name}\'s chief meeple is protected from death effects'), [
                             'player_id' => $player_id,
                             'player_name' => $this->getPlayerNameById($player_id),
@@ -1170,8 +1250,8 @@ class Game extends Table
                                                        player_family as family_count, player_temple as temple_count,
                                                        player_amulet as amulet_count
                                                        FROM player WHERE player_id = $player_id");
-                $this->notifyAllPlayers('playerCountsChanged', '', array_merge(['player_id' => $player_id], $player_data));
-                $this->notifyAllPlayers('familiesGained',
+                $this->notifyResolutionEffect('playerCountsChanged', '', array_merge(['player_id' => $player_id], $player_data));
+                $this->notifyResolutionEffect('familiesGained',
                     $silent ? '' : clienttranslate('${player_name} gains ${families_count} new believers'),
                     [
                         'player_id'      => $player_id,
@@ -1201,12 +1281,12 @@ class Game extends Table
                                                        FROM player WHERE player_id = $player_id");
                 
                 // Update UI counters
-                $this->notifyAllPlayers('playerCountsChanged', '', array_merge([
+                $this->notifyResolutionEffect('playerCountsChanged', '', array_merge([
                     'player_id' => $player_id
                 ], $player_data));
                 
                 // Notify about the temple destruction
-                $this->notifyAllPlayers('templeDestroyed', 
+                $this->notifyResolutionEffect('templeDestroyed',
                     clienttranslate('${player_name} loses ${temples_count} temple(s)'), [
                         'player_id' => $player_id,
                         'player_name' => $this->getPlayerNameById($player_id),
